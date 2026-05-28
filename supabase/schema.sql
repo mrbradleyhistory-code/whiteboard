@@ -8,6 +8,7 @@ create table boards (
   stickies jsonb default '[]',
   text_boxes jsonb default '[]',
   images jsonb default '[]',
+  pages jsonb default '[]',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

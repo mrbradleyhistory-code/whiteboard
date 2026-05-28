@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { boardUpdatePayload, createPage, normalizeBoardPages } from '../boardPages'
 import { supabase } from '../supabaseClient'
 
 function formatWhen(iso) {
@@ -49,9 +50,11 @@ export default function BoardHome({ session, onOpenBoard }) {
     setCreating(true)
     setError('')
     const name = newName.trim() || `Board ${boards.length + 1}`
+    const pageId = crypto.randomUUID()
+    const pages = [createPage(pageId, 'Page 1')]
     const { data, error: insertErr } = await supabase
       .from('boards')
-      .insert({ name, user_id: session.user.id, strokes: [], stickies: [], text_boxes: [], images: [] })
+      .insert({ name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId) })
       .select()
       .single()
     setCreating(false)
@@ -107,15 +110,15 @@ export default function BoardHome({ session, onOpenBoard }) {
       setBusyId(null)
       return
     }
+    const pagesList = normalizeBoardPages(full).map((p) =>
+      createPage(crypto.randomUUID(), p.name, p),
+    )
     const { data: copy, error: insErr } = await supabase
       .from('boards')
       .insert({
         name: `${full.name} (copy)`,
         user_id: session.user.id,
-        strokes: full.strokes || [],
-        stickies: full.stickies || [],
-        text_boxes: full.text_boxes || [],
-        images: full.images || [],
+        ...boardUpdatePayload(pagesList, pagesList[0].id),
       })
       .select('id, name, created_at, updated_at')
       .single()

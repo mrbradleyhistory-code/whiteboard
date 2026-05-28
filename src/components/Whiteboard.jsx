@@ -1,5 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
+import {
+  createPage,
+  normalizeBoardPages,
+  pageToSnapshot,
+  mergeActivePage,
+  boardUpdatePayload,
+} from '../boardPages'
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
 import Tip from './Tip'
@@ -155,6 +162,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [textBoxes, setTextBoxes] = useState([])
   const [images, setImages] = useState([])
   const [activeBoard, setActiveBoard] = useState(null)
+  const [pages, setPages] = useState([])
+  const [activePageId, setActivePageId] = useState(null)
+  const pagesRef = useRef([])
   const [showBoardPanel, setShowBoardPanel] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
   const [editingTextId, setEditingTextId] = useState(null)
@@ -170,6 +180,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [pendingUnderline, setPendingUnderline] = useState(false)
   zoomRef.current = zoom
   drawSettingsRef.current = { tool, color, width, highlight, highlightColor }
+  pagesRef.current = pages
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 2500) }
 
@@ -178,46 +189,105 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     historyIndexRef.current = 0
   }
 
+  const getCanvasSnap = useCallback((overrides = {}) => ({
+    strokes: overrides.strokes !== undefined ? overrides.strokes : [...strokesRef.current],
+    stickies: overrides.stickies !== undefined ? overrides.stickies : stickies,
+    textBoxes: overrides.textBoxes !== undefined ? overrides.textBoxes : textBoxes,
+    images: overrides.images !== undefined ? overrides.images : images,
+  }), [stickies, textBoxes, images])
+
+  const applyPage = useCallback((page) => {
+    const snap = pageToSnapshot(page)
+    strokesRef.current = snap.strokes
+    setStickies(snap.stickies)
+    setTextBoxes(snap.textBoxes)
+    setImages(snap.images)
+    redrawCanvas(snap.strokes)
+    clearStrokeOverlay()
+    initHistory(snap)
+  }, [])
+
+  const persistPages = useCallback(async (pagesList, activeId) => {
+    if (!activeBoard) return
+    setSaving(true)
+    await supabase.from('boards').update(boardUpdatePayload(pagesList, activeId)).eq('id', activeBoard.id)
+    setSaving(false)
+  }, [activeBoard])
+
   // --- Supabase persistence ---
   const loadBoard = useCallback(async (board) => {
     if (!board) return
     const { data } = await supabase.from('boards').select('*').eq('id', board.id).single()
     if (data) {
-      strokesRef.current = data.strokes || []
-      setStickies(data.stickies || [])
-      setTextBoxes(data.text_boxes || [])
-      setImages(data.images || [])
-      redrawCanvas(data.strokes || [])
+      const pagesList = normalizeBoardPages(data)
+      pagesRef.current = pagesList
+      setPages(pagesList)
       setActiveBoard(data)
-      initHistory({ strokes: data.strokes || [], stickies: data.stickies || [], textBoxes: data.text_boxes || [], images: data.images || [] })
+      const first = pagesList[0]
+      setActivePageId(first.id)
+      applyPage(first)
     }
-  }, [])
+  }, [applyPage])
 
   // scheduleSave also pushes to undo history immediately (before the debounce)
   const scheduleSave = useCallback((overrides = {}) => {
-    if (!activeBoard) return
-    const snap = {
-      strokes: overrides.strokes !== undefined ? overrides.strokes : [...strokesRef.current],
-      stickies: overrides.stickies !== undefined ? overrides.stickies : stickies,
-      textBoxes: overrides.textBoxes !== undefined ? overrides.textBoxes : textBoxes,
-      images: overrides.images !== undefined ? overrides.images : images,
-    }
+    if (!activeBoard || !activePageId) return
+    const snap = getCanvasSnap(overrides)
+    const merged = mergeActivePage(pagesRef.current, activePageId, snap)
+    pagesRef.current = merged
+    setPages(merged)
     historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1)
     historyRef.current.push(snap)
     if (historyRef.current.length > 50) historyRef.current.shift()
     else historyIndexRef.current++
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      setSaving(true)
-      await supabase.from('boards').update({
-        strokes: snap.strokes,
-        stickies: snap.stickies,
-        text_boxes: snap.textBoxes,
-        images: snap.images,
-      }).eq('id', activeBoard.id)
-      setSaving(false)
-    }, 800)
-  }, [activeBoard, stickies, textBoxes, images])
+    saveTimer.current = setTimeout(() => persistPages(merged, activePageId), 800)
+  }, [activeBoard, activePageId, getCanvasSnap, persistPages])
+
+  const switchPage = useCallback((pageId) => {
+    if (!activePageId || pageId === activePageId) return
+    const merged = mergeActivePage(pagesRef.current, activePageId, getCanvasSnap())
+    pagesRef.current = merged
+    setPages(merged)
+    const page = merged.find(p => p.id === pageId)
+    if (!page) return
+    setActivePageId(pageId)
+    applyPage(page)
+  }, [activePageId, getCanvasSnap, applyPage])
+
+  const addPage = useCallback(() => {
+    if (!activePageId) return
+    const merged = mergeActivePage(pagesRef.current, activePageId, getCanvasSnap())
+    const newPage = createPage(uid(), `Page ${merged.length + 1}`)
+    const next = [...merged, newPage]
+    pagesRef.current = next
+    setPages(next)
+    setActivePageId(newPage.id)
+    applyPage(newPage)
+    persistPages(next, newPage.id)
+    notify('Page added')
+  }, [activePageId, getCanvasSnap, applyPage, persistPages])
+
+  const deletePage = useCallback((pageId) => {
+    if (pagesRef.current.length <= 1) {
+      notify('Keep at least one page')
+      return
+    }
+    if (!confirm('Delete this page and all its content?')) return
+    let merged = pageId === activePageId
+      ? mergeActivePage(pagesRef.current, activePageId, getCanvasSnap())
+      : [...pagesRef.current]
+    const idx = merged.findIndex(p => p.id === pageId)
+    if (idx < 0) return
+    merged = merged.filter(p => p.id !== pageId)
+    const nextActive = merged[Math.min(idx, merged.length - 1)]
+    pagesRef.current = merged
+    setPages(merged)
+    setActivePageId(nextActive.id)
+    applyPage(nextActive)
+    persistPages(merged, nextActive.id)
+    notify('Page deleted')
+  }, [activePageId, getCanvasSnap, applyPage, persistPages, notify])
 
   useEffect(() => {
     if (boardSummary) loadBoard(boardSummary)
@@ -230,12 +300,13 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     setTextBoxes(snap.textBoxes)
     setImages(snap.images)
     redrawCanvas(snap.strokes)
-    if (activeBoard) {
-      setSaving(true)
-      supabase.from('boards').update({ strokes: snap.strokes, stickies: snap.stickies, text_boxes: snap.textBoxes, images: snap.images })
-        .eq('id', activeBoard.id).then(() => setSaving(false))
+    if (activeBoard && activePageId) {
+      const merged = mergeActivePage(pagesRef.current, activePageId, snap)
+      pagesRef.current = merged
+      setPages(merged)
+      persistPages(merged, activePageId)
     }
-  }, [activeBoard])
+  }, [activeBoard, activePageId, persistPages])
 
   const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return
@@ -862,8 +933,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           </button>
         </Tip>
 
-        <Tip label="Clear everything on this board" side="bottom">
-          <button onClick={() => { if(confirm('Clear everything on this board?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],images:[]}) } }}
+        <Tip label="Clear everything on this page" side="bottom">
+          <button onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],images:[]}) } }}
             style={{ padding:'4px 10px', borderRadius:8, border:'none', background:'#fee2e2', color:'#991b1b', fontSize:13 }}>
             🗑 Clear all
           </button>
@@ -1020,8 +1091,36 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         </div>
       </div>
 
-      <div style={{ padding:'4px 16px', background:'#fff', borderTop:'1px solid #e5e5e5', fontSize:11, color:'#aaa', display:'flex', gap:16 }}>
-        <span>Draw: click &amp; drag</span><span>Text/Sticky: click canvas</span><span>Format: Text or Sticky tool → sidebar</span><span>Move: Select → drag</span><span>Edit: double-click / double-tap</span><span>Zoom: Ctrl+wheel or pinch</span>
+      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 12px', background:'#fff', borderTop:'1px solid #e5e5e5', overflowX:'auto', flexShrink:0 }}>
+        {pages.map((p, i) => (
+          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
+            <button type="button" onClick={() => switchPage(p.id)}
+              style={{
+                padding:'6px 12px', borderRadius:8, fontSize:13, cursor:'pointer',
+                border: p.id === activePageId ? '1px solid #457b9d' : '1px solid #e0e0e0',
+                background: p.id === activePageId ? '#457b9d' : '#f5f5f5',
+                color: p.id === activePageId ? '#fff' : '#333',
+                fontWeight: p.id === activePageId ? 600 : 400,
+              }}>
+              {p.name}
+            </button>
+            {pages.length > 1 && (
+              <button type="button" onClick={() => deletePage(p.id)} title={`Delete ${p.name}`}
+                style={{ width:22, height:22, borderRadius:6, border:'none', background:'transparent', color:'#aaa', fontSize:14, cursor:'pointer', lineHeight:1 }}>
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={addPage}
+          style={{ padding:'6px 12px', borderRadius:8, border:'1px dashed #457b9d', background:'#f0f7fa', color:'#457b9d', fontSize:13, fontWeight:600, cursor:'pointer', flexShrink:0 }}>
+          + Page
+        </button>
+      </div>
+
+      <div style={{ padding:'4px 16px', background:'#fff', borderTop:'1px solid #e5e5e5', fontSize:11, color:'#aaa', display:'flex', gap:16, flexWrap:'wrap' }}>
+        <span>Pages: switch below · + Page to add</span>
+        <span>Draw: click &amp; drag</span><span>Text/Sticky: click canvas</span><span>Move: Select → drag</span><span>Zoom: Ctrl+wheel or pinch</span>
       </div>
     </div>
   )

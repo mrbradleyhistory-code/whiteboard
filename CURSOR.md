@@ -15,8 +15,10 @@ Live URL: https://whiteboard-smoky.vercel.app
 ## File structure
 ```
 src/
+  boardPages.js      ← page CRUD helpers, normalize, dual-write payload
   components/
-    Whiteboard.jsx   ← main component, ~630 lines
+    Whiteboard.jsx   ← main component; page tabs in footer
+    BoardHome.jsx    ← board list, create/duplicate with pages
     Toolbar.jsx      ← left sidebar tool/color/width buttons
     Tip.jsx          ← tooltip wrapper (hover to show label)
     BoardPanel.jsx   ← slide-out panel for board management
@@ -29,7 +31,11 @@ supabase/schema.sql  ← run once in Supabase SQL editor
 ```
 
 ## Data model
-Supabase `boards` table columns: `id, name, owner_id, strokes (jsonb), stickies (jsonb), text_boxes (jsonb), images (jsonb), updated_at`
+Supabase `boards` table columns: `id, name, user_id, strokes (jsonb), stickies (jsonb), text_boxes (jsonb), images (jsonb), pages (jsonb), created_at, updated_at`
+
+Each board has **multiple pages** in `pages`: an array of `{ id, name, strokes, stickies, text_boxes, images }`. Legacy boards without `pages` are migrated client-side to a single "Page 1" via `normalizeBoardPages()` in `src/boardPages.js`. Saves dual-write the full `pages` array plus legacy columns for the **active** page (older clients).
+
+**Migration** (existing Supabase projects): run `supabase/migration_pages.sql` once in the SQL editor.
 
 RLS: users can only read/write their own boards.
 

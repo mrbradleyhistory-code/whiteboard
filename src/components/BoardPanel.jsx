@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { boardUpdatePayload, createPage } from '../boardPages'
 import { supabase } from '../supabaseClient'
 
 export default function BoardPanel({ session, activeBoardId, onSelect, onClose }) {
@@ -19,9 +20,11 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
 
   const createBoard = async () => {
     const name = newName.trim() || `Board ${boards.length + 1}`
+    const pageId = crypto.randomUUID()
+    const pages = [createPage(pageId, 'Page 1')]
     const { data, error } = await supabase
       .from('boards')
-      .insert({ name, user_id: session.user.id, strokes: [], stickies: [], text_boxes: [], images: [] })
+      .insert({ name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId) })
       .select()
       .single()
     if (!error) { setBoards(prev => [data, ...prev]); onSelect(data); setNewName('') }
