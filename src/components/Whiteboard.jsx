@@ -90,14 +90,15 @@ const traceSmoothStroke = (ctx, points) => {
   ctx.stroke()
 }
 
-const applyStrokeStyle = (ctx, stroke, { erasing = false } = {}) => {
+const applyStrokeStyle = (ctx, stroke, { erasing = false, livePreview = false } = {}) => {
   if (erasing) {
     ctx.globalCompositeOperation = 'destination-out'
     ctx.strokeStyle = 'rgba(0,0,0,1)'
     ctx.lineWidth = stroke.width * 4
   } else if (stroke.highlight) {
-    ctx.globalCompositeOperation = 'multiply'
-    ctx.strokeStyle = stroke.color + '88'
+    // Multiply on the white board; source-over on transparent overlay while drawing
+    ctx.globalCompositeOperation = livePreview ? 'source-over' : 'multiply'
+    ctx.strokeStyle = stroke.color.length === 7 ? stroke.color + '88' : stroke.color
     ctx.lineWidth = stroke.width * 3
   } else {
     ctx.globalCompositeOperation = 'source-over'
@@ -123,8 +124,10 @@ const drawStrokeDot = (ctx, stroke) => {
   const p = stroke.points[0]
   if (!p) return
   applyStrokeStyle(ctx, stroke)
+  const r = stroke.highlight ? (stroke.width * 3) / 2 : Math.max(stroke.width / 2, 1)
+  ctx.fillStyle = stroke.highlight && stroke.color.length === 7 ? stroke.color + '88' : stroke.color
   ctx.beginPath()
-  ctx.arc(p.x, p.y, Math.max(stroke.width / 2, 1), 0, Math.PI * 2)
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
   ctx.fill()
   ctx.globalCompositeOperation = 'source-over'
 }
@@ -367,7 +370,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     const overlay = strokeCanvasRef.current
     if (!main) return
 
-    const { tool: t, highlight: hl } = drawSettingsRef.current
+    const { tool: t } = drawSettingsRef.current
     const pts = stroke.points
 
     if (t === 'erase') {
@@ -379,19 +382,11 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       return
     }
 
-    if (hl) {
-      const ctx = main.getContext('2d')
-      applyStrokeStyle(ctx, stroke)
-      drawPointSegments(ctx, pts, liveStrokeRenderedRef.current)
-      liveStrokeRenderedRef.current = pts.length
-      ctx.globalCompositeOperation = 'source-over'
-      return
-    }
-
+    // Pen and highlighter: smooth curve on overlay (avoids beaded segment stamps)
     if (!overlay) return
     const ctx = overlay.getContext('2d')
     ctx.clearRect(0, 0, overlay.width, overlay.height)
-    applyStrokeStyle(ctx, stroke)
+    applyStrokeStyle(ctx, stroke, { livePreview: stroke.highlight })
     traceSmoothStroke(ctx, pts)
     ctx.globalCompositeOperation = 'source-over'
   }, [])
@@ -617,7 +612,6 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const editingTextItem = editingTextId ? textBoxes.find(t => t.id === editingTextId) : null
   const editingStickyItem = editingStickyId ? stickies.find(s => s.id === editingStickyId) : null
   const formatItem = editingTextItem || editingStickyItem
-  const showTextFormat = tool === 'text' || tool === 'sticky' || !!editingTextId || !!editingStickyId
 
   // --- Resize (images, text boxes, stickies) ---
   const onResizeStart = (e, item, type = 'image') => {
@@ -968,12 +962,13 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         <Toolbar tool={tool} setTool={setTool} color={color} setColor={setColor}
           highlightColor={highlightColor} setHighlightColor={setHighlightColor}
           width={width} setWidth={setWidth} highlight={highlight} setHighlight={setHighlight}
-          fontSize={fontSize} setFontSize={setFontSize} textColor={textColor} setTextColor={setTextColor}
+          fontSize={fontSize} setFontSize={setFontSize}
+          textColor={textColor} setTextColor={setTextColor}
           fontFamily={fontFamily} setFontFamily={applyFontFamily}
           textAlign={formatItem?.textAlign ?? textAlign} setTextAlign={applyTextAlign}
           listStyle={formatItem?.listStyle ?? listStyle} setListStyle={applyListStyle}
-          showTextFormat={showTextFormat}
-          showFontPicker={tool === 'text' || !!editingTextId}
+          editingTextId={editingTextId}
+          editingStickyId={editingStickyId}
           bold={formatItem ? !!formatItem.bold : pendingBold}
           italic={formatItem ? !!formatItem.italic : pendingItalic}
           underline={formatItem ? !!formatItem.underline : pendingUnderline}
