@@ -189,10 +189,10 @@ export default function Auth() {
       ) : (
         <button type="button" onClick={signInWithOAuthRedirect} disabled={signingIn}
           style={{
-            display:'flex', alignItems:'center', gap:10, padding:'12px 24px', borderRadius:8,
-            border:'1px solid #dadce0', background:'#fff', fontSize:15, fontWeight:500, color:'#3c4043',
+            display:'flex', alignItems:'center', gap:12, padding:'16px 32px', borderRadius:12,
+            border:'1px solid #dadce0', background:'#fff', fontSize:17, fontWeight:600, color:'#3c4043',
             cursor: signingIn ? 'default' : 'pointer', opacity: signingIn ? 0.7 : 1,
-            boxShadow:'0 1px 2px rgba(0,0,0,0.08)',
+            boxShadow:'0 2px 8px rgba(0,0,0,0.1)', minHeight: 52, touchAction:'manipulation',
           }}>
           <GoogleIcon />
           {signingIn ? 'Redirecting to Google…' : 'Sign in with Google'}

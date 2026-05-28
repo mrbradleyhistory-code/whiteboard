@@ -10,6 +10,7 @@ import {
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
 import Tip from './Tip'
+import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResizeHandle } from '../uiTheme'
 
 const STICKY_COLORS = ['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd']
 const ZOOM_MIN = 0.25
@@ -513,7 +514,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       const n = [...textBoxes, nb]
       setTextBoxes(n); setEditingTextId(nb.id); scheduleSave({ textBoxes: n })
     } else if (tool === 'sticky') {
-      const ns = { id: uid(), x, y, text: 'Note...', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 160, height: 110, fontSize: 13, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
+      const ns = { id: uid(), x, y, text: 'Note...', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 180, height: 120, fontSize: 16, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
       const n = [...stickies, ns]
       setStickies(n); setEditingStickyId(ns.id); scheduleSave({ stickies: n })
     }
@@ -857,93 +858,109 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const cursorStyle = tool==='draw'?'crosshair':tool==='erase'?'cell':tool==='text'||tool==='sticky'?'copy':'default'
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#f0f0f0' }}>
-      {notification && <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', background:'#2a9d8f', color:'#fff', padding:'8px 20px', borderRadius:8, zIndex:9999, fontSize:14, pointerEvents:'none' }}>{notification}</div>}
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#eef1f4' }}>
+      {notification && (
+        <div style={{
+          position:'fixed', top:20, left:'50%', transform:'translateX(-50%)',
+          background: colors.success, color:'#fff', padding:'14px 28px', borderRadius:12,
+          zIndex:9999, fontSize:17, fontWeight:600, pointerEvents:'none',
+          boxShadow:'0 4px 20px rgba(0,0,0,0.18)',
+        }}>{notification}</div>
+      )}
 
-      {/* Top bar */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'#fff', borderBottom:'1px solid #e5e5e5', zIndex:10, flexWrap:'wrap' }}>
+      {/* Top bar — large touch targets for interactive displays */}
+      <div style={{
+        display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
+        background: colors.surface, borderBottom:`1px solid ${colors.border}`,
+        zIndex:10, flexWrap:'wrap', minHeight: 64,
+      }}>
         <Tip label="Back to board list" side="bottom">
-          <button onClick={onExitBoard}
-            style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:8, border:'1px solid #457b9d', background:'#f0f7fa', fontSize:13, fontWeight:600, color:'#457b9d' }}>
-            ← Board list
+          <button type="button" onClick={onExitBoard}
+            style={touchBtn({ background: colors.accentLight, border:`2px solid ${colors.accent}`, color: colors.accent })}>
+            ← Boards
           </button>
         </Tip>
 
-        <span style={{ fontWeight:600, fontSize:15 }}>🖊 {activeBoard?.name || 'Whiteboard'}</span>
+        <span style={{
+          fontWeight:700, fontSize:18, color: colors.text,
+          maxWidth: 220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+        }}>
+          {activeBoard?.name || 'Whiteboard'}
+        </span>
 
-        <Tip label="Switch to another board" side="bottom">
-          <button onClick={() => setShowBoardPanel(v => !v)}
-            style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:13 }}>
-            📋 {activeBoard?.name || 'Board'}
+        <Tip label="Switch board" side="bottom">
+          <button type="button" onClick={() => setShowBoardPanel(v => !v)}
+            style={touchBtn({ padding: '10px 14px' })}>
+            📋
           </button>
         </Tip>
 
-        <div style={{ width:1, height:24, background:'#e5e5e5' }} />
-        <Tip label="Undo (Ctrl+Z)" side="bottom">
-          <button onClick={undo} style={{ padding:'4px 8px', borderRadius:6, border:'none', background:'transparent', fontSize:16, color:'#555' }}>↩</button>
+        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
+
+        <Tip label="Undo" side="bottom">
+          <button type="button" onClick={undo} style={iconOnlyBtn()} aria-label="Undo">↩</button>
         </Tip>
-        <Tip label="Redo (Ctrl+Shift+Z)" side="bottom">
-          <button onClick={redo} style={{ padding:'4px 8px', borderRadius:6, border:'none', background:'transparent', fontSize:16, color:'#555' }}>↪</button>
+        <Tip label="Redo" side="bottom">
+          <button type="button" onClick={redo} style={iconOnlyBtn()} aria-label="Redo">↪</button>
         </Tip>
 
-        <div style={{ width:1, height:24, background:'#e5e5e5' }} />
+        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
+
         <Tip label="Zoom out" side="bottom">
-          <button onClick={() => setZoom(z => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))}
-            style={{ width:28, height:28, borderRadius:6, border:'none', background:'#f0f0f0', fontSize:16, lineHeight:1 }}>−</button>
+          <button type="button" onClick={() => setZoom(z => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))}
+            style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom out">−</button>
         </Tip>
-        <span style={{ fontSize:12, minWidth:38, textAlign:'center' }}>{Math.round(zoom * 100)}%</span>
+        <span style={{ fontSize:16, fontWeight:700, minWidth:52, textAlign:'center', color: colors.text }}>{Math.round(zoom * 100)}%</span>
         <Tip label="Zoom in" side="bottom">
-          <button onClick={() => setZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
-            style={{ width:28, height:28, borderRadius:6, border:'none', background:'#f0f0f0', fontSize:16, lineHeight:1 }}>+</button>
+          <button type="button" onClick={() => setZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
+            style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom in">+</button>
         </Tip>
-        <Tip label="Reset zoom to 100%" side="bottom">
-          <button onClick={() => setZoom(1)}
-            style={{ padding:'0 6px', height:28, borderRadius:6, border:'none', background:'#f0f0f0', fontSize:11 }}>1:1</button>
+        <Tip label="Reset zoom" side="bottom">
+          <button type="button" onClick={() => setZoom(1)} style={touchBtn({ minWidth: 52, padding: '10px 12px', fontSize: 14 })}>100%</button>
         </Tip>
 
-        <div style={{ flex:1 }} />
+        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
 
-        <label style={{ fontSize:12, color:'#888' }}>Size</label>
-        <input type="range" min={1} max={30} step={1} value={tool==='text'?fontSize:width}
-          onChange={e => tool==='text' ? setFontSize(+e.target.value) : setWidth(+e.target.value)} style={{ width:80 }} />
-        <span style={{ fontSize:12, minWidth:20 }}>{tool==='text'?fontSize:width}</span>
+        <label style={{ fontSize:14, fontWeight:600, color: colors.textMuted }}>
+          {tool === 'text' ? 'Text' : 'Pen'}
+        </label>
+        <input type="range" className="wb-range" min={1} max={30} step={1} value={tool==='text'?fontSize:width}
+          onChange={e => tool==='text' ? setFontSize(+e.target.value) : setWidth(+e.target.value)} />
+        <span style={{ fontSize:16, fontWeight:700, minWidth:28, color: colors.text }}>{tool==='text'?fontSize:width}</span>
 
         {tool === 'draw' && (
-          <Tip label={highlight ? 'Turn off highlighter' : 'Turn on highlighter'} side="bottom">
-            <button onClick={() => setHighlight(v => !v)}
-              style={{ padding:'4px 10px', borderRadius:8, border:'none', background: highlight ? '#f6c90e' : '#f0f0f0', color: highlight ? '#333' : '#666', fontSize:12, fontWeight: highlight?600:400 }}>
-              Highlight
+          <Tip label={highlight ? 'Pen mode' : 'Highlighter'} side="bottom">
+            <button type="button" onClick={() => setHighlight(v => !v)}
+              style={touchBtn({
+                background: highlight ? '#f6c90e' : '#f6f8fa',
+                border: highlight ? '2px solid #ca8a04' : `1px solid ${colors.border}`,
+              })}>
+              {highlight ? '✏️ Pen' : '🖍 Mark'}
             </button>
           </Tip>
         )}
 
-        {saving && <span style={{ fontSize:11, color:'#888' }}>Saving...</span>}
+        {saving && <span style={{ fontSize:14, color: colors.textMuted, fontWeight:500 }}>Saving…</span>}
 
-        <Tip label="Download board as PNG" side="bottom">
-          <button onClick={handleExport} disabled={!activeBoard}
-            style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:13, opacity: activeBoard?1:0.5 }}>
-            ⬇ Export PNG
+        <div style={{ flex:1, minWidth: 8 }} />
+
+        <Tip label="Export PNG" side="bottom">
+          <button type="button" onClick={handleExport} disabled={!activeBoard} style={touchBtn()}>⬇</button>
+        </Tip>
+        <Tip label="Wipe pen &amp; highlighter only" side="bottom">
+          <button type="button" onClick={handleWipe} disabled={!activeBoard}
+            style={touchBtn({ background: colors.warnBg, color: colors.warn, border: '1px solid #fcd34d' })}>
+            🧽 Wipe
           </button>
         </Tip>
-
-        <Tip label="Erase all pen strokes and highlights, keep stickies and images" side="bottom">
-          <button onClick={handleWipe} disabled={!activeBoard}
-            style={{ padding:'4px 10px', borderRadius:8, border:'none', background:'#fef3c7', color:'#92400e', fontSize:13, opacity: activeBoard?1:0.5 }}>
-            🧽 Wipe drawing
+        <Tip label="Clear this page" side="bottom">
+          <button type="button" onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],images:[]}) } }}
+            style={touchBtn({ background: colors.dangerBg, color: colors.danger, border: '1px solid #fecaca' })}>
+            🗑 Clear
           </button>
         </Tip>
-
-        <Tip label="Clear everything on this page" side="bottom">
-          <button onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],images:[]}) } }}
-            style={{ padding:'4px 10px', borderRadius:8, border:'none', background:'#fee2e2', color:'#991b1b', fontSize:13 }}>
-            🗑 Clear all
-          </button>
-        </Tip>
-
-        <div style={{ width:1, height:24, background:'#e5e5e5' }} />
-        <span style={{ fontSize:12, color:'#888' }}>{session.user.email}</span>
         <Tip label="Sign out" side="bottom">
-          <button onClick={handleSignOut} style={{ padding:'4px 10px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:12 }}>Sign out</button>
+          <button type="button" onClick={handleSignOut} style={touchBtn({ fontSize: 14 })}>Sign out</button>
         </Tip>
       </div>
 
@@ -986,11 +1003,11 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                 onMouseDown={e => onDragStart(e,'image',img.id)}
                 onTouchStart={e => onDragStart(e,'image',img.id)}>
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none' }} draggable={false} alt="" />
-                <button onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}) }}
-                  style={{ position:'absolute', top:-10, right:-10, width:20, height:20, borderRadius:'50%', border:'none', background:'#e63946', color:'#fff', fontSize:11, padding:0, pointerEvents:'auto' }}>✕</button>
+                <button type="button" onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}) }}
+                  style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
                 {tool === 'select' && (
                   <div onMouseDown={e => onResizeStart(e, img)} onTouchStart={e => onResizeStart(e, img)}
-                    style={{ position:'absolute', bottom:-10, right:-10, width:28, height:28, background:'#457b9d', border:'2px solid #fff', borderRadius:3, cursor:'nwse-resize', pointerEvents:'auto', zIndex:1, touchAction:'none' }} />
+                    style={canvasResizeHandle} role="presentation" />
                 )}
               </div>
             ))}
@@ -1014,7 +1031,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               const sf = s.fontSize || 13
               const fmtStyle = { fontWeight: s.bold?700:400, fontStyle: s.italic?'italic':'normal', textDecoration: s.underline?'underline':'none' }
               return (
-                <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:4, padding:'8px 8px 28px 8px', boxShadow:'2px 3px 8px rgba(0,0,0,0.13)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column' }}
+                <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8, padding:'10px 10px 32px 10px', boxShadow:'0 3px 12px rgba(0,0,0,0.15)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column' }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}>
                   {editingStickyId === s.id
@@ -1035,17 +1052,17 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                             ))
                           : <span style={{ whiteSpace:'pre-wrap' }}>{s.text}</span>}
                       </div>}
-                  <button onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}) }}
-                    style={{ position:'absolute', top:-8, right:-8, width:18, height:18, borderRadius:'50%', border:'none', background:'#e63946', color:'#fff', fontSize:10, padding:0 }}>✕</button>
-                  <div style={{ position:'absolute', bottom:6, left:8, display:'flex', gap:3 }}>
+                  <button type="button" onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}) }}
+                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove note">✕</button>
+                  <div style={{ position:'absolute', bottom:8, left:10, display:'flex', gap:6 }}>
                     {['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd'].map(c => (
-                      <div key={c} onClick={() => setStickies(prev => prev.map(x => x.id===s.id?{...x,color:c}:x))}
-                        style={{ width:10, height:10, borderRadius:'50%', background:c, cursor:'pointer', border: s.color===c?'1.5px solid #555':'1px solid #aaa' }} />
+                      <button type="button" key={c} onClick={() => setStickies(prev => prev.map(x => x.id===s.id?{...x,color:c}:x))}
+                        style={{ width:22, height:22, borderRadius:'50%', background:c, border: s.color===c?'3px solid #333':'2px solid #fff', padding:0, boxShadow:'0 1px 3px rgba(0,0,0,0.2)', touchAction:'manipulation' }} aria-label="Note color" />
                     ))}
                   </div>
                   {tool === 'select' && (
                     <div onMouseDown={e => onResizeStart(e, s, 'sticky')} onTouchStart={e => onResizeStart(e, s, 'sticky')}
-                      style={{ position:'absolute', bottom:-10, right:-10, width:28, height:28, background:'#457b9d', border:'2px solid #fff', borderRadius:3, cursor:'nwse-resize', zIndex:1, touchAction:'none' }} />
+                      style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
               )
@@ -1078,11 +1095,11 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                             ))
                           : <span style={{ whiteSpace:'pre-wrap' }}>{t.text}</span>}
                       </div>}
-                  <button onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}) }}
-                    style={{ position:'absolute', top:-8, right:-8, width:18, height:18, borderRadius:'50%', border:'none', background:'#e63946', color:'#fff', fontSize:10, padding:0 }}>✕</button>
+                  <button type="button" onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}) }}
+                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
                   {tool === 'select' && (
                     <div onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
-                      style={{ position:'absolute', bottom:-10, right:-10, width:28, height:28, background:'#457b9d', border:'2px solid #fff', borderRadius:3, cursor:'nwse-resize', zIndex:1, touchAction:'none' }} />
+                      style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
               )
@@ -1093,36 +1110,52 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         </div>
       </div>
 
-      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 12px', background:'#fff', borderTop:'1px solid #e5e5e5', overflowX:'auto', flexShrink:0 }}>
-        {pages.map((p, i) => (
-          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
+      <div style={{
+        display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+        background: colors.surface, borderTop:`1px solid ${colors.border}`,
+        overflowX:'auto', flexShrink:0, minHeight: sizes.pageTabMinHeight + 20,
+      }}>
+        {pages.map((p) => (
+          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
             <button type="button" onClick={() => switchPage(p.id)}
               style={{
-                padding:'6px 12px', borderRadius:8, fontSize:13, cursor:'pointer',
-                border: p.id === activePageId ? '1px solid #457b9d' : '1px solid #e0e0e0',
-                background: p.id === activePageId ? '#457b9d' : '#f5f5f5',
-                color: p.id === activePageId ? '#fff' : '#333',
-                fontWeight: p.id === activePageId ? 600 : 400,
+                ...touchBtn({
+                  minHeight: sizes.pageTabMinHeight,
+                  padding: '12px 20px',
+                  fontSize: 16,
+                  border: p.id === activePageId ? `2px solid ${colors.accentDark}` : `1px solid ${colors.border}`,
+                  background: p.id === activePageId ? colors.accent : '#f6f8fa',
+                  color: p.id === activePageId ? '#fff' : colors.text,
+                }),
               }}>
               {p.name}
             </button>
             {pages.length > 1 && (
               <button type="button" onClick={() => deletePage(p.id)} title={`Delete ${p.name}`}
-                style={{ width:22, height:22, borderRadius:6, border:'none', background:'transparent', color:'#aaa', fontSize:14, cursor:'pointer', lineHeight:1 }}>
+                style={iconOnlyBtn({ minWidth: 44, minHeight: 44, fontSize: 22, color: colors.textMuted, background: 'transparent', border: 'none' })}
+                aria-label={`Delete ${p.name}`}>
                 ×
               </button>
             )}
           </div>
         ))}
         <button type="button" onClick={addPage}
-          style={{ padding:'6px 12px', borderRadius:8, border:'1px dashed #457b9d', background:'#f0f7fa', color:'#457b9d', fontSize:13, fontWeight:600, cursor:'pointer', flexShrink:0 }}>
+          style={touchBtn({
+            minHeight: sizes.pageTabMinHeight,
+            border: `2px dashed ${colors.accent}`,
+            background: colors.accentLight,
+            color: colors.accent,
+          })}>
           + Page
         </button>
       </div>
 
-      <div style={{ padding:'4px 16px', background:'#fff', borderTop:'1px solid #e5e5e5', fontSize:11, color:'#aaa', display:'flex', gap:16, flexWrap:'wrap' }}>
-        <span>Pages: switch below · + Page to add</span>
-        <span>Draw: click &amp; drag</span><span>Text/Sticky: click canvas</span><span>Move: Select → drag</span><span>Zoom: Ctrl+wheel or pinch</span>
+      <div className="wb-help-footer" style={{
+        padding:'8px 16px', background: colors.surface, borderTop:`1px solid ${colors.border}`,
+        fontSize:13, color: colors.textMuted, display:'flex', gap:20, flexWrap:'wrap',
+      }}>
+        <span>Touch: draw with finger · pinch to zoom · double-tap notes to edit</span>
+        <span>Paste images from clipboard</span>
       </div>
     </div>
   )

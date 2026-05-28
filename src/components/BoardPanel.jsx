@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { boardUpdatePayload, createPage } from '../boardPages'
 import { supabase } from '../supabaseClient'
+import { colors, sizes, touchBtn } from '../uiTheme'
 
 export default function BoardPanel({ session, activeBoardId, onSelect, onClose }) {
   const [boards, setBoards] = useState([])
@@ -38,26 +39,53 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
     if (activeBoardId === id) onSelect(null)
   }
 
-  return (
-    <div style={{ position:'absolute', top:0, left:56, width:240, height:'100%', background:'#fff', borderRight:'1px solid #e5e5e5', zIndex:20, display:'flex', flexDirection:'column', padding:12, gap:8, overflowY:'auto', boxShadow:'2px 0 8px rgba(0,0,0,0.07)' }}>
-      <div style={{ fontWeight:600, fontSize:14, marginBottom:4 }}>My Boards</div>
+  const panelWidth = 280
 
-      {loading ? <div style={{ fontSize:13, color:'#888' }}>Loading...</div> : boards.map(b => (
+  return (
+    <div style={{
+      position:'absolute', top:0, left: sizes.toolbarWidth, width: panelWidth, height:'100%',
+      background: colors.surface, borderRight:`1px solid ${colors.border}`, zIndex:20,
+      display:'flex', flexDirection:'column', padding:16, gap:10, overflowY:'auto',
+      boxShadow:'4px 0 16px rgba(0,0,0,0.08)',
+    }}>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:4, color: colors.text }}>My Boards</div>
+
+      {loading ? <div style={{ fontSize:15, color: colors.textMuted }}>Loading…</div> : boards.map(b => (
         <div key={b.id} onClick={() => { onSelect(b); onClose() }}
-          style={{ padding:'8px 10px', borderRadius:8, background: b.id === activeBoardId ? '#457b9d' : '#f5f5f5', color: b.id === activeBoardId ? '#fff' : '#222', cursor:'pointer', fontSize:13, border:'1px solid #e5e5e5', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          style={{
+            padding:'14px 16px', borderRadius:10, minHeight: sizes.touchMin,
+            background: b.id === activeBoardId ? colors.accent : '#f6f8fa',
+            color: b.id === activeBoardId ? '#fff' : colors.text,
+            cursor:'pointer', fontSize:16, fontWeight: 600,
+            border:`1px solid ${b.id === activeBoardId ? colors.accentDark : colors.border}`,
+            display:'flex', alignItems:'center', justifyContent:'space-between', gap:8,
+          }}>
           <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{b.name}</span>
-          <button onClick={e => deleteBoard(e, b.id)} style={{ background:'none', border:'none', color: b.id === activeBoardId ? '#fff' : '#aaa', fontSize:14, padding:'0 0 0 6px', lineHeight:1 }}>✕</button>
+          <button type="button" onClick={e => deleteBoard(e, b.id)}
+            style={{
+              background:'none', border:'none',
+              color: b.id === activeBoardId ? '#fff' : '#94a3b8',
+              fontSize:22, padding:'4px 8px', minWidth: 44, minHeight: 44,
+              lineHeight:1, flexShrink:0,
+            }}
+            aria-label={`Delete ${b.name}`}>✕</button>
         </div>
       ))}
 
-      <div style={{ display:'flex', gap:6, marginTop:8 }}>
-        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="New board name..."
+      <div style={{ display:'flex', gap:8, marginTop:8 }}>
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="New board name…"
           onKeyDown={e => e.key === 'Enter' && createBoard()}
-          style={{ flex:1, fontSize:13, padding:'5px 8px', borderRadius:6, border:'1px solid #ddd' }} />
-        <button onClick={createBoard} style={{ padding:'5px 12px', borderRadius:6, border:'none', background:'#457b9d', color:'#fff', fontSize:13 }}>+</button>
+          style={{ flex:1, fontSize:16, padding:'12px 14px', borderRadius:10, border:`1px solid ${colors.border}`, minHeight: sizes.touchMin }} />
+        <button type="button" onClick={createBoard}
+          style={touchBtn({ background: colors.accent, color:'#fff', border:'none', minWidth: 56 })}>
+          +
+        </button>
       </div>
 
-      <button onClick={onClose} style={{ marginTop:'auto', padding:7, borderRadius:8, border:'1px solid #e5e5e5', background:'#f5f5f5', fontSize:13 }}>Close</button>
+      <button type="button" onClick={onClose}
+        style={{ ...touchBtn(), marginTop:'auto', width:'100%' }}>
+        Close
+      </button>
     </div>
   )
 }

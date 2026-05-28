@@ -38,7 +38,7 @@ export default function App() {
     }
   }, [])
 
-  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:16 }}>Loading...</div>
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:18, fontWeight:500, color:'#5c6570' }}>Loading…</div>
   if (!session) return <Auth />
   if (!openBoard) {
     return <BoardHome session={session} onOpenBoard={setOpenBoard} />
