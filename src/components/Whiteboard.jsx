@@ -977,19 +977,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         {/* Canvas */}
         <div ref={scrollRef} style={{ flex:1, overflow:'auto', touchAction:'none' }}>
           <div style={{ width: 2400 * zoom, height: 1600 * zoom, position:'relative', flexShrink:0 }}>
-            <div style={{ position:'absolute', top:0, left:0, width:2400, height:1600, transform:`scale(${zoom})`, transformOrigin:'0 0' }}>
-          <canvas ref={canvasRef} width={2400} height={1600}
-            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, cursor:cursorStyle, touchAction:'none', background:'#fff', zIndex:0 }}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
-            onPointerUp={onCanvasPointerUp}
-            onPointerCancel={onCanvasPointerCancel}
-            onClick={handleCanvasClick} />
-          <canvas ref={strokeCanvasRef} width={2400} height={1600}
-            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, touchAction:'none', pointerEvents:'none', zIndex:1 }} />
-
-          {/* Overlay */}
-          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none' }}>
+            <div style={{ position:'absolute', top:0, left:0, width:2400, height:1600, transform:`scale(${zoom})`, transformOrigin:'0 0', background:'#fff' }}>
+          {/* Images under ink so pen/highlighter draw on top */}
+          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0 }}>
             {images.map(img => (
               <div key={img.id} id={'img_'+img.id}
                 style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none', cursor:'move', border:'1.5px dashed #457b9d' }}
@@ -998,14 +988,26 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none' }} draggable={false} alt="" />
                 <button onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}) }}
                   style={{ position:'absolute', top:-10, right:-10, width:20, height:20, borderRadius:'50%', border:'none', background:'#e63946', color:'#fff', fontSize:11, padding:0, pointerEvents:'auto' }}>✕</button>
-                {/* Resize handle — bottom-right corner, only in select mode */}
                 {tool === 'select' && (
                   <div onMouseDown={e => onResizeStart(e, img)} onTouchStart={e => onResizeStart(e, img)}
                     style={{ position:'absolute', bottom:-10, right:-10, width:28, height:28, background:'#457b9d', border:'2px solid #fff', borderRadius:3, cursor:'nwse-resize', pointerEvents:'auto', zIndex:1, touchAction:'none' }} />
                 )}
               </div>
             ))}
+          </div>
 
+          <canvas ref={canvasRef} width={2400} height={1600}
+            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, cursor:cursorStyle, touchAction:'none', background:'transparent', zIndex:1, pointerEvents: tool === 'select' ? 'none' : 'auto' }}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerUp={onCanvasPointerUp}
+            onPointerCancel={onCanvasPointerCancel}
+            onClick={handleCanvasClick} />
+          <canvas ref={strokeCanvasRef} width={2400} height={1600}
+            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, touchAction:'none', pointerEvents:'none', zIndex:2 }} />
+
+          {/* Stickies & text above ink */}
+          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:3 }}>
             {stickies.map(s => {
               const sw = s.width || 160
               const sh = s.height || 110
