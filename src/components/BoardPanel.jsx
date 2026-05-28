@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-export default function BoardPanel({ session, activeBoardId, onSelect, onClose, onBoardsLoaded }) {
+export default function BoardPanel({ session, activeBoardId, onSelect, onClose }) {
   const [boards, setBoards] = useState([])
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(true)
@@ -13,7 +13,7 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose, 
       .from('boards')
       .select('id, name, created_at, updated_at')
       .order('updated_at', { ascending: false })
-    if (!error) { setBoards(data); onBoardsLoaded(data) }
+    if (!error) setBoards(data || [])
     setLoading(false)
   }
 

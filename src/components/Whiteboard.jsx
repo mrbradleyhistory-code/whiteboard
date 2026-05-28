@@ -121,7 +121,7 @@ const drawStrokeDot = (ctx, stroke) => {
   ctx.globalCompositeOperation = 'source-over'
 }
 
-export default function Whiteboard({ session }) {
+export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const canvasRef = useRef(null)
   const strokeCanvasRef = useRef(null)
   const strokesRef = useRef([])
@@ -165,6 +165,9 @@ export default function Whiteboard({ session }) {
   const [zoom, setZoom] = useState(1)
   const [textAlign, setTextAlign] = useState('left')
   const [listStyle, setListStyle] = useState('none')
+  const [pendingBold, setPendingBold] = useState(false)
+  const [pendingItalic, setPendingItalic] = useState(false)
+  const [pendingUnderline, setPendingUnderline] = useState(false)
   zoomRef.current = zoom
   drawSettingsRef.current = { tool, color, width, highlight, highlightColor }
 
@@ -216,27 +219,9 @@ export default function Whiteboard({ session }) {
     }, 800)
   }, [activeBoard, stickies, textBoxes, images])
 
-  // Auto-load most recently used board on mount
   useEffect(() => {
-    let cancelled = false
-    supabase
-      .from('boards')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (cancelled || !data || !data[0]) return
-        const board = data[0]
-        strokesRef.current = board.strokes || []
-        setStickies(board.stickies || [])
-        setTextBoxes(board.text_boxes || [])
-        setImages(board.images || [])
-        setActiveBoard(board)
-        redrawCanvas(board.strokes || [])
-        initHistory({ strokes: board.strokes || [], stickies: board.stickies || [], textBoxes: board.text_boxes || [], images: board.images || [] })
-      })
-    return () => { cancelled = true }
-  }, [])
+    if (boardSummary) loadBoard(boardSummary)
+  }, [boardSummary, loadBoard])
 
   // --- Undo / Redo ---
   const restoreSnap = useCallback((snap) => {
@@ -453,11 +438,11 @@ export default function Whiteboard({ session }) {
     const x = (e.clientX - r.left) / z, y = (e.clientY - r.top) / z
 
     if (tool === 'text') {
-      const nb = { id: uid(), x, y, text: 'Text here', fontSize, color: textColor, fontFamily, width: 200, height: 60, bold: false, italic: false, underline: false, textAlign, listStyle }
+      const nb = { id: uid(), x, y, text: 'Text here', fontSize, color: textColor, fontFamily, width: 200, height: 60, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
       const n = [...textBoxes, nb]
       setTextBoxes(n); setEditingTextId(nb.id); scheduleSave({ textBoxes: n })
     } else if (tool === 'sticky') {
-      const ns = { id: uid(), x, y, text: 'Note...', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 160, height: 110, fontSize: 13, bold: false, italic: false, underline: false, textAlign: 'left', listStyle: 'none' }
+      const ns = { id: uid(), x, y, text: 'Note...', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 160, height: 110, fontSize: 13, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
       const n = [...stickies, ns]
       setStickies(n); setEditingStickyId(ns.id); scheduleSave({ stickies: n })
     }
@@ -513,6 +498,39 @@ export default function Whiteboard({ session }) {
     setDragging({ type, id })
   }
 
+  const toggleItemFormat = (field) => {
+    if (editingTextId) {
+      setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, [field]: !x[field] } : x))
+      return
+    }
+    if (editingStickyId) {
+      setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, [field]: !x[field] } : x))
+      return
+    }
+    if (tool === 'text' || tool === 'sticky') {
+      if (field === 'bold') setPendingBold(v => !v)
+      if (field === 'italic') setPendingItalic(v => !v)
+      if (field === 'underline') setPendingUnderline(v => !v)
+    }
+  }
+
+  const applyTextAlign = (align) => {
+    setTextAlign(align)
+    if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, textAlign: align } : x))
+    if (editingStickyId) setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, textAlign: align } : x))
+  }
+
+  const applyListStyle = (ls) => {
+    setListStyle(ls)
+    if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, listStyle: ls } : x))
+    if (editingStickyId) setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, listStyle: ls } : x))
+  }
+
+  const applyFontFamily = (ff) => {
+    setFontFamily(ff)
+    if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, fontFamily: ff } : x))
+  }
+
   // --- Formatting shortcut handler (Ctrl/Cmd + B/I/U) ---
   const handleFormatKey = (e, type, id) => {
     if (!(e.ctrlKey || e.metaKey)) return
@@ -523,6 +541,11 @@ export default function Whiteboard({ session }) {
     if (type === 'text') setTextBoxes(prev => prev.map(x => x.id===id ? {...x, [field]: !x[field]} : x))
     else setStickies(prev => prev.map(x => x.id===id ? {...x, [field]: !x[field]} : x))
   }
+
+  const editingTextItem = editingTextId ? textBoxes.find(t => t.id === editingTextId) : null
+  const editingStickyItem = editingStickyId ? stickies.find(s => s.id === editingStickyId) : null
+  const formatItem = editingTextItem || editingStickyItem
+  const showTextFormat = tool === 'text' || tool === 'sticky' || !!editingTextId || !!editingStickyId
 
   // --- Resize (images, text boxes, stickies) ---
   const onResizeStart = (e, item, type = 'image') => {
@@ -768,16 +791,21 @@ export default function Whiteboard({ session }) {
 
       {/* Top bar */}
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 12px', background:'#fff', borderBottom:'1px solid #e5e5e5', zIndex:10, flexWrap:'wrap' }}>
-        <span style={{ fontWeight:600, fontSize:15 }}>🖊 Whiteboard</span>
-
-        <Tip label="Open / switch boards" side="bottom">
-          <button onClick={() => setShowBoardPanel(v => !v)}
-            style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:13 }}>
-            📋 {activeBoard?.name || 'Select a board'}
+        <Tip label="Back to board list" side="bottom">
+          <button onClick={onExitBoard}
+            style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:8, border:'1px solid #457b9d', background:'#f0f7fa', fontSize:13, fontWeight:600, color:'#457b9d' }}>
+            ← Board list
           </button>
         </Tip>
 
-        {!activeBoard && <span style={{ fontSize:12, color:'#888' }}>← Open the board panel to create or select a board</span>}
+        <span style={{ fontWeight:600, fontSize:15 }}>🖊 {activeBoard?.name || 'Whiteboard'}</span>
+
+        <Tip label="Switch to another board" side="bottom">
+          <button onClick={() => setShowBoardPanel(v => !v)}
+            style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:13 }}>
+            📋 {activeBoard?.name || 'Board'}
+          </button>
+        </Tip>
 
         <div style={{ width:1, height:24, background:'#e5e5e5' }} />
         <Tip label="Undo (Ctrl+Z)" side="bottom">
@@ -853,15 +881,26 @@ export default function Whiteboard({ session }) {
           highlightColor={highlightColor} setHighlightColor={setHighlightColor}
           width={width} setWidth={setWidth} highlight={highlight} setHighlight={setHighlight}
           fontSize={fontSize} setFontSize={setFontSize} textColor={textColor} setTextColor={setTextColor}
-          fontFamily={fontFamily} setFontFamily={setFontFamily}
-          textAlign={textAlign} setTextAlign={setTextAlign}
-          listStyle={listStyle} setListStyle={setListStyle} />
+          fontFamily={fontFamily} setFontFamily={applyFontFamily}
+          textAlign={formatItem?.textAlign ?? textAlign} setTextAlign={applyTextAlign}
+          listStyle={formatItem?.listStyle ?? listStyle} setListStyle={applyListStyle}
+          showTextFormat={showTextFormat}
+          showFontPicker={tool === 'text' || !!editingTextId}
+          bold={formatItem ? !!formatItem.bold : pendingBold}
+          italic={formatItem ? !!formatItem.italic : pendingItalic}
+          underline={formatItem ? !!formatItem.underline : pendingUnderline}
+          onToggleBold={() => toggleItemFormat('bold')}
+          onToggleItalic={() => toggleItemFormat('italic')}
+          onToggleUnderline={() => toggleItemFormat('underline')}
+          formatHint={editingTextId || editingStickyId ? 'Editing selection' : tool === 'text' ? 'New text defaults' : 'New note defaults'} />
 
         {showBoardPanel && (
           <BoardPanel session={session} activeBoardId={activeBoard?.id}
-            onSelect={(b) => { setActiveBoard(b); if(b) loadBoard(b) }}
-            onClose={() => setShowBoardPanel(false)}
-            onBoardsLoaded={(boards) => { if (!activeBoard && boards.length > 0) loadBoard(boards[0]) }} />
+            onSelect={(b) => {
+              if (b) { loadBoard(b); setShowBoardPanel(false) }
+              else onExitBoard()
+            }}
+            onClose={() => setShowBoardPanel(false)} />
         )}
 
         {/* Canvas */}
@@ -982,7 +1021,7 @@ export default function Whiteboard({ session }) {
       </div>
 
       <div style={{ padding:'4px 16px', background:'#fff', borderTop:'1px solid #e5e5e5', fontSize:11, color:'#aaa', display:'flex', gap:16 }}>
-        <span>Draw: click &amp; drag</span><span>Text/Sticky: click canvas</span><span>Move: Select → drag</span><span>Resize: Select → drag corner</span><span>Images: Ctrl+V</span><span>Edit: double-click / double-tap</span><span>Zoom: Ctrl+wheel or pinch</span><span>Pan: two-finger drag</span>
+        <span>Draw: click &amp; drag</span><span>Text/Sticky: click canvas</span><span>Format: Text or Sticky tool → sidebar</span><span>Move: Select → drag</span><span>Edit: double-click / double-tap</span><span>Zoom: Ctrl+wheel or pinch</span>
       </div>
     </div>
   )

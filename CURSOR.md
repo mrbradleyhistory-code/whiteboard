@@ -7,7 +7,7 @@ Live URL: https://whiteboard-smoky.vercel.app
 
 ## Tech stack
 - **Frontend**: Vite + React 18 (JSX only, no TS)
-- **Auth**: Google OAuth via Google Identity Services → Supabase `signInWithIdToken`
+- **Auth**: Production uses Supabase `signInWithOAuth` (redirect). **Localhost** uses Google Identity Services button + `signInWithIdToken` (needs `VITE_GOOGLE_CLIENT_ID` + JavaScript origin for localhost).
 - **DB**: Supabase (PostgreSQL + RLS). Board state stored as JSONB columns.
 - **Canvas**: HTML5 Canvas for drawing strokes. Stickies, text boxes, images are React overlays positioned absolutely over the canvas.
 - **Deployment**: Vercel (`npx vercel --prod --yes`)
@@ -105,9 +105,11 @@ const dy = (e.clientY - startY) / zoomRef.current
 - `select` — drag items, drag resize handle (bottom-right corner)
 
 ## Formatting on text boxes + stickies
-- **Ctrl/Cmd+B/I/U** while editing toggles bold/italic/underline
-- `textAlign`: 'left' | 'center' | 'right' — stored per item, set via toolbar when text tool active
-- `listStyle`: 'none' | 'bullet' | 'numbered' — stored per item; in display mode, each `\n`-separated line gets a prefix
+- Sidebar shows a **text format panel** when the Text or Sticky tool is active, or while double-click/double-tap editing (Select tool).
+- **B / I / U** buttons (plus Ctrl/Cmd+B/I/U while editing). When not editing, toggles apply to the next placed text box or sticky.
+- **Font** picker (text tool / editing text only), **alignment**, and **list** buttons apply to the item being edited or new-item defaults.
+- `textAlign`: 'left' | 'center' | 'right' — stored per item
+- `listStyle`: 'none' | 'bullet' | 'numbered' — in display mode, each `\n`-separated line gets a prefix
 
 ## Toolbar props
 ```jsx
@@ -141,6 +143,11 @@ const dy = (e.clientY - startY) / zoomRef.current
 
 ## What to work on next (pending user requests — none right now)
 The last user request was completed: zoom/scroll + text justification + bullet/numbered lists.
+
+## Local Google sign-in
+- **localhost**: GIS button + `signInWithIdToken` — add `http://localhost:5173` to Google **JavaScript origins**; `VITE_GOOGLE_CLIENT_ID` must match Supabase → Google → Client ID.
+- **Production (Vercel)**: OAuth redirect — Supabase Redirect URLs must include `https://whiteboard-smoky.vercel.app/**`; Google redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`.
+- Optional local fallback: “Try redirect sign-in” (requires `http://localhost:5173/**` in Supabase Redirect URLs).
 
 ## Deploy command
 ```bash

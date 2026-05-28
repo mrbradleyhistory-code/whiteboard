@@ -28,7 +28,15 @@ function HighlighterIcon({ active, color }) {
   )
 }
 
-export default function Toolbar({ tool, setTool, color, setColor, highlightColor, setHighlightColor, width, setWidth, highlight, setHighlight, fontSize, setFontSize, textColor, setTextColor, fontFamily, setFontFamily, textAlign, setTextAlign, listStyle, setListStyle }) {
+export default function Toolbar({
+  tool, setTool, color, setColor, highlightColor, setHighlightColor,
+  width, setWidth, highlight, setHighlight, fontSize, setFontSize,
+  textColor, setTextColor, fontFamily, setFontFamily,
+  textAlign, setTextAlign, listStyle, setListStyle,
+  showTextFormat, showFontPicker,
+  bold, italic, underline, onToggleBold, onToggleItalic, onToggleUnderline,
+  formatHint,
+}) {
   const activeColor = tool === 'text' ? textColor : highlight ? highlightColor : color
 
   const setActiveColor = (c) => {
@@ -46,8 +54,25 @@ export default function Toolbar({ tool, setTool, color, setColor, highlightColor
     </Tip>
   )
 
+  const fmtBtn = (label, active, onClick, children, disabled = false) => (
+    <Tip label={label} side="right">
+      <button type="button" onClick={onClick} disabled={disabled}
+        style={{
+          width: 40, height: 26, borderRadius: 6, border: 'none',
+          background: active ? '#457b9d' : 'transparent',
+          color: active ? '#fff' : '#333',
+          fontSize: 14, fontWeight: 700, fontStyle: 'normal', textDecoration: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: disabled ? 0.4 : 1, cursor: disabled ? 'default' : 'pointer',
+        }}>
+        {children}
+      </button>
+    </Tip>
+  )
+
   const activeColors = tool === 'draw' && highlight ? HIGHLIGHT_COLORS : COLORS
   const activeColorNames = tool === 'draw' && highlight ? HIGHLIGHT_NAMES : COLOR_NAMES
+  const canToggleStyle = tool === 'text' || tool === 'sticky'
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6, padding:'12px 6px', background:'#fff', borderRight:'1px solid #e5e5e5', zIndex:10 }}>
@@ -68,48 +93,80 @@ export default function Toolbar({ tool, setTool, color, setColor, highlightColor
         </Tip>
       )}
 
-      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-        {activeColors.map((c, i) => (
-          <Tip key={c} label={activeColorNames[i]} side="right">
-            <button onClick={() => setActiveColor(c)}
-              style={{ width:24, height:24, borderRadius:'50%', border: activeColor===c ? '2.5px solid #457b9d' : '1.5px solid #ccc', background:c, padding:0 }} />
-          </Tip>
-        ))}
-
-        {/* Custom color picker */}
-        <Tip label="Custom color" side="right">
-          <label style={{ width:24, height:24, borderRadius:'50%', border:'1.5px solid #ccc', background:'conic-gradient(from 0deg, #e63946, #f4a261, #f6c90e, #2a9d8f, #457b9d, #6a4c93, #e63946)', cursor:'pointer', display:'block', position:'relative', overflow:'hidden', flexShrink:0 }}>
-            <input type="color" onChange={e => setActiveColor(e.target.value)}
-              style={{ position:'absolute', opacity:0, width:'150%', height:'150%', left:'-25%', top:'-25%', cursor:'pointer' }} />
-          </label>
-        </Tip>
-      </div>
-
-      <div style={{ height:1, width:28, background:'#e5e5e5', margin:'4px 0' }} />
-
-      {WIDTHS.map((w, i) => (
-        <Tip key={w} label={WIDTH_LABELS[i]} side="right">
-          <button onClick={() => setWidth(w)}
-            style={{ width:28, height:20, borderRadius:4, border:'none', background: width===w ? '#457b9d' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ width:16, height: w>10?8:w>4?4:2, background: width===w ? '#fff' : '#888', borderRadius:2 }} />
-          </button>
-        </Tip>
-      ))}
-
-      {tool === 'text' && (
+      {!showTextFormat && (
         <>
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            {activeColors.map((c, i) => (
+              <Tip key={c} label={activeColorNames[i]} side="right">
+                <button onClick={() => setActiveColor(c)}
+                  style={{ width:24, height:24, borderRadius:'50%', border: activeColor===c ? '2.5px solid #457b9d' : '1.5px solid #ccc', background:c, padding:0 }} />
+              </Tip>
+            ))}
+            <Tip label="Custom color" side="right">
+              <label style={{ width:24, height:24, borderRadius:'50%', border:'1.5px solid #ccc', background:'conic-gradient(from 0deg, #e63946, #f4a261, #f6c90e, #2a9d8f, #457b9d, #6a4c93, #e63946)', cursor:'pointer', display:'block', position:'relative', overflow:'hidden', flexShrink:0 }}>
+                <input type="color" onChange={e => setActiveColor(e.target.value)}
+                  style={{ position:'absolute', opacity:0, width:'150%', height:'150%', left:'-25%', top:'-25%', cursor:'pointer' }} />
+              </label>
+            </Tip>
+          </div>
+
           <div style={{ height:1, width:28, background:'#e5e5e5', margin:'4px 0' }} />
-          {FONTS.map(f => (
-            <Tip key={f.value} label={f.label} side="right">
-              <button onClick={() => setFontFamily(f.value)}
-                style={{ width:40, height:26, borderRadius:6, border:'none', background: fontFamily===f.value ? '#457b9d' : 'transparent', color: fontFamily===f.value ? '#fff' : '#333', fontSize:14, fontFamily:f.value, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                Aa
+
+          {WIDTHS.map((w, i) => (
+            <Tip key={w} label={WIDTH_LABELS[i]} side="right">
+              <button onClick={() => setWidth(w)}
+                style={{ width:28, height:20, borderRadius:4, border:'none', background: width===w ? '#457b9d' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <div style={{ width:16, height: w>10?8:w>4?4:2, background: width===w ? '#fff' : '#888', borderRadius:2 }} />
               </button>
             </Tip>
           ))}
+        </>
+      )}
+
+      {showTextFormat && (
+        <>
+          <div style={{ fontSize: 9, color: '#888', textAlign: 'center', lineHeight: 1.2, maxWidth: 48, marginBottom: 2 }}>
+            {formatHint}
+          </div>
+
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            {activeColors.map((c, i) => (
+              <Tip key={c} label={activeColorNames[i]} side="right">
+                <button onClick={() => setActiveColor(c)}
+                  style={{ width:24, height:24, borderRadius:'50%', border: activeColor===c ? '2.5px solid #457b9d' : '1.5px solid #ccc', background:c, padding:0 }} />
+              </Tip>
+            ))}
+            <Tip label="Custom color" side="right">
+              <label style={{ width:24, height:24, borderRadius:'50%', border:'1.5px solid #ccc', background:'conic-gradient(from 0deg, #e63946, #f4a261, #f6c90e, #2a9d8f, #457b9d, #6a4c93, #e63946)', cursor:'pointer', display:'block', position:'relative', overflow:'hidden', flexShrink:0 }}>
+                <input type="color" onChange={e => setActiveColor(e.target.value)}
+                  style={{ position:'absolute', opacity:0, width:'150%', height:'150%', left:'-25%', top:'-25%', cursor:'pointer' }} />
+              </label>
+            </Tip>
+          </div>
+
           <div style={{ height:1, width:28, background:'#e5e5e5', margin:'4px 0' }} />
-          {[['left','⬅','Left'], ['center','↔','Center'], ['right','➡','Right']].map(([align, icon, label]) => (
-            <Tip key={align} label={`Align ${label}`} side="right">
+
+          {fmtBtn('Bold (Ctrl+B)', bold, onToggleBold, <span style={{ fontWeight: 700 }}>B</span>, !canToggleStyle)}
+          {fmtBtn('Italic (Ctrl+I)', italic, onToggleItalic, <span style={{ fontStyle: 'italic', fontWeight: 400 }}>I</span>, !canToggleStyle)}
+          {fmtBtn('Underline (Ctrl+U)', underline, onToggleUnderline, <span style={{ textDecoration: 'underline', fontWeight: 400 }}>U</span>, !canToggleStyle)}
+
+          {showFontPicker && (
+            <>
+              <div style={{ height:1, width:28, background:'#e5e5e5', margin:'4px 0' }} />
+              {FONTS.map(f => (
+                <Tip key={f.value} label={f.label} side="right">
+                  <button onClick={() => setFontFamily(f.value)}
+                    style={{ width:40, height:26, borderRadius:6, border:'none', background: fontFamily===f.value ? '#457b9d' : 'transparent', color: fontFamily===f.value ? '#fff' : '#333', fontSize:14, fontFamily:f.value, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    Aa
+                  </button>
+                </Tip>
+              ))}
+            </>
+          )}
+
+          <div style={{ height:1, width:28, background:'#e5e5e5', margin:'4px 0' }} />
+          {[['left','⬅','Align left'], ['center','↔','Align center'], ['right','➡','Align right']].map(([align, icon, label]) => (
+            <Tip key={align} label={label} side="right">
               <button onClick={() => setTextAlign(align)}
                 style={{ width:40, height:26, borderRadius:6, border:'none', background: textAlign===align ? '#457b9d' : 'transparent', color: textAlign===align ? '#fff' : '#333', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>
                 {icon}
