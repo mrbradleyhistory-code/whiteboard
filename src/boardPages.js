@@ -56,13 +56,18 @@ export function mergeActivePage(pages, activePageId, snap) {
 }
 
 /** Dual-write active page to legacy columns for older clients. */
-export function boardUpdatePayload(pages, activePageId) {
+export function boardUpdatePayload(pages, activePageId, includePages = true) {
   const active = pages.find(p => p.id === activePageId) || pages[0]
-  return {
-    pages,
+  const payload = {
     strokes: active?.strokes || [],
     stickies: active?.stickies || [],
     text_boxes: active?.text_boxes || [],
     images: active?.images || [],
   }
+  if (includePages) payload.pages = pages
+  return payload
+}
+
+export function isMissingPagesColumnError(message) {
+  return !!message && /pages|column|schema cache/i.test(message)
 }

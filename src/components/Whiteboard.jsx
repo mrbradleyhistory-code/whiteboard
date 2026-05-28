@@ -6,11 +6,14 @@ import {
   pageToSnapshot,
   mergeActivePage,
   boardUpdatePayload,
+  isMissingPagesColumnError,
 } from '../boardPages'
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
 import Tip from './Tip'
 import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResizeHandle } from '../uiTheme'
+
+const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
 const STICKY_COLORS = ['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd']
 const ZOOM_MIN = 0.25
@@ -91,19 +94,20 @@ const traceSmoothStroke = (ctx, points) => {
 }
 
 const applyStrokeStyle = (ctx, stroke, { erasing = false, livePreview = false } = {}) => {
+  const color = stroke?.color || '#1a1a1a'
+  const lineWidth = stroke?.width ?? 5
   if (erasing) {
     ctx.globalCompositeOperation = 'destination-out'
     ctx.strokeStyle = 'rgba(0,0,0,1)'
-    ctx.lineWidth = stroke.width * 4
-  } else if (stroke.highlight) {
-    // Multiply on the white board; source-over on transparent overlay while drawing
+    ctx.lineWidth = lineWidth * 4
+  } else if (stroke?.highlight) {
     ctx.globalCompositeOperation = livePreview ? 'source-over' : 'multiply'
-    ctx.strokeStyle = stroke.color.length === 7 ? stroke.color + '88' : stroke.color
-    ctx.lineWidth = stroke.width * 3
+    ctx.strokeStyle = color.length === 7 ? color + '88' : color
+    ctx.lineWidth = lineWidth * 3
   } else {
     ctx.globalCompositeOperation = 'source-over'
-    ctx.strokeStyle = stroke.color
-    ctx.lineWidth = stroke.width
+    ctx.strokeStyle = color
+    ctx.lineWidth = lineWidth
   }
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
@@ -120,12 +124,21 @@ const drawPointSegments = (ctx, points, fromIndex) => {
   }
 }
 
+const drawStrokeOnCtx = (ctx, s) => {
+  if (!s.points || s.points.length < 2) return
+  applyStrokeStyle(ctx, s, { erasing: false })
+  traceSmoothStroke(ctx, s.points)
+  ctx.globalCompositeOperation = 'source-over'
+}
+
 const drawStrokeDot = (ctx, stroke) => {
-  const p = stroke.points[0]
+  const p = stroke?.points?.[0]
   if (!p) return
   applyStrokeStyle(ctx, stroke)
-  const r = stroke.highlight ? (stroke.width * 3) / 2 : Math.max(stroke.width / 2, 1)
-  ctx.fillStyle = stroke.highlight && stroke.color.length === 7 ? stroke.color + '88' : stroke.color
+  const w = stroke?.width ?? 5
+  const color = stroke?.color || '#1a1a1a'
+  const r = stroke?.highlight ? (w * 3) / 2 : Math.max(w / 2, 1)
+  ctx.fillStyle = stroke?.highlight && color.length === 7 ? color + '88' : color
   ctx.beginPath()
   ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
   ctx.fill()
@@ -182,9 +195,22 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [pendingBold, setPendingBold] = useState(false)
   const [pendingItalic, setPendingItalic] = useState(false)
   const [pendingUnderline, setPendingUnderline] = useState(false)
+  const [pagesBarCollapsed, setPagesBarCollapsed] = useState(() => {
+    try { return localStorage.getItem(PAGES_BAR_COLLAPSED_KEY) === '1' } catch { return false }
+  })
+  const [loadError, setLoadError] = useState(null)
+  const [editingPageNameId, setEditingPageNameId] = useState(null)
+  const [editingPageNameValue, setEditingPageNameValue] = useState('')
   zoomRef.current = zoom
   drawSettingsRef.current = { tool, color, width, highlight, highlightColor }
   pagesRef.current = pages
+
+  useEffect(() => {
+    try { localStorage.setItem(PAGES_BAR_COLLAPSED_KEY, pagesBarCollapsed ? '1' : '0') } catch (_) {}
+  }, [pagesBarCollapsed])
+
+  const activePage = pages.find(p => p.id === activePageId)
+  const activePageIndex = pages.findIndex(p => p.id === activePageId)
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 2500) }
 
@@ -200,6 +226,22 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     images: overrides.images !== undefined ? overrides.images : images,
   }), [stickies, textBoxes, images])
 
+  const redrawCanvas = useCallback((strokes) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ;(strokes || strokesRef.current).forEach(s => drawStrokeOnCtx(ctx, s))
+    const overlay = strokeCanvasRef.current
+    overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
+  }, [])
+
+  const clearStrokeOverlay = useCallback(() => {
+    const overlay = strokeCanvasRef.current
+    if (!overlay) return
+    overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
+  }, [])
+
   const applyPage = useCallback((page) => {
     const snap = pageToSnapshot(page)
     strokesRef.current = snap.strokes
@@ -209,27 +251,56 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     redrawCanvas(snap.strokes)
     clearStrokeOverlay()
     initHistory(snap)
-  }, [])
+  }, [redrawCanvas, clearStrokeOverlay])
 
   const persistPages = useCallback(async (pagesList, activeId) => {
     if (!activeBoard) return
     setSaving(true)
-    await supabase.from('boards').update(boardUpdatePayload(pagesList, activeId)).eq('id', activeBoard.id)
+    let payload = boardUpdatePayload(pagesList, activeId, true)
+    let { error } = await supabase.from('boards').update(payload).eq('id', activeBoard.id)
+    if (error && isMissingPagesColumnError(error.message)) {
+      payload = boardUpdatePayload(pagesList, activeId, false)
+      ;({ error } = await supabase.from('boards').update(payload).eq('id', activeBoard.id))
+    }
+    if (error) notify(error.message)
     setSaving(false)
   }, [activeBoard])
 
   // --- Supabase persistence ---
   const loadBoard = useCallback(async (board) => {
-    if (!board) return
-    const { data } = await supabase.from('boards').select('*').eq('id', board.id).single()
-    if (data) {
+    if (!board?.id) return
+    setLoadError(null)
+    const { data, error } = await supabase.from('boards').select('*').eq('id', board.id).single()
+    if (error) {
+      setLoadError(error.message)
+      return
+    }
+    if (!data) {
+      setLoadError('Board not found')
+      return
+    }
+    try {
       const pagesList = normalizeBoardPages(data)
       pagesRef.current = pagesList
       setPages(pagesList)
       setActiveBoard(data)
       const first = pagesList[0]
+      if (!first) {
+        setLoadError('Board has no pages')
+        return
+      }
       setActivePageId(first.id)
-      applyPage(first)
+      requestAnimationFrame(() => {
+        try {
+          applyPage(first)
+        } catch (err) {
+          console.error('applyPage:', err)
+          setLoadError(err?.message || 'Failed to display board')
+        }
+      })
+    } catch (err) {
+      console.error('loadBoard:', err)
+      setLoadError(err?.message || 'Failed to load board')
     }
   }, [applyPage])
 
@@ -248,7 +319,42 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     saveTimer.current = setTimeout(() => persistPages(merged, activePageId), 800)
   }, [activeBoard, activePageId, getCanvasSnap, persistPages])
 
+  const renamePage = useCallback((pageId, rawName) => {
+    const name = rawName.trim()
+    if (!name) return
+    const merged = pagesRef.current.map(p => (p.id === pageId ? { ...p, name } : p))
+    pagesRef.current = merged
+    setPages(merged)
+    persistPages(merged, activePageId)
+  }, [activePageId, persistPages])
+
+  const startPageRename = useCallback((pageId) => {
+    const p = pagesRef.current.find(x => x.id === pageId)
+    if (!p) return
+    setEditingPageNameId(pageId)
+    setEditingPageNameValue(p.name)
+  }, [])
+
+  const commitPageRename = useCallback(() => {
+    if (!editingPageNameId) return
+    const pageId = editingPageNameId
+    const value = editingPageNameValue
+    setEditingPageNameId(null)
+    setEditingPageNameValue('')
+    const current = pagesRef.current.find(p => p.id === pageId)
+    if (!current) return
+    const name = value.trim() || current.name
+    if (name === current.name) return
+    renamePage(pageId, name)
+  }, [editingPageNameId, editingPageNameValue, renamePage])
+
+  const cancelPageRename = useCallback(() => {
+    setEditingPageNameId(null)
+    setEditingPageNameValue('')
+  }, [])
+
   const switchPage = useCallback((pageId) => {
+    if (editingPageNameId) commitPageRename()
     if (!activePageId || pageId === activePageId) return
     const merged = mergeActivePage(pagesRef.current, activePageId, getCanvasSnap())
     pagesRef.current = merged
@@ -257,7 +363,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     if (!page) return
     setActivePageId(pageId)
     applyPage(page)
-  }, [activePageId, getCanvasSnap, applyPage])
+  }, [activePageId, editingPageNameId, commitPageRename, getCanvasSnap, applyPage])
+
+  const goToAdjacentPage = useCallback((delta) => {
+    const list = pagesRef.current
+    const idx = list.findIndex(p => p.id === activePageId)
+    if (idx < 0) return
+    const next = list[idx + delta]
+    if (next) switchPage(next.id)
+  }, [activePageId, switchPage])
 
   const addPage = useCallback(() => {
     if (!activePageId) return
@@ -291,7 +405,19 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     applyPage(nextActive)
     persistPages(merged, nextActive.id)
     notify('Page deleted')
-  }, [activePageId, getCanvasSnap, applyPage, persistPages, notify])
+  }, [activePageId, getCanvasSnap, applyPage, persistPages])
+
+  const handlePageTabClick = useCallback((pageId) => {
+    if (editingPageNameId) {
+      if (editingPageNameId !== pageId) switchPage(pageId)
+      return
+    }
+    if (pageId === activePageId) {
+      startPageRename(pageId)
+      return
+    }
+    switchPage(pageId)
+  }, [activePageId, editingPageNameId, startPageRename, switchPage])
 
   useEffect(() => {
     if (boardSummary) loadBoard(boardSummary)
@@ -310,7 +436,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       setPages(merged)
       persistPages(merged, activePageId)
     }
-  }, [activeBoard, activePageId, persistPages])
+  }, [activeBoard, activePageId, persistPages, redrawCanvas])
 
   const undo = useCallback(() => {
     if (historyIndexRef.current <= 0) return
@@ -337,30 +463,6 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   useEffect(() => () => {
     if (drawRafRef.current != null) cancelAnimationFrame(drawRafRef.current)
   }, [])
-
-  // --- Canvas helpers ---
-  const redrawCanvas = (strokes) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ;(strokes || strokesRef.current).forEach(s => drawStroke(ctx, s))
-    const overlay = strokeCanvasRef.current
-    overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
-  }
-
-  const drawStroke = (ctx, s) => {
-    if (!s.points || s.points.length < 2) return
-    applyStrokeStyle(ctx, s, { erasing: false })
-    traceSmoothStroke(ctx, s.points)
-    ctx.globalCompositeOperation = 'source-over'
-  }
-
-  const clearStrokeOverlay = () => {
-    const overlay = strokeCanvasRef.current
-    if (!overlay) return
-    overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
-  }
 
   const paintLiveStroke = useCallback(() => {
     const stroke = currentStroke.current
@@ -851,6 +953,53 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
 
   const cursorStyle = tool==='draw'?'crosshair':tool==='erase'?'cell':tool==='text'||tool==='sticky'?'copy':'default'
 
+  const pageNameInputStyle = (isActive) => ({
+    flex: 1,
+    minWidth: 72,
+    maxWidth: 240,
+    minHeight: sizes.pageTabMinHeight,
+    padding: '8px 14px',
+    fontSize: 16,
+    fontWeight: 700,
+    borderRadius: 10,
+    border: isActive ? `2px solid ${colors.accentDark}` : `1px solid ${colors.border}`,
+    background: isActive ? colors.accent : '#f6f8fa',
+    color: isActive ? '#fff' : colors.text,
+    outline: 'none',
+    boxSizing: 'border-box',
+  })
+
+  const pageNameInputProps = (pageId, isActive) => ({
+    autoFocus: true,
+    value: editingPageNameValue,
+    onChange: e => setEditingPageNameValue(e.target.value),
+    onBlur: commitPageRename,
+    onKeyDown: e => {
+      if (e.key === 'Enter') { e.preventDefault(); commitPageRename() }
+      if (e.key === 'Escape') { e.preventDefault(); cancelPageRename() }
+    },
+    onClick: e => e.stopPropagation(),
+    onPointerDown: e => e.stopPropagation(),
+    style: pageNameInputStyle(isActive),
+    'aria-label': `Rename ${pages.find(p => p.id === pageId)?.name || 'page'}`,
+  })
+
+  if (loadError && !activeBoard) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', gap: 16, padding: 24, background: '#eef1f4',
+      }}>
+        <p style={{ fontSize: 18, fontWeight: 600, color: colors.danger, textAlign: 'center', maxWidth: 480 }}>
+          Could not open board: {loadError}
+        </p>
+        <button type="button" onClick={onExitBoard} style={touchBtn({ background: colors.accent, color: '#fff', border: 'none' })}>
+          ← Back to boards
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#eef1f4' }}>
       {notification && (
@@ -1106,52 +1255,156 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       </div>
 
       <div style={{
-        display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
-        background: colors.surface, borderTop:`1px solid ${colors.border}`,
-        overflowX:'auto', flexShrink:0, minHeight: sizes.pageTabMinHeight + 20,
+        background: colors.surface,
+        borderTop: `1px solid ${colors.border}`,
+        flexShrink: 0,
       }}>
-        {pages.map((p) => (
-          <div key={p.id} style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-            <button type="button" onClick={() => switchPage(p.id)}
-              style={{
-                ...touchBtn({
-                  minHeight: sizes.pageTabMinHeight,
-                  padding: '12px 20px',
-                  fontSize: 16,
-                  border: p.id === activePageId ? `2px solid ${colors.accentDark}` : `1px solid ${colors.border}`,
-                  background: p.id === activePageId ? colors.accent : '#f6f8fa',
-                  color: p.id === activePageId ? '#fff' : colors.text,
-                }),
-              }}>
-              {p.name}
-            </button>
-            {pages.length > 1 && (
-              <button type="button" onClick={() => deletePage(p.id)} title={`Delete ${p.name}`}
-                style={iconOnlyBtn({ minWidth: 44, minHeight: 44, fontSize: 22, color: colors.textMuted, background: 'transparent', border: 'none' })}
-                aria-label={`Delete ${p.name}`}>
-                ×
+        {pagesBarCollapsed ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+            minHeight: sizes.touchMin,
+          }}>
+            <Tip label="Show page tabs" side="top">
+              <button
+                type="button"
+                onClick={() => setPagesBarCollapsed(false)}
+                aria-expanded={false}
+                style={touchBtn({ minHeight: 44, padding: '8px 12px', flexShrink: 0 })}
+              >
+                ▲
               </button>
+            </Tip>
+            <Tip label="Previous page" side="top">
+              <button
+                type="button"
+                onClick={() => goToAdjacentPage(-1)}
+                disabled={activePageIndex <= 0}
+                aria-label="Previous page"
+                style={iconOnlyBtn({
+                  minWidth: 44, minHeight: 44, fontSize: 24, fontWeight: 300, flexShrink: 0,
+                })}
+              >
+                ‹
+              </button>
+            </Tip>
+            {activePageId && editingPageNameId === activePageId ? (
+              <input {...pageNameInputProps(activePageId, true)} />
+            ) : (
+              <Tip label="Tap again to rename page" side="top">
+                <button
+                  type="button"
+                  onClick={() => activePageId && handlePageTabClick(activePageId)}
+                  onDoubleClick={() => activePageId && startPageRename(activePageId)}
+                  style={{
+                    flex: 1, minHeight: 44, minWidth: 0, border: 'none', background: 'transparent',
+                    textAlign: 'center', fontSize: 16, fontWeight: 700, color: colors.text,
+                    padding: '8px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activePage?.name || 'Page'}
+                  {pages.length > 1 && (
+                    <span style={{ fontWeight: 500, color: colors.textMuted, marginLeft: 8 }}>
+                      {activePageIndex >= 0 ? activePageIndex + 1 : 1} / {pages.length}
+                    </span>
+                  )}
+                </button>
+              </Tip>
             )}
+            <Tip label="Next page" side="top">
+              <button
+                type="button"
+                onClick={() => goToAdjacentPage(1)}
+                disabled={activePageIndex < 0 || activePageIndex >= pages.length - 1}
+                aria-label="Next page"
+                style={iconOnlyBtn({
+                  minWidth: 44, minHeight: 44, fontSize: 24, fontWeight: 300, flexShrink: 0,
+                })}
+              >
+                ›
+              </button>
+            </Tip>
+            <Tip label="Add page" side="top">
+              <button type="button" onClick={addPage}
+                style={touchBtn({ minHeight: 44, minWidth: 44, padding: 0, flexShrink: 0, border: `2px dashed ${colors.accent}`, background: colors.accentLight, color: colors.accent })}>
+                +
+              </button>
+            </Tip>
           </div>
-        ))}
-        <button type="button" onClick={addPage}
-          style={touchBtn({
-            minHeight: sizes.pageTabMinHeight,
-            border: `2px dashed ${colors.accent}`,
-            background: colors.accentLight,
-            color: colors.accent,
-          })}>
-          + Page
-        </button>
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+            overflowX: 'auto', minHeight: sizes.pageTabMinHeight + 20,
+          }}>
+            <Tip label="Hide page tabs" side="top">
+              <button
+                type="button"
+                onClick={() => setPagesBarCollapsed(true)}
+                aria-expanded
+                style={{
+                  ...touchBtn({ minHeight: sizes.pageTabMinHeight, minWidth: 44, padding: '8px 10px', flexShrink: 0 }),
+                  fontSize: 14,
+                }}
+              >
+                ▼
+              </button>
+            </Tip>
+            {pages.map((p) => {
+              const isActive = p.id === activePageId
+              return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                {editingPageNameId === p.id ? (
+                  <input {...pageNameInputProps(p.id, isActive)} />
+                ) : (
+                  <Tip label={isActive ? 'Tap again to rename' : `Open ${p.name}`} side="top">
+                    <button type="button"
+                      onClick={() => handlePageTabClick(p.id)}
+                      onDoubleClick={(e) => { e.preventDefault(); startPageRename(p.id) }}
+                      style={{
+                        ...touchBtn({
+                          minHeight: sizes.pageTabMinHeight,
+                          padding: '12px 20px',
+                          fontSize: 16,
+                          border: isActive ? `2px solid ${colors.accentDark}` : `1px solid ${colors.border}`,
+                          background: isActive ? colors.accent : '#f6f8fa',
+                          color: isActive ? '#fff' : colors.text,
+                        }),
+                      }}>
+                      {p.name}
+                    </button>
+                  </Tip>
+                )}
+                {pages.length > 1 && (
+                  <button type="button" onClick={() => deletePage(p.id)} title={`Delete ${p.name}`}
+                    style={iconOnlyBtn({ minWidth: 44, minHeight: 44, fontSize: 22, color: colors.textMuted, background: 'transparent', border: 'none' })}
+                    aria-label={`Delete ${p.name}`}>
+                    ×
+                  </button>
+                )}
+              </div>
+            )})}
+            <button type="button" onClick={addPage}
+              style={touchBtn({
+                minHeight: sizes.pageTabMinHeight,
+                border: `2px dashed ${colors.accent}`,
+                background: colors.accentLight,
+                color: colors.accent,
+                flexShrink: 0,
+              })}>
+              + Page
+            </button>
+          </div>
+        )}
       </div>
 
+      {!pagesBarCollapsed && (
       <div className="wb-help-footer" style={{
         padding:'8px 16px', background: colors.surface, borderTop:`1px solid ${colors.border}`,
         fontSize:13, color: colors.textMuted, display:'flex', gap:20, flexWrap:'wrap',
       }}>
-        <span>Touch: draw with finger · pinch to zoom · double-tap notes to edit</span>
+        <span>Touch: draw with finger · pinch to zoom · tap page tab again to rename</span>
         <span>Paste images from clipboard</span>
       </div>
+      )}
     </div>
   )
 }

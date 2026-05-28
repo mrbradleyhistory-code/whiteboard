@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { boardUpdatePayload, createPage, normalizeBoardPages } from '../boardPages'
+import { boardUpdatePayload, createPage, isMissingPagesColumnError, normalizeBoardPages } from '../boardPages'
 import { supabase } from '../supabaseClient'
 import { colors, sizes, touchBtn } from '../uiTheme'
 
@@ -45,11 +45,12 @@ export default function BoardHome({ session, onOpenBoard }) {
     const name = newName.trim() || `Board ${boards.length + 1}`
     const pageId = crypto.randomUUID()
     const pages = [createPage(pageId, 'Page 1')]
-    const { data, error: insertErr } = await supabase
-      .from('boards')
-      .insert({ name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId) })
-      .select()
-      .single()
+    let row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, true) }
+    let { data, error: insertErr } = await supabase.from('boards').insert(row).select().single()
+    if (insertErr && isMissingPagesColumnError(insertErr.message)) {
+      row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, false) }
+      ;({ data, error: insertErr } = await supabase.from('boards').insert(row).select().single())
+    }
     setCreating(false)
     if (insertErr) {
       setError(insertErr.message)
@@ -106,15 +107,28 @@ export default function BoardHome({ session, onOpenBoard }) {
     const pagesList = normalizeBoardPages(full).map((p) =>
       createPage(crypto.randomUUID(), p.name, p),
     )
-    const { data: copy, error: insErr } = await supabase
+    let copyRow = {
+      name: `${full.name} (copy)`,
+      user_id: session.user.id,
+      ...boardUpdatePayload(pagesList, pagesList[0].id, true),
+    }
+    let { data: copy, error: insErr } = await supabase
       .from('boards')
-      .insert({
-        name: `${full.name} (copy)`,
-        user_id: session.user.id,
-        ...boardUpdatePayload(pagesList, pagesList[0].id),
-      })
+      .insert(copyRow)
       .select('id, name, created_at, updated_at')
       .single()
+    if (insErr && isMissingPagesColumnError(insErr.message)) {
+      copyRow = {
+        name: `${full.name} (copy)`,
+        user_id: session.user.id,
+        ...boardUpdatePayload(pagesList, pagesList[0].id, false),
+      }
+      ;({ data: copy, error: insErr } = await supabase
+        .from('boards')
+        .insert(copyRow)
+        .select('id, name, created_at, updated_at')
+        .single())
+    }
     setBusyId(null)
     if (insErr) setError(insErr.message)
     else setBoards(prev => [copy, ...prev])

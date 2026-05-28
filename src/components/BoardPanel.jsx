@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { boardUpdatePayload, createPage } from '../boardPages'
+import { boardUpdatePayload, createPage, isMissingPagesColumnError } from '../boardPages'
 import { supabase } from '../supabaseClient'
 import { colors, sizes, touchBtn } from '../uiTheme'
 
@@ -23,11 +23,12 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
     const name = newName.trim() || `Board ${boards.length + 1}`
     const pageId = crypto.randomUUID()
     const pages = [createPage(pageId, 'Page 1')]
-    const { data, error } = await supabase
-      .from('boards')
-      .insert({ name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId) })
-      .select()
-      .single()
+    let row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, true) }
+    let { data, error } = await supabase.from('boards').insert(row).select().single()
+    if (error && isMissingPagesColumnError(error.message)) {
+      row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, false) }
+      ;({ data, error } = await supabase.from('boards').insert(row).select().single())
+    }
     if (!error) { setBoards(prev => [data, ...prev]); onSelect(data); setNewName('') }
   }
 

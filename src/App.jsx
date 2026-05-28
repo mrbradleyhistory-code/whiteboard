@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './components/Auth'
 import BoardHome from './components/BoardHome'
@@ -8,6 +8,7 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [openBoard, setOpenBoard] = useState(null)
+  const handleExitBoard = useCallback(() => setOpenBoard(null), [])
 
   useEffect(() => {
     let mounted = true
@@ -40,6 +41,7 @@ export default function App() {
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontSize:18, fontWeight:500, color:'#5c6570' }}>Loading…</div>
   if (!session) return <Auth />
+
   if (!openBoard) {
     return <BoardHome session={session} onOpenBoard={setOpenBoard} />
   }
@@ -47,7 +49,7 @@ export default function App() {
     <Whiteboard
       session={session}
       boardSummary={openBoard}
-      onExitBoard={() => setOpenBoard(null)}
+      onExitBoard={handleExitBoard}
     />
   )
 }
