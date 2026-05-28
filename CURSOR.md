@@ -52,6 +52,8 @@ RLS: users can only read/write their own boards.
 
 ## Key architecture decisions
 
+**Pen rendering**: Pointer Events with `getCoalescedEvents()` capture every sample between frames. Live pen strokes render on a transparent overlay canvas each animation frame with quadratic smoothing; highlighter/eraser draw incremental segments on the main canvas (no full redraw per move).
+
 **Canvas coordinate system**: Canvas internal resolution is 2400×1600. The canvas element now has `style={{ width:2400, height:1600 }}` (1:1) and lives inside a `transform: scale(zoom)` div. This means `getBoundingClientRect().width = 2400 * zoom`, so all coordinate conversions divide by zoom automatically via `scaleX = canvas.width / r.width`.
 
 **Zoom structure** (added most recently):

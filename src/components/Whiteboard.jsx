@@ -39,8 +39,91 @@ const isTouchPointer = (e) => e.type.startsWith('touch')
 const shouldIgnoreOverlayPointer = (target) =>
   target.closest('textarea, button, input')
 
+const canvasPos = (clientX, clientY, canvas) => {
+  const r = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / r.width
+  const scaleY = canvas.height / r.height
+  return { x: (clientX - r.left) * scaleX, y: (clientY - r.top) * scaleY }
+}
+
+const collectCoalescedPoints = (e, canvas) => {
+  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
+  return events.map(ev => canvasPos(ev.clientX, ev.clientY, canvas))
+}
+
+const MIN_POINT_DIST = 0.35
+
+const appendStrokePoints = (stroke, newPoints) => {
+  const pts = stroke.points
+  for (const p of newPoints) {
+    const last = pts[pts.length - 1]
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= MIN_POINT_DIST) pts.push(p)
+  }
+}
+
+const traceSmoothStroke = (ctx, points) => {
+  const n = points.length
+  if (n < 2) return
+  ctx.beginPath()
+  ctx.moveTo(points[0].x, points[0].y)
+  if (n === 2) {
+    ctx.lineTo(points[1].x, points[1].y)
+    ctx.stroke()
+    return
+  }
+  for (let i = 1; i < n - 1; i++) {
+    const mx = (points[i].x + points[i + 1].x) / 2
+    const my = (points[i].y + points[i + 1].y) / 2
+    ctx.quadraticCurveTo(points[i].x, points[i].y, mx, my)
+  }
+  const last = points[n - 1]
+  const prev = points[n - 2]
+  ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y)
+  ctx.stroke()
+}
+
+const applyStrokeStyle = (ctx, stroke, { erasing = false } = {}) => {
+  if (erasing) {
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.strokeStyle = 'rgba(0,0,0,1)'
+    ctx.lineWidth = stroke.width * 4
+  } else if (stroke.highlight) {
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.strokeStyle = stroke.color + '88'
+    ctx.lineWidth = stroke.width * 3
+  } else {
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.strokeStyle = stroke.color
+    ctx.lineWidth = stroke.width
+  }
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+}
+
+const drawPointSegments = (ctx, points, fromIndex) => {
+  for (let i = Math.max(1, fromIndex); i < points.length; i++) {
+    const a = points[i - 1]
+    const b = points[i]
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
+  }
+}
+
+const drawStrokeDot = (ctx, stroke) => {
+  const p = stroke.points[0]
+  if (!p) return
+  applyStrokeStyle(ctx, stroke)
+  ctx.beginPath()
+  ctx.arc(p.x, p.y, Math.max(stroke.width / 2, 1), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalCompositeOperation = 'source-over'
+}
+
 export default function Whiteboard({ session }) {
   const canvasRef = useRef(null)
+  const strokeCanvasRef = useRef(null)
   const strokesRef = useRef([])
   const drawing = useRef(false)
   const currentStroke = useRef(null)
@@ -55,6 +138,11 @@ export default function Whiteboard({ session }) {
   const touchDragPendingRef = useRef(null)
   const lastTapRef = useRef({ time: 0, x: 0, y: 0, type: null, id: null })
   const cancelDragResizeRef = useRef(() => {})
+  const activePointerIdRef = useRef(null)
+  const drawRafRef = useRef(null)
+  const liveStrokeRenderedRef = useRef(0)
+  const drewThisGestureRef = useRef(false)
+  const drawSettingsRef = useRef({ tool: 'draw', color: '#1a1a1a', width: 5, highlight: false, highlightColor: '#f6c90e' })
 
   const [tool, setTool] = useState('draw')
   const [color, setColor] = useState('#1a1a1a')
@@ -78,6 +166,7 @@ export default function Whiteboard({ session }) {
   const [textAlign, setTextAlign] = useState('left')
   const [listStyle, setListStyle] = useState('none')
   zoomRef.current = zoom
+  drawSettingsRef.current = { tool, color, width, highlight, highlightColor }
 
   const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(''), 2500) }
 
@@ -185,6 +274,10 @@ export default function Whiteboard({ session }) {
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo])
 
+  useEffect(() => () => {
+    if (drawRafRef.current != null) cancelAnimationFrame(drawRafRef.current)
+  }, [])
+
   // --- Canvas helpers ---
   const redrawCanvas = (strokes) => {
     const canvas = canvasRef.current
@@ -192,98 +285,167 @@ export default function Whiteboard({ session }) {
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ;(strokes || strokesRef.current).forEach(s => drawStroke(ctx, s))
+    const overlay = strokeCanvasRef.current
+    overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
   }
 
   const drawStroke = (ctx, s) => {
     if (!s.points || s.points.length < 2) return
-    ctx.beginPath()
-    ctx.strokeStyle = s.highlight ? s.color + '88' : s.color
-    ctx.lineWidth = s.width
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.globalCompositeOperation = s.highlight ? 'multiply' : 'source-over'
-    ctx.moveTo(s.points[0].x, s.points[0].y)
-    s.points.forEach(p => ctx.lineTo(p.x, p.y))
-    ctx.stroke()
+    applyStrokeStyle(ctx, s, { erasing: false })
+    traceSmoothStroke(ctx, s.points)
     ctx.globalCompositeOperation = 'source-over'
   }
 
-  const getPos = (e, canvas) => {
-    const r = canvas.getBoundingClientRect()
-    const src = e.touches ? e.touches[0] : e
-    const scaleX = canvas.width / r.width
-    const scaleY = canvas.height / r.height
-    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY }
+  const clearStrokeOverlay = () => {
+    const overlay = strokeCanvasRef.current
+    if (!overlay) return
+    overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
   }
 
-  // --- Drawing handlers ---
-  const onPointerDown = (e) => {
-    if (tool !== 'draw' && tool !== 'erase') return
-    if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
+  const paintLiveStroke = useCallback(() => {
+    const stroke = currentStroke.current
+    if (!drawing.current || !stroke?.points.length) return
+
+    const main = canvasRef.current
+    const overlay = strokeCanvasRef.current
+    if (!main) return
+
+    const { tool: t, highlight: hl } = drawSettingsRef.current
+    const pts = stroke.points
+
+    if (t === 'erase') {
+      const ctx = main.getContext('2d')
+      applyStrokeStyle(ctx, stroke, { erasing: true })
+      drawPointSegments(ctx, pts, liveStrokeRenderedRef.current)
+      liveStrokeRenderedRef.current = pts.length
+      ctx.globalCompositeOperation = 'source-over'
+      return
+    }
+
+    if (hl) {
+      const ctx = main.getContext('2d')
+      applyStrokeStyle(ctx, stroke)
+      drawPointSegments(ctx, pts, liveStrokeRenderedRef.current)
+      liveStrokeRenderedRef.current = pts.length
+      ctx.globalCompositeOperation = 'source-over'
+      return
+    }
+
+    if (!overlay) return
+    const ctx = overlay.getContext('2d')
+    ctx.clearRect(0, 0, overlay.width, overlay.height)
+    applyStrokeStyle(ctx, stroke)
+    traceSmoothStroke(ctx, pts)
+    ctx.globalCompositeOperation = 'source-over'
+  }, [])
+
+  const scheduleStrokeFrame = useCallback(() => {
+    if (drawRafRef.current != null) return
+    drawRafRef.current = requestAnimationFrame(() => {
+      drawRafRef.current = null
+      paintLiveStroke()
+    })
+  }, [paintLiveStroke])
+
+  const cancelStrokeFrame = () => {
+    if (drawRafRef.current != null) {
+      cancelAnimationFrame(drawRafRef.current)
+      drawRafRef.current = null
+    }
+  }
+
+  // --- Drawing handlers (Pointer Events + coalesced points) ---
+  const onCanvasPointerDown = (e) => {
+    const { tool: t } = drawSettingsRef.current
+    if (t !== 'draw' && t !== 'erase') return
+    if (touchGestureRef.current.active) return
+    if (!canvasRef.current) return
+
+    e.currentTarget.setPointerCapture(e.pointerId)
+    activePointerIdRef.current = e.pointerId
+    drewThisGestureRef.current = false
+    liveStrokeRenderedRef.current = 0
+    clearStrokeOverlay()
+
     const canvas = canvasRef.current
+    const { color: c, width: w, highlight: hl, highlightColor: hc } = drawSettingsRef.current
+    const points = collectCoalescedPoints(e, canvas)
     drawing.current = true
-    currentStroke.current = { color: highlight ? highlightColor : color, width, highlight: highlight && tool==='draw', points: [getPos(e, canvas)] }
+    currentStroke.current = {
+      color: hl ? hc : c,
+      width: w,
+      highlight: hl && t === 'draw',
+      points: points.length ? [points[0]] : [],
+    }
+    appendStrokePoints(currentStroke.current, points.slice(1))
+    if (currentStroke.current.points.length) {
+      drewThisGestureRef.current = true
+      scheduleStrokeFrame()
+    }
     e.preventDefault()
   }
 
-  const onPointerMove = (e) => {
+  const onCanvasPointerMove = (e) => {
     if (!drawing.current || !currentStroke.current) return
+    if (activePointerIdRef.current !== e.pointerId) return
+
     const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    const pos = getPos(e, canvas)
-    currentStroke.current.points.push(pos)
-    const pts = currentStroke.current.points
-
-    if (tool === 'erase') {
-      ctx.globalCompositeOperation = 'destination-out'
-      ctx.strokeStyle = 'rgba(0,0,0,1)'
-      ctx.lineWidth = width * 4
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-      ctx.beginPath()
-      ctx.moveTo(pts[pts.length-2].x, pts[pts.length-2].y)
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y)
-      ctx.stroke()
-      ctx.globalCompositeOperation = 'source-over'
-    } else if (highlight) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      strokesRef.current.forEach(s => drawStroke(ctx, s))
-      ctx.globalCompositeOperation = 'multiply'
-      ctx.strokeStyle = highlightColor + '88'
-      ctx.lineWidth = width * 3
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-      ctx.beginPath()
-      ctx.moveTo(pts[0].x, pts[0].y)
-      pts.forEach(p => ctx.lineTo(p.x, p.y))
-      ctx.stroke()
-      ctx.globalCompositeOperation = 'source-over'
-    } else {
-      ctx.globalCompositeOperation = 'source-over'
-      ctx.strokeStyle = color
-      ctx.lineWidth = width
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-      ctx.beginPath()
-      ctx.moveTo(pts[pts.length-2].x, pts[pts.length-2].y)
-      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y)
-      ctx.stroke()
-    }
+    appendStrokePoints(currentStroke.current, collectCoalescedPoints(e, canvas))
+    drewThisGestureRef.current = true
+    scheduleStrokeFrame()
     e.preventDefault()
   }
 
-  const onPointerUp = () => {
-    if (!drawing.current || !currentStroke.current) return
-    drawing.current = false
-    if (tool !== 'erase') {
-      const newStrokes = [...strokesRef.current, currentStroke.current]
-      strokesRef.current = newStrokes
-      scheduleSave({ strokes: newStrokes })
-    } else {
-      strokesRef.current = []
-      scheduleSave({ strokes: [] })
+  const finishCanvasPointer = (e) => {
+    if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return
+    if (!drawing.current) return
+
+    cancelStrokeFrame()
+    if (e?.currentTarget?.releasePointerCapture && activePointerIdRef.current != null) {
+      try { e.currentTarget.releasePointerCapture(activePointerIdRef.current) } catch (_) {}
     }
+    activePointerIdRef.current = null
+
+    const { tool: t } = drawSettingsRef.current
+    const canvas = canvasRef.current
+    const stroke = currentStroke.current
+
+    if (stroke?.points.length >= 1 && canvas) {
+      const ctx = canvas.getContext('2d')
+      if (t === 'erase') {
+        strokesRef.current = []
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        scheduleSave({ strokes: [] })
+      } else if (stroke.points.length === 1) {
+        drawStrokeDot(ctx, stroke)
+        const newStrokes = [...strokesRef.current, stroke]
+        strokesRef.current = newStrokes
+        scheduleSave({ strokes: newStrokes })
+      } else {
+        applyStrokeStyle(ctx, stroke)
+        traceSmoothStroke(ctx, stroke.points)
+        ctx.globalCompositeOperation = 'source-over'
+        const newStrokes = [...strokesRef.current, stroke]
+        strokesRef.current = newStrokes
+        scheduleSave({ strokes: newStrokes })
+      }
+    }
+
+    clearStrokeOverlay()
+    drawing.current = false
     currentStroke.current = null
+    liveStrokeRenderedRef.current = 0
   }
+
+  const onCanvasPointerUp = (e) => finishCanvasPointer(e)
+
+  const onCanvasPointerCancel = (e) => finishCanvasPointer(e)
 
   const handleCanvasClick = (e) => {
+    if (drewThisGestureRef.current) {
+      drewThisGestureRef.current = false
+      return
+    }
     if (!activeBoard) return
     const canvas = canvasRef.current
     const r = canvas.getBoundingClientRect()
@@ -707,10 +869,14 @@ export default function Whiteboard({ session }) {
           <div style={{ width: 2400 * zoom, height: 1600 * zoom, position:'relative', flexShrink:0 }}>
             <div style={{ position:'absolute', top:0, left:0, width:2400, height:1600, transform:`scale(${zoom})`, transformOrigin:'0 0' }}>
           <canvas ref={canvasRef} width={2400} height={1600}
-            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, cursor:cursorStyle, touchAction:'none', background:'#fff' }}
-            onMouseDown={onPointerDown} onMouseMove={onPointerMove} onMouseUp={onPointerUp}
-            onTouchStart={onPointerDown} onTouchMove={onPointerMove} onTouchEnd={onPointerUp}
+            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, cursor:cursorStyle, touchAction:'none', background:'#fff', zIndex:0 }}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerUp={onCanvasPointerUp}
+            onPointerCancel={onCanvasPointerCancel}
             onClick={handleCanvasClick} />
+          <canvas ref={strokeCanvasRef} width={2400} height={1600}
+            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, touchAction:'none', pointerEvents:'none', zIndex:1 }} />
 
           {/* Overlay */}
           <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none' }}>
