@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Classroom Whiteboard">
+  <rect width="32" height="32" rx="7" fill="#457b9d"/>
+  <rect x="4" y="6" width="24" height="17" rx="2.5" fill="#ffffff"/>
+  <path
+    d="M8 19 Q12 13 17 15.5 T25 11"
+    fill="none"
+    stroke="#2a9d8f"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M22 10.5 L26.5 6 L28 7.5 L23.5 12 Z"
+    fill="#1a1f26"
+  />
+  <circle cx="26.5" cy="6" r="1.25" fill="#f6c90e"/>
+</svg>
