@@ -1,4 +1,4 @@
-/** @typedef {{ id: string, name: string, strokes: object[], stickies: object[], text_boxes: object[], images: object[] }} BoardPage */
+/** @typedef {{ id: string, name: string, strokes: object[], stickies: object[], text_boxes: object[], images: object[], shapes: object[] }} BoardPage */
 
 export function createPage(id, name, content = {}) {
   return {
@@ -8,6 +8,7 @@ export function createPage(id, name, content = {}) {
     stickies: content.stickies || [],
     text_boxes: content.text_boxes || [],
     images: content.images || [],
+    shapes: content.shapes || [],
   }
 }
 
@@ -36,6 +37,7 @@ export function pageToSnapshot(page) {
     stickies: page.stickies || [],
     textBoxes: page.text_boxes || [],
     images: page.images || [],
+    shapes: page.shapes || [],
   }
 }
 
@@ -45,6 +47,7 @@ export function snapshotToPageFields(snap) {
     stickies: snap.stickies || [],
     text_boxes: snap.textBoxes || [],
     images: snap.images || [],
+    shapes: snap.shapes || [],
   }
 }
 
@@ -55,7 +58,7 @@ export function mergeActivePage(pages, activePageId, snap) {
   )
 }
 
-/** Dual-write active page to legacy columns for older clients. */
+/** Dual-write active page to legacy columns for older clients. Shapes live only in pages JSON. */
 export function boardUpdatePayload(pages, activePageId, includePages = true) {
   const active = pages.find(p => p.id === activePageId) || pages[0]
   const payload = {

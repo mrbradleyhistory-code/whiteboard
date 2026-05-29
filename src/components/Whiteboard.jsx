@@ -12,6 +12,7 @@ import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
 import Tip from './Tip'
 import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResizeHandle } from '../uiTheme'
+import { ShapeGraphic, createShapeFields } from '../shapes'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -180,6 +181,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [textColor, setTextColor] = useState('#1a1a1a')
   const [stickies, setStickies] = useState([])
   const [textBoxes, setTextBoxes] = useState([])
+  const [shapes, setShapes] = useState([])
   const [images, setImages] = useState([])
   const [activeBoard, setActiveBoard] = useState(null)
   const [pages, setPages] = useState([])
@@ -188,6 +190,13 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [showBoardPanel, setShowBoardPanel] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
   const [editingTextId, setEditingTextId] = useState(null)
+  const [editingShapeId, setEditingShapeId] = useState(null)
+  const [selectedOverlay, setSelectedOverlay] = useState(null) // { type: 'sticky'|'text'|'image'|'shape', id }
+  const [shapeKind, setShapeKind] = useState('rect')
+  const [shapeFill, setShapeFill] = useState('#e8f2f8')
+  const [shapeStroke, setShapeStroke] = useState('#457b9d')
+  const [shapePreview, setShapePreview] = useState(null)
+  const shapeDragRef = useRef(null)
   const [dragging, setDragging] = useState(null)
   const [notification, setNotification] = useState('')
   const [saving, setSaving] = useState(false)
@@ -213,6 +222,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     try { localStorage.setItem(PAGES_BAR_COLLAPSED_KEY, pagesBarCollapsed ? '1' : '0') } catch (_) {}
   }, [pagesBarCollapsed])
 
+  useEffect(() => {
+    setSelectedOverlay(null)
+  }, [tool])
+
   const activePage = pages.find(p => p.id === activePageId)
   const activePageIndex = pages.findIndex(p => p.id === activePageId)
 
@@ -228,7 +241,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     stickies: overrides.stickies !== undefined ? overrides.stickies : stickies,
     textBoxes: overrides.textBoxes !== undefined ? overrides.textBoxes : textBoxes,
     images: overrides.images !== undefined ? overrides.images : images,
-  }), [stickies, textBoxes, images])
+    shapes: overrides.shapes !== undefined ? overrides.shapes : shapes,
+  }), [stickies, textBoxes, images, shapes])
 
   const redrawCanvas = useCallback((strokes) => {
     const canvas = canvasRef.current
@@ -252,6 +266,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     setStickies(snap.stickies)
     setTextBoxes(snap.textBoxes)
     setImages(snap.images)
+    setShapes(snap.shapes)
     redrawCanvas(snap.strokes)
     clearStrokeOverlay()
     initHistory(snap)
@@ -266,7 +281,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       payload = boardUpdatePayload(pagesList, activeId, false)
       ;({ error } = await supabase.from('boards').update(payload).eq('id', activeBoard.id))
     }
-    if (error) notify(error.message)
+    if (error) notify(`Save failed: ${error.message}`)
     setSaving(false)
   }, [activeBoard])
 
@@ -433,6 +448,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     setStickies(snap.stickies)
     setTextBoxes(snap.textBoxes)
     setImages(snap.images)
+    setShapes(snap.shapes)
     redrawCanvas(snap.strokes)
     if (activeBoard && activePageId) {
       const merged = mergeActivePage(pagesRef.current, activePageId, snap)
@@ -513,9 +529,70 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }
 
   // --- Drawing handlers (Pointer Events + coalesced points) ---
+  const commitShapeFromDrag = (endX, endY) => {
+    const d = shapeDragRef.current
+    if (!d) return
+    let x = Math.min(d.startX, endX)
+    let y = Math.min(d.startY, endY)
+    let w = Math.abs(endX - d.startX)
+    let h = Math.abs(endY - d.startY)
+    if (w < 24 && h < 24) {
+      w = 160
+      h = 120
+      x = d.startX - w / 2
+      y = d.startY - h / 2
+    }
+    const ns = {
+      id: uid(),
+      ...createShapeFields({
+        kind: shapeKind,
+        x, y, width: w, height: h,
+        fillColor: shapeFill,
+        strokeColor: shapeStroke,
+        fontSize, textColor, fontFamily,
+        bold: pendingBold, italic: pendingItalic, underline: pendingUnderline,
+        textAlign, listStyle,
+      }),
+    }
+    const n = [...shapes, ns]
+    setShapes(n)
+    setEditingShapeId(ns.id)
+    setSelectedOverlay({ type: 'shape', id: ns.id })
+    scheduleSave({ shapes: n })
+  }
+
+  const finishShapePointer = (e) => {
+    if (!shapeDragRef.current) return false
+    if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return false
+    const canvas = canvasRef.current
+    if (!canvas) return false
+    const pt = canvasPos(e.clientX, e.clientY, canvas)
+    commitShapeFromDrag(pt.x, pt.y)
+    shapeDragRef.current = null
+    setShapePreview(null)
+    activePointerIdRef.current = null
+    if (e?.currentTarget?.releasePointerCapture) {
+      try { e.currentTarget.releasePointerCapture(e.pointerId) } catch (_) {}
+    }
+    return true
+  }
+
   const onCanvasPointerDown = (e) => {
-    const { tool: t } = drawSettingsRef.current
     if (e.button === 1 || middlePanRef.current.active) return
+    if (tool === 'shape') {
+      if (!canvasRef.current) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      activePointerIdRef.current = e.pointerId
+      const pt = canvasPos(e.clientX, e.clientY, canvasRef.current)
+      shapeDragRef.current = { startX: pt.x, startY: pt.y, pointerId: e.pointerId }
+      setShapePreview({
+        x: pt.x, y: pt.y, w: 0, h: 0,
+        kind: shapeKind, fillColor: shapeFill, strokeColor: shapeStroke,
+      })
+      e.preventDefault()
+      return
+    }
+    const { tool: t } = drawSettingsRef.current
     if (t !== 'draw' && t !== 'erase') return
     if (touchGestureRef.current.active) return
     if (!canvasRef.current) return
@@ -545,6 +622,23 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }
 
   const onCanvasPointerMove = (e) => {
+    if (shapeDragRef.current && activePointerIdRef.current === e.pointerId) {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const pt = canvasPos(e.clientX, e.clientY, canvas)
+      const d = shapeDragRef.current
+      setShapePreview({
+        x: Math.min(d.startX, pt.x),
+        y: Math.min(d.startY, pt.y),
+        w: Math.abs(pt.x - d.startX),
+        h: Math.abs(pt.y - d.startY),
+        kind: shapeKind,
+        fillColor: shapeFill,
+        strokeColor: shapeStroke,
+      })
+      e.preventDefault()
+      return
+    }
     if (!drawing.current || !currentStroke.current) return
     if (activePointerIdRef.current !== e.pointerId) return
 
@@ -596,9 +690,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     liveStrokeRenderedRef.current = 0
   }
 
-  const onCanvasPointerUp = (e) => finishCanvasPointer(e)
+  const onCanvasPointerUp = (e) => {
+    if (finishShapePointer(e)) return
+    finishCanvasPointer(e)
+  }
 
-  const onCanvasPointerCancel = (e) => finishCanvasPointer(e)
+  const onCanvasPointerCancel = (e) => {
+    if (finishShapePointer(e)) return
+    finishCanvasPointer(e)
+  }
 
   const handleCanvasClick = (e) => {
     if (drewThisGestureRef.current) {
@@ -641,8 +741,16 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     if (last.type === type && last.id === id &&
         now - last.time < DOUBLE_TAP_MS &&
         Math.hypot(clientX - last.x, clientY - last.y) < DOUBLE_TAP_PX) {
-      if (type === 'sticky') setEditingStickyId(id)
-      else setEditingTextId(id)
+      if (type === 'sticky') {
+        setEditingStickyId(id)
+        setSelectedOverlay({ type: 'sticky', id })
+      } else if (type === 'shape') {
+        setEditingShapeId(id)
+        setSelectedOverlay({ type: 'shape', id })
+      } else {
+        setEditingTextId(id)
+        setSelectedOverlay({ type: 'text', id })
+      }
       lastTapRef.current = { time: 0, x: 0, y: 0, type: null, id: null }
       touchDragPendingRef.current = null
       e.preventDefault()
@@ -659,7 +767,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
     if (shouldIgnoreOverlayPointer(e.target)) return
     e.stopPropagation()
-    const items = type==='sticky' ? stickies : type==='text' ? textBoxes : images
+    if (type === 'sticky' || type === 'text' || type === 'image' || type === 'shape') setSelectedOverlay({ type, id })
+    const items = type === 'sticky' ? stickies : type === 'text' ? textBoxes : type === 'shape' ? shapes : images
     const item = items.find(i => i.id === id)
     const { clientX, clientY } = pointerXY(e)
     if (isTouchPointer(e)) {
@@ -682,7 +791,11 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, [field]: !x[field] } : x))
       return
     }
-    if (tool === 'text' || tool === 'sticky') {
+    if (editingShapeId) {
+      setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, [field]: !x[field] } : x))
+      return
+    }
+    if (tool === 'text' || tool === 'sticky' || tool === 'shape') {
       if (field === 'bold') setPendingBold(v => !v)
       if (field === 'italic') setPendingItalic(v => !v)
       if (field === 'underline') setPendingUnderline(v => !v)
@@ -693,17 +806,20 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     setTextAlign(align)
     if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, textAlign: align } : x))
     if (editingStickyId) setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, textAlign: align } : x))
+    if (editingShapeId) setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, textAlign: align } : x))
   }
 
   const applyListStyle = (ls) => {
     setListStyle(ls)
     if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, listStyle: ls } : x))
     if (editingStickyId) setStickies(prev => prev.map(x => x.id === editingStickyId ? { ...x, listStyle: ls } : x))
+    if (editingShapeId) setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, listStyle: ls } : x))
   }
 
   const applyFontFamily = (ff) => {
     setFontFamily(ff)
     if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, fontFamily: ff } : x))
+    if (editingShapeId) setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, fontFamily: ff } : x))
   }
 
   // --- Formatting shortcut handler (Ctrl/Cmd + B/I/U) ---
@@ -714,21 +830,47 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     e.preventDefault()
     const field = key === 'b' ? 'bold' : key === 'i' ? 'italic' : 'underline'
     if (type === 'text') setTextBoxes(prev => prev.map(x => x.id===id ? {...x, [field]: !x[field]} : x))
+    else if (type === 'shape') setShapes(prev => prev.map(x => x.id===id ? {...x, [field]: !x[field]} : x))
     else setStickies(prev => prev.map(x => x.id===id ? {...x, [field]: !x[field]} : x))
   }
 
   const editingTextItem = editingTextId ? textBoxes.find(t => t.id === editingTextId) : null
   const editingStickyItem = editingStickyId ? stickies.find(s => s.id === editingStickyId) : null
-  const formatItem = editingTextItem || editingStickyItem
+  const editingShapeItem = editingShapeId ? shapes.find(s => s.id === editingShapeId) : null
+  const formatItem = editingTextItem || editingStickyItem || editingShapeItem
+
+  const overlaySelected = (type, id) =>
+    selectedOverlay?.type === type && selectedOverlay?.id === id
+
+  const showStickyDelete = (id) =>
+    (tool === 'select' && (overlaySelected('sticky', id) || editingStickyId === id)) ||
+    (tool === 'sticky' && (overlaySelected('sticky', id) || editingStickyId === id))
+
+  const showTextDelete = (id) =>
+    (tool === 'select' && (overlaySelected('text', id) || editingTextId === id)) ||
+    (tool === 'text' && (overlaySelected('text', id) || editingTextId === id))
+
+  const showImageControls = (id) =>
+    tool === 'select' && overlaySelected('image', id)
+
+  const showShapeControls = (id) =>
+    (tool === 'select' && (overlaySelected('shape', id) || editingShapeId === id)) ||
+    (tool === 'shape' && (overlaySelected('shape', id) || editingShapeId === id))
+
+  const clearOverlaySelection = () => setSelectedOverlay(null)
 
   // --- Resize (images, text boxes, stickies) ---
   const onResizeStart = (e, item, type = 'image') => {
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
     e.stopPropagation()
     const { clientX, clientY } = pointerXY(e)
-    const startW = type === 'image' ? item.w : type === 'sticky' ? (item.width || 160) : (item.width || 200)
-    const startH = type === 'image' ? item.h : type === 'sticky' ? (item.height || 110) : (item.height || 60)
-    const startFontSize = type !== 'image' ? (item.fontSize || (type === 'sticky' ? 13 : 18)) : null
+    const startW = type === 'image' ? item.w
+      : type === 'shape' ? (item.width || 160)
+      : type === 'sticky' ? (item.width || 160) : (item.width || 200)
+    const startH = type === 'image' ? item.h
+      : type === 'shape' ? (item.height || 120)
+      : type === 'sticky' ? (item.height || 110) : (item.height || 60)
+    const startFontSize = type !== 'image' ? (item.fontSize || (type === 'sticky' ? 13 : type === 'shape' ? 16 : 18)) : null
     resizeRef.current = { type, id: item.id, startX: clientX, startY: clientY, startW, startH, startFontSize }
     if (isTouchPointer(e)) e.preventDefault()
   }
@@ -764,6 +906,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         const newW = Math.max(100, startW + dx), newH = Math.max(60, startH + dy)
         const newFontSize = Math.max(8, Math.min(72, Math.round(startFontSize * Math.sqrt((newW * newH) / (startW * startH)))))
         setStickies(prev => prev.map(s => s.id === id ? { ...s, width: newW, height: newH, fontSize: newFontSize } : s))
+      } else if (type === 'shape') {
+        const newW = Math.max(48, startW + dx), newH = Math.max(48, startH + dy)
+        setShapes(prev => prev.map(s => s.id === id ? { ...s, width: newW, height: newH } : s))
       } else {
         setImages(prev => prev.map(i => i.id === id ? { ...i, w: Math.max(50, startW + dx), h: Math.max(50, startH + dy) } : i))
       }
@@ -774,6 +919,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     const y = (clientY - r.top) / z - dragOffset.current.y
     if (dragging.type === 'sticky') setStickies(prev => prev.map(s => s.id===dragging.id ? {...s,x,y} : s))
     else if (dragging.type === 'text') setTextBoxes(prev => prev.map(t => t.id===dragging.id ? {...t,x,y} : t))
+    else if (dragging.type === 'shape') setShapes(prev => prev.map(s => s.id===dragging.id ? {...s,x,y} : s))
     else if (dragging.type === 'image') setImages(prev => prev.map(i => i.id===dragging.id ? {...i,x,y} : i))
   }, [dragging])
 
@@ -1013,7 +1159,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
 
   const handleSignOut = async () => { await supabase.auth.signOut() }
 
-  const cursorStyle = tool==='draw'?'crosshair':tool==='erase'?'cell':tool==='text'||tool==='sticky'?'copy':'default'
+  const cursorStyle = tool==='draw'?'crosshair':tool==='erase'?'cell':tool==='text'||tool==='sticky'||tool==='shape'?'copy':'default'
 
   const pageNameInputStyle = (isActive) => ({
     flex: 1,
@@ -1159,7 +1305,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           </button>
         </Tip>
         <Tip label="Clear this page" side="bottom">
-          <button type="button" onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],images:[]}) } }}
+          <button type="button" onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setShapes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],shapes:[],images:[]}) } }}
             style={touchBtn({ background: colors.dangerBg, color: colors.danger, border: '1px solid #fecaca' })}>
             🗑 Clear
           </button>
@@ -1173,20 +1319,24 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         <Toolbar tool={tool} setTool={setTool} color={color} setColor={setColor}
           highlightColor={highlightColor} setHighlightColor={setHighlightColor}
           width={width} setWidth={setWidth} highlight={highlight} setHighlight={setHighlight}
-          fontSize={fontSize} setFontSize={setFontSize}
-          textColor={textColor} setTextColor={setTextColor}
+          fontSize={fontSize} setFontSize={(sz) => { setFontSize(sz); if (editingShapeId) setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, fontSize: sz } : x)) }}
+          textColor={textColor} setTextColor={(c) => { setTextColor(c); if (editingTextId) setTextBoxes(prev => prev.map(x => x.id === editingTextId ? { ...x, color: c } : x)); if (editingShapeId) setShapes(prev => prev.map(x => x.id === editingShapeId ? { ...x, textColor: c } : x)) }}
           fontFamily={fontFamily} setFontFamily={applyFontFamily}
           textAlign={formatItem?.textAlign ?? textAlign} setTextAlign={applyTextAlign}
           listStyle={formatItem?.listStyle ?? listStyle} setListStyle={applyListStyle}
           editingTextId={editingTextId}
           editingStickyId={editingStickyId}
+          editingShapeId={editingShapeId}
+          shapeKind={shapeKind} setShapeKind={(id) => { setShapeKind(id); if (editingShapeId) setShapes(prev => prev.map(s => s.id === editingShapeId ? { ...s, kind: id } : s)) }}
+          shapeFill={shapeFill} setShapeFill={(c) => { setShapeFill(c); if (editingShapeId) setShapes(prev => prev.map(s => s.id === editingShapeId ? { ...s, fillColor: c } : s)) }}
+          shapeStroke={shapeStroke} setShapeStroke={(c) => { setShapeStroke(c); if (editingShapeId) setShapes(prev => prev.map(s => s.id === editingShapeId ? { ...s, strokeColor: c } : s)) }}
           bold={formatItem ? !!formatItem.bold : pendingBold}
           italic={formatItem ? !!formatItem.italic : pendingItalic}
           underline={formatItem ? !!formatItem.underline : pendingUnderline}
           onToggleBold={() => toggleItemFormat('bold')}
           onToggleItalic={() => toggleItemFormat('italic')}
           onToggleUnderline={() => toggleItemFormat('underline')}
-          formatHint={editingTextId || editingStickyId ? 'Editing selection' : tool === 'text' ? 'New text defaults' : 'New note defaults'} />
+          formatHint={editingTextId || editingStickyId || editingShapeId ? 'Editing selection' : tool === 'text' ? 'New text defaults' : tool === 'shape' ? 'New shape defaults' : 'New note defaults'} />
 
         {showBoardPanel && (
           <BoardPanel session={session} activeBoardId={activeBoard?.id}
@@ -1206,18 +1356,24 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             <div style={{
               position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT,
               transform:`scale(${zoom})`, transformOrigin:'0 0', background:'#fff',
-            }}>
+            }}
+              onPointerDown={(e) => {
+                if (e.target !== e.currentTarget) return
+                if (tool === 'select' || tool === 'text' || tool === 'sticky' || tool === 'shape') clearOverlaySelection()
+              }}>
           {/* Images under ink so pen/highlighter draw on top */}
           <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0 }}>
             {images.map(img => (
               <div key={img.id} id={'img_'+img.id}
-                style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none', cursor:'move', border:'1.5px dashed #457b9d' }}
+                style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none', cursor:'move' }}
                 onMouseDown={e => onDragStart(e,'image',img.id)}
                 onTouchStart={e => onDragStart(e,'image',img.id)}>
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none' }} draggable={false} alt="" />
-                <button type="button" onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}) }}
-                  style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
-                {tool === 'select' && (
+                {showImageControls(img.id) && (
+                  <button type="button" onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}); clearOverlaySelection() }}
+                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
+                )}
+                {showImageControls(img.id) && (
                   <div onMouseDown={e => onResizeStart(e, img)} onTouchStart={e => onResizeStart(e, img)}
                     style={canvasResizeHandle} role="presentation" />
                 )}
@@ -1235,8 +1391,91 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           <canvas ref={strokeCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
             style={{ position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, touchAction:'none', pointerEvents:'none', zIndex:2 }} />
 
-          {/* Stickies & text above ink */}
+          {/* Stickies, shapes & text above ink */}
           <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:3 }}>
+            {shapePreview && shapePreview.w + shapePreview.h > 0 && (
+              <div style={{
+                position:'absolute', left:shapePreview.x, top:shapePreview.y,
+                width:shapePreview.w, height:shapePreview.h,
+                pointerEvents:'none', opacity:0.72,
+              }}>
+                <ShapeGraphic
+                  kind={shapePreview.kind}
+                  fillColor={shapePreview.fillColor}
+                  strokeColor={shapePreview.strokeColor}
+                />
+              </div>
+            )}
+
+            {shapes.map(sh => {
+              const fmtStyle = {
+                fontWeight: sh.bold ? 700 : 400,
+                fontStyle: sh.italic ? 'italic' : 'normal',
+                textDecoration: sh.underline ? 'underline' : 'none',
+              }
+              const sf = sh.fontSize || 16
+              const ff = sh.fontFamily || 'system-ui, sans-serif'
+              const tc = sh.textColor || '#1a1f26'
+              return (
+                <div key={sh.id}
+                  style={{
+                    position:'absolute', left:sh.x, top:sh.y, width:sh.width, height:sh.height,
+                    pointerEvents:'auto', cursor: tool==='select' ? 'move' : tool==='shape' ? 'copy' : 'default',
+                    display:'flex', flexDirection:'column',
+                  }}
+                  onMouseDown={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
+                  onTouchStart={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
+                  onClick={tool === 'shape' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'shape', id: sh.id }) } : undefined}>
+                  <ShapeGraphic
+                    kind={sh.kind}
+                    fillColor={sh.fillColor}
+                    strokeColor={sh.strokeColor}
+                    strokeWidth={sh.strokeWidth}
+                    style={{ position:'absolute', inset:0 }}
+                  />
+                  <div style={{
+                    position:'relative', flex:1, zIndex:1, display:'flex', alignItems:'center',
+                    justifyContent:'center', padding:'8px 10px', minHeight:0, overflow:'hidden',
+                  }}>
+                    {editingShapeId === sh.id
+                      ? <textarea autoFocus value={sh.text}
+                          onChange={e => setShapes(prev => prev.map(x => x.id===sh.id ? {...x, text:e.target.value} : x))}
+                          onBlur={() => { setEditingShapeId(null); scheduleSave() }}
+                          onKeyDown={e => handleFormatKey(e, 'shape', sh.id)}
+                          style={{
+                            width:'100%', height:'100%', border:'none', background:'transparent', resize:'none',
+                            fontSize:sf, color:tc, fontFamily:ff, outline:'none', cursor:'text',
+                            textAlign: sh.textAlign || 'center', ...fmtStyle,
+                          }} />
+                      : <div
+                          onDoubleClick={() => { setEditingShapeId(sh.id); setSelectedOverlay({ type: 'shape', id: sh.id }) }}
+                          onTouchEnd={e => handleEditTouchEnd(e, 'shape', sh.id)}
+                          style={{
+                            width:'100%', fontSize:sf, color:tc, fontFamily:ff, wordBreak:'break-word',
+                            textAlign: sh.textAlign || 'center', ...fmtStyle,
+                          }}>
+                          {(sh.listStyle === 'bullet' || sh.listStyle === 'numbered')
+                            ? sh.text.split('\n').map((line, i) => (
+                                <div key={i} style={{ display:'flex', gap:4, justifyContent: sh.textAlign === 'right' ? 'flex-end' : sh.textAlign === 'center' ? 'center' : 'flex-start' }}>
+                                  <span style={{ flexShrink:0 }}>{sh.listStyle === 'bullet' ? '•' : `${i+1}.`}</span>
+                                  <span>{line}</span>
+                                </div>
+                              ))
+                            : <span style={{ whiteSpace:'pre-wrap' }}>{sh.text}</span>}
+                        </div>}
+                  </div>
+                  {showShapeControls(sh.id) && (
+                    <button type="button" onClick={() => { const n=shapes.filter(x=>x.id!==sh.id); setShapes(n); scheduleSave({shapes:n}); clearOverlaySelection(); setEditingShapeId(null) }}
+                      style={{ ...canvasControlDelete, top: -14, right: -14, zIndex: 2 }} aria-label="Remove shape">✕</button>
+                  )}
+                  {showShapeControls(sh.id) && (
+                    <div onMouseDown={e => onResizeStart(e, sh, 'shape')} onTouchStart={e => onResizeStart(e, sh, 'shape')}
+                      style={canvasResizeHandle} role="presentation" />
+                  )}
+                </div>
+              )
+            })}
+
             {stickies.map(s => {
               const sw = s.width || 160
               const sh = s.height || 110
@@ -1245,14 +1484,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               return (
                 <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8, padding:'10px 10px 32px 10px', boxShadow:'0 3px 12px rgba(0,0,0,0.15)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column' }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
-                  onTouchStart={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}>
+                  onTouchStart={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
+                  onClick={tool === 'sticky' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'sticky', id: s.id }) } : undefined}>
                   {editingStickyId === s.id
                     ? <textarea autoFocus value={s.text}
                         onChange={e => setStickies(prev => prev.map(x => x.id===s.id?{...x,text:e.target.value}:x))}
                         onBlur={() => { setEditingStickyId(null); scheduleSave() }}
                         onKeyDown={e => handleFormatKey(e, 'sticky', s.id)}
                         style={{ flex:1, border:'none', background:'transparent', resize:'none', fontSize:sf, outline:'none', cursor:'text', ...fmtStyle, textAlign: s.textAlign || 'left' }} />
-                    : <div onDoubleClick={() => setEditingStickyId(s.id)}
+                    : <div onDoubleClick={() => { setEditingStickyId(s.id); setSelectedOverlay({ type: 'sticky', id: s.id }) }}
                         onTouchEnd={e => handleEditTouchEnd(e, 'sticky', s.id)}
                         style={{ flex:1, fontSize:sf, wordBreak:'break-word', ...fmtStyle, textAlign: s.textAlign || 'left' }}>
                         {(s.listStyle === 'bullet' || s.listStyle === 'numbered')
@@ -1264,8 +1504,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                             ))
                           : <span style={{ whiteSpace:'pre-wrap' }}>{s.text}</span>}
                       </div>}
-                  <button type="button" onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}) }}
-                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove note">✕</button>
+                  {showStickyDelete(s.id) && (
+                    <button type="button" onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}); clearOverlaySelection() }}
+                      style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove note">✕</button>
+                  )}
                   <div style={{ position:'absolute', bottom:8, left:10, display:'flex', gap:6 }}>
                     {['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd'].map(c => (
                       <button type="button" key={c} onClick={() => setStickies(prev => prev.map(x => x.id===s.id?{...x,color:c}:x))}
@@ -1288,14 +1530,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               return (
                 <div key={t.id} style={{ position:'absolute', left:t.x, top:t.y, width:tw, pointerEvents:'auto', cursor: tool==='select'?'move':'text' }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
-                  onTouchStart={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}>
+                  onTouchStart={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
+                  onClick={tool === 'text' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'text', id: t.id }) } : undefined}>
                   {editingTextId === t.id
                     ? <textarea autoFocus value={t.text}
                         onChange={e => setTextBoxes(prev => prev.map(x => x.id===t.id?{...x,text:e.target.value}:x))}
                         onBlur={() => { setEditingTextId(null); scheduleSave() }}
                         onKeyDown={e => handleFormatKey(e, 'text', t.id)}
                         style={{ fontSize:t.fontSize, color:t.color, fontFamily:ff, ...fmtStyle, border:'none', outline:'1.5px dashed #457b9d', background:'transparent', resize:'none', padding:4, width:'100%', height:th, lineHeight:1.4, display:'block', textAlign: t.textAlign || 'left' }} />
-                    : <div onDoubleClick={() => setEditingTextId(t.id)}
+                    : <div onDoubleClick={() => { setEditingTextId(t.id); setSelectedOverlay({ type: 'text', id: t.id }) }}
                         onTouchEnd={e => handleEditTouchEnd(e, 'text', t.id)}
                         style={{ fontSize:t.fontSize, color:t.color, fontFamily:ff, ...fmtStyle, wordBreak:'break-word', userSelect:'none', padding:4, minHeight:th, lineHeight:1.4, textAlign: t.textAlign || 'left' }}>
                         {(t.listStyle === 'bullet' || t.listStyle === 'numbered')
@@ -1307,8 +1550,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                             ))
                           : <span style={{ whiteSpace:'pre-wrap' }}>{t.text}</span>}
                       </div>}
-                  <button type="button" onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}) }}
-                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
+                  {showTextDelete(t.id) && (
+                    <button type="button" onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}); clearOverlaySelection() }}
+                      style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
+                  )}
                   {tool === 'select' && (
                     <div onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
                       style={canvasResizeHandle} role="presentation" />

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Tip from './Tip'
 import PopoverMenu from './PopoverMenu'
 import { colors, sizes } from '../uiTheme'
+import { SHAPE_KINDS } from '../shapes'
 
 const COLORS = ['#1a1a1a','#e63946','#f4a261','#f6c90e','#2a9d8f','#457b9d','#6a4c93','#ffffff']
 const HIGHLIGHT_COLORS = ['#f6c90e','#a8dadc','#b5ead7','#ffd6e0','#c3b1e1']
@@ -25,6 +26,7 @@ const TOOLS = [
   { id: 'erase', label: 'Erase', icon: '🧹' },
   { id: 'text', label: 'Text', icon: 'T' },
   { id: 'sticky', label: 'Note', icon: '📝' },
+  { id: 'shape', label: 'Shape', icon: '⬡' },
   { id: 'select', label: 'Move', icon: '☝️' },
 ]
 
@@ -57,13 +59,15 @@ function HighlighterIcon({ active, color }) {
   )
 }
 
-function panelMode(tool, editingTextId, editingStickyId) {
+function panelMode(tool, editingTextId, editingStickyId, editingShapeId) {
   if (editingTextId) return 'text'
   if (editingStickyId) return 'sticky'
+  if (editingShapeId) return 'shape'
   if (tool === 'draw') return 'draw'
   if (tool === 'erase') return 'erase'
   if (tool === 'text') return 'text'
   if (tool === 'sticky') return 'sticky'
+  if (tool === 'shape') return 'shape'
   if (tool === 'select') return 'select'
   return null
 }
@@ -421,12 +425,14 @@ export default function Toolbar({
   fontSize, setFontSize,
   textColor, setTextColor, fontFamily, setFontFamily,
   textAlign, setTextAlign, listStyle, setListStyle,
-  editingTextId, editingStickyId,
+  editingTextId, editingStickyId, editingShapeId,
+  shapeKind, setShapeKind,
+  shapeFill, setShapeFill, shapeStroke, setShapeStroke,
   bold, italic, underline, onToggleBold, onToggleItalic, onToggleUnderline,
   formatHint,
 }) {
   const [openMenu, setOpenMenu] = useState(null)
-  const mode = panelMode(tool, editingTextId, editingStickyId)
+  const mode = panelMode(tool, editingTextId, editingStickyId, editingShapeId)
   const isTextMode = mode === 'text'
   const isDrawMode = mode === 'draw'
 
@@ -443,7 +449,7 @@ export default function Toolbar({
   useEffect(() => { setOpenMenu(null) }, [mode, highlight])
 
   const toolBtn = (t, label, icon) => {
-    const active = tool === t && !editingTextId && !editingStickyId
+    const active = tool === t && !editingTextId && !editingStickyId && !editingShapeId
     return (
       <Tip key={t} label={label} side="right">
         <button type="button" onClick={() => setTool(t)}
@@ -608,6 +614,93 @@ export default function Toolbar({
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
             stickyHint="Tap canvas to place · change note color on the note"
+            formatHint={formatHint}
+            palette={COLORS}
+            paletteNames={COLOR_NAMES}
+            activeColor={textColor}
+            setActiveColor={setTextColor}
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            fontFamily={fontFamily}
+            setFontFamily={setFontFamily}
+            textAlign={textAlign}
+            setTextAlign={setTextAlign}
+            listStyle={listStyle}
+            setListStyle={setListStyle}
+            bold={bold}
+            italic={italic}
+            underline={underline}
+            onToggleBold={onToggleBold}
+            onToggleItalic={onToggleItalic}
+            onToggleUnderline={onToggleUnderline}
+          />
+        </ContextSection>
+      )}
+
+      {mode === 'shape' && (
+        <ContextSection title={editingShapeId ? 'Edit shape' : 'Shapes'}>
+          <p style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 1.35, margin: 0 }}>
+            {editingShapeId ? 'Edit label text below' : 'Drag on canvas to draw a shape'}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {SHAPE_KINDS.map(({ id, label, icon }) => (
+              <Tip key={id} label={label} side="right">
+                <button
+                  type="button"
+                  onClick={() => setShapeKind(id)}
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 8,
+                    border: shapeKind === id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
+                    background: shapeKind === id ? colors.accentLight : '#f6f8fa',
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: colors.text,
+                  }}
+                >
+                  {icon}
+                </button>
+              </Tip>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <PopoverMenu
+              open={openMenu === 'shapeFill'}
+              onOpenChange={v => setOpenMenu(v ? 'shapeFill' : null)}
+              minWidth={220}
+              trigger={({ toggle }) => (
+                <CompactMenuTrigger open={openMenu === 'shapeFill'} toggle={toggle} label="Fill">
+                  <span style={{
+                    width: 28, height: 28, borderRadius: 6, background: shapeFill,
+                    border: '2px solid #fff', boxShadow: '0 0 0 1px #b8c0cc',
+                  }} />
+                </CompactMenuTrigger>
+              )}
+            >
+              <ColorMenuGrid palette={COLORS} paletteNames={COLOR_NAMES} value={shapeFill} onChange={setShapeFill} onPick={() => setOpenMenu(null)} />
+            </PopoverMenu>
+            <PopoverMenu
+              open={openMenu === 'shapeStroke'}
+              onOpenChange={v => setOpenMenu(v ? 'shapeStroke' : null)}
+              minWidth={220}
+              trigger={({ toggle }) => (
+                <CompactMenuTrigger open={openMenu === 'shapeStroke'} toggle={toggle} label="Outline">
+                  <span style={{
+                    width: 28, height: 28, borderRadius: 6, background: shapeStroke,
+                    border: '2px solid #fff', boxShadow: '0 0 0 1px #b8c0cc',
+                  }} />
+                </CompactMenuTrigger>
+              )}
+            >
+              <ColorMenuGrid palette={COLORS} paletteNames={COLOR_NAMES} value={shapeStroke} onChange={setShapeStroke} onPick={() => setOpenMenu(null)} />
+            </PopoverMenu>
+          </div>
+          <TextFormatControls
+            openMenu={openMenu}
+            setOpenMenu={setOpenMenu}
+            showColor
+            showFont
+            showTextSize
             formatHint={formatHint}
             palette={COLORS}
             paletteNames={COLOR_NAMES}
