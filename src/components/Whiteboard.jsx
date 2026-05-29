@@ -15,8 +15,10 @@ import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResize
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
+const CANVAS_WIDTH = 7200
+const CANVAS_HEIGHT = 4800
 const STICKY_COLORS = ['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd']
-const ZOOM_MIN = 0.25
+const ZOOM_MIN = 0.05
 const ZOOM_MAX = 3
 const DOUBLE_TAP_MS = 350
 const DOUBLE_TAP_PX = 32
@@ -159,6 +161,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const scrollRef = useRef(null)
   const zoomRef = useRef(1)
   const touchGestureRef = useRef({ active: false, lastDist: 0, lastMidX: 0, lastMidY: 0 })
+  const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0, pointerId: null })
   const touchDragPendingRef = useRef(null)
   const lastTapRef = useRef({ time: 0, x: 0, y: 0, type: null, id: null })
   const cancelDragResizeRef = useRef(() => {})
@@ -198,6 +201,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [pagesBarCollapsed, setPagesBarCollapsed] = useState(() => {
     try { return localStorage.getItem(PAGES_BAR_COLLAPSED_KEY) === '1' } catch { return false }
   })
+  const [isMiddlePanning, setIsMiddlePanning] = useState(false)
   const [loadError, setLoadError] = useState(null)
   const [editingPageNameId, setEditingPageNameId] = useState(null)
   const [editingPageNameValue, setEditingPageNameValue] = useState('')
@@ -511,6 +515,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   // --- Drawing handlers (Pointer Events + coalesced points) ---
   const onCanvasPointerDown = (e) => {
     const { tool: t } = drawSettingsRef.current
+    if (e.button === 1 || middlePanRef.current.active) return
     if (t !== 'draw' && t !== 'erase') return
     if (touchGestureRef.current.active) return
     if (!canvasRef.current) return
@@ -650,6 +655,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
 
   // --- Drag ---
   const onDragStart = (e, type, id) => {
+    if (e.button === 1 || middlePanRef.current.active) return
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
     if (shouldIgnoreOverlayPointer(e.target)) return
     e.stopPropagation()
@@ -801,6 +807,62 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     }
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
+  }, [])
+
+  // Middle mouse button drag to pan the viewport
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    const endPan = (e) => {
+      if (!middlePanRef.current.active) return
+      if (e?.pointerId != null && middlePanRef.current.pointerId !== e.pointerId) return
+      middlePanRef.current.active = false
+      middlePanRef.current.pointerId = null
+      setIsMiddlePanning(false)
+      if (e?.pointerId != null) {
+        try { el.releasePointerCapture(e.pointerId) } catch (_) {}
+      }
+    }
+
+    const onPointerDown = (e) => {
+      if (e.button !== 1) return
+      e.preventDefault()
+      e.stopPropagation()
+      cancelDragResizeRef.current()
+      middlePanRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, pointerId: e.pointerId }
+      setIsMiddlePanning(true)
+      try { el.setPointerCapture(e.pointerId) } catch (_) {}
+    }
+
+    const onPointerMove = (e) => {
+      if (!middlePanRef.current.active) return
+      if (middlePanRef.current.pointerId !== e.pointerId) return
+      el.scrollLeft -= e.clientX - middlePanRef.current.lastX
+      el.scrollTop -= e.clientY - middlePanRef.current.lastY
+      middlePanRef.current.lastX = e.clientX
+      middlePanRef.current.lastY = e.clientY
+      e.preventDefault()
+    }
+
+    const onAuxClick = (e) => {
+      if (e.button === 1) e.preventDefault()
+    }
+
+    el.addEventListener('pointerdown', onPointerDown, { capture: true })
+    el.addEventListener('pointermove', onPointerMove)
+    el.addEventListener('pointerup', endPan)
+    el.addEventListener('pointercancel', endPan)
+    el.addEventListener('auxclick', onAuxClick)
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      el.removeEventListener('pointermove', onPointerMove)
+      el.removeEventListener('pointerup', endPan)
+      el.removeEventListener('pointercancel', endPan)
+      el.removeEventListener('auxclick', onAuxClick)
+      middlePanRef.current.active = false
+      setIsMiddlePanning(false)
+    }
   }, [])
 
   // Pinch-to-zoom + two-finger pan on the scroll viewport
@@ -1050,12 +1112,12 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
 
         <Tip label="Zoom out" side="bottom">
-          <button type="button" onClick={() => setZoom(z => Math.max(0.25, parseFloat((z - 0.25).toFixed(2))))}
+          <button type="button" onClick={() => setZoom(z => Math.max(ZOOM_MIN, parseFloat((z - 0.25).toFixed(2))))}
             style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom out">−</button>
         </Tip>
         <span style={{ fontSize:16, fontWeight:700, minWidth:52, textAlign:'center', color: colors.text }}>{Math.round(zoom * 100)}%</span>
         <Tip label="Zoom in" side="bottom">
-          <button type="button" onClick={() => setZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
+          <button type="button" onClick={() => setZoom(z => Math.min(ZOOM_MAX, parseFloat((z + 0.25).toFixed(2))))}
             style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom in">+</button>
         </Tip>
         <Tip label="Reset zoom" side="bottom">
@@ -1136,9 +1198,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         )}
 
         {/* Canvas */}
-        <div ref={scrollRef} style={{ flex:1, overflow:'auto', touchAction:'none' }}>
-          <div style={{ width: 2400 * zoom, height: 1600 * zoom, position:'relative', flexShrink:0 }}>
-            <div style={{ position:'absolute', top:0, left:0, width:2400, height:1600, transform:`scale(${zoom})`, transformOrigin:'0 0', background:'#fff' }}>
+        <div ref={scrollRef} style={{
+          flex: 1, overflow: 'auto', touchAction: 'none',
+          cursor: isMiddlePanning ? 'grabbing' : 'default',
+        }}>
+          <div style={{ width: CANVAS_WIDTH * zoom, height: CANVAS_HEIGHT * zoom, position:'relative', flexShrink:0 }}>
+            <div style={{
+              position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT,
+              transform:`scale(${zoom})`, transformOrigin:'0 0', background:'#fff',
+            }}>
           {/* Images under ink so pen/highlighter draw on top */}
           <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0 }}>
             {images.map(img => (
@@ -1157,15 +1225,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             ))}
           </div>
 
-          <canvas ref={canvasRef} width={2400} height={1600}
-            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, cursor:cursorStyle, touchAction:'none', background:'transparent', zIndex:1, pointerEvents: tool === 'select' ? 'none' : 'auto' }}
+          <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
+            style={{ position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, cursor:cursorStyle, touchAction:'none', background:'transparent', zIndex:1, pointerEvents: tool === 'select' ? 'none' : 'auto' }}
             onPointerDown={onCanvasPointerDown}
             onPointerMove={onCanvasPointerMove}
             onPointerUp={onCanvasPointerUp}
             onPointerCancel={onCanvasPointerCancel}
             onClick={handleCanvasClick} />
-          <canvas ref={strokeCanvasRef} width={2400} height={1600}
-            style={{ position:'absolute', top:0, left:0, width:2400, height:1600, touchAction:'none', pointerEvents:'none', zIndex:2 }} />
+          <canvas ref={strokeCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
+            style={{ position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, touchAction:'none', pointerEvents:'none', zIndex:2 }} />
 
           {/* Stickies & text above ink */}
           <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:3 }}>
@@ -1401,7 +1469,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         padding:'8px 16px', background: colors.surface, borderTop:`1px solid ${colors.border}`,
         fontSize:13, color: colors.textMuted, display:'flex', gap:20, flexWrap:'wrap',
       }}>
-        <span>Touch: draw with finger · pinch to zoom · tap page tab again to rename</span>
+        <span>Touch: pinch to zoom · middle-click drag to pan · tap page tab again to rename</span>
         <span>Paste images from clipboard</span>
       </div>
       )}
