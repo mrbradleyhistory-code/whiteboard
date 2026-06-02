@@ -24,6 +24,7 @@ import {
 import { buildGroupStickies, viewportCenterFromScroll } from '../placeGroupOverlays'
 import WhiteboardTimer from './WhiteboardTimer'
 import InjectGroupsModal from './InjectGroupsModal'
+import { buildPagesFromPngFiles } from '../importPngPages'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -173,6 +174,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const scrollRef = useRef(null)
   const rootRef = useRef(null)
   const pagesBarCollapsedBeforeFsRef = useRef(null)
+  const pngImportInputRef = useRef(null)
   const lastPageNavAtRef = useRef(0)
   const zoomRef = useRef(1)
   const touchGestureRef = useRef({ active: false, lastDist: 0, lastMidX: 0, lastMidY: 0 })
@@ -1235,6 +1237,37 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }
 
   // --- Export ---
+  const handleImportPngPages = async (e) => {
+    const fileList = e.target.files
+    e.target.value = ''
+    if (!fileList?.length || !activePageId) return
+
+    notify('Importing PNGs…')
+    try {
+      const newPages = await buildPagesFromPngFiles(fileList, {
+        createId: uid,
+        canvasWidth: CANVAS_WIDTH,
+        canvasHeight: CANVAS_HEIGHT,
+      })
+      if (!newPages.length) {
+        notify('No PNG files found — select .png images')
+        return
+      }
+      const merged = mergeActivePage(pagesRef.current, activePageId, getCanvasSnap())
+      const next = [...merged, ...newPages]
+      const firstNew = newPages[0]
+      pagesRef.current = next
+      setPages(next)
+      setActivePageId(firstNew.id)
+      applyPage(firstNew)
+      persistPages(next, firstNew.id)
+      notify(`Added ${newPages.length} page${newPages.length === 1 ? '' : 's'} from PNGs`)
+    } catch (err) {
+      console.error('importPngPages:', err)
+      notify(err?.message || 'PNG import failed')
+    }
+  }
+
   const handleExport = () => {
     const canvas = canvasRef.current
     const exp = document.createElement('canvas')
@@ -1479,6 +1512,19 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
               ⬇ Export PNG
             </button>
+            <button type="button" onClick={() => { setTopMenuOpen(false); pngImportInputRef.current?.click() }} disabled={!activeBoard}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              🖼 Import PNGs as pages
+            </button>
+            <input
+              ref={pngImportInputRef}
+              type="file"
+              accept="image/png,.png"
+              multiple
+              onChange={handleImportPngPages}
+              style={{ display: 'none' }}
+              aria-hidden
+            />
             <button type="button" onClick={() => { handleWipe(); setTopMenuOpen(false) }} disabled={!activeBoard}
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start', background: colors.warnBg, color: colors.warn }), border: 'none' }}>
               🧽 Wipe pen &amp; highlighter
