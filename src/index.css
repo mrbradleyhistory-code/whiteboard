@@ -437,3 +437,48 @@ input[type='range'].wb-range::-moz-range-thumb {
   justify-content: center;
   margin-top: 32px;
 }
+
+.wb-flash-presenter__prompt--quiz {
+  flex: 0 1 auto;
+  max-height: 28vh;
+  font-size: clamp(28px, 4.5vw, 56px);
+}
+
+.wb-flash-presenter__nav {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 20px;
+  flex-shrink: 0;
+}
+
+.wb-flash-presenter__nav-btn {
+  min-width: min(280px, 42vw);
+  min-height: 72px;
+  padding: 16px 28px;
+  border-radius: 14px;
+  border: 2px solid #5c6570;
+  background: #2a3038;
+  color: #fff;
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+.wb-flash-presenter__nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.wb-flash-presenter__nav-btn--primary {
+  border-color: #457b9d;
+  background: #457b9d;
+}
+
+.wb-flash-presenter__nav-btn--primary:hover:not(:disabled),
+.wb-flash-presenter__nav-btn--primary:active:not(:disabled) {
+  background: #35607a;
+}

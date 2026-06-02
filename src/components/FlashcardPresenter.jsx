@@ -4,9 +4,9 @@ import { shuffleCards, pickTermChoices } from '../flashcardStudy'
 import { colors, touchBtn } from '../uiTheme'
 
 /**
- * Classroom presenter: large display + presenter remote.
- * - cycle: term → definition (Page Down), Page Up back
- * - quiz: definition + pick term (Page Down/Up), Space reveal, Page Down next
+ * Classroom presenter: large display + presenter remote + touch nav.
+ * - cycle: term → definition → next (Page Down / Forward)
+ * - quiz: Page Down reveals correct answer, Page Down again → next
  */
 export default function FlashcardPresenter({ deck, mode, onExit }) {
   const rootRef = useRef(null)
@@ -14,7 +14,6 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
 
   const [index, setIndex] = useState(0)
   const [cyclePhase, setCyclePhase] = useState('term') // 'term' | 'def'
-  const [choiceIndex, setChoiceIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [choices, setChoices] = useState([])
 
@@ -24,7 +23,6 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
   useEffect(() => {
     if (mode === 'quiz' && current && !done) {
       setChoices(pickTermChoices(cards, current))
-      setChoiceIndex(0)
       setRevealed(false)
     }
   }, [index, mode, deck.id, done, current, cards])
@@ -42,15 +40,42 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
     setIndex(i => i + 1)
     setCyclePhase('term')
     setRevealed(false)
-    setChoiceIndex(0)
   }, [])
 
   const goPrevCard = useCallback(() => {
     setIndex(i => Math.max(0, i - 1))
     setCyclePhase('term')
     setRevealed(false)
-    setChoiceIndex(0)
   }, [])
+
+  const cycleForward = useCallback(() => {
+    if (cyclePhase === 'term') setCyclePhase('def')
+    else goNextCard()
+  }, [cyclePhase, goNextCard])
+
+  const cycleBack = useCallback(() => {
+    if (cyclePhase === 'def') setCyclePhase('term')
+    else if (index > 0) goPrevCard()
+  }, [cyclePhase, index, goPrevCard])
+
+  const revealCorrect = useCallback(() => {
+    setRevealed(true)
+  }, [])
+
+  const quizForward = useCallback(() => {
+    if (!revealed) revealCorrect()
+    else goNextCard()
+  }, [revealed, revealCorrect, goNextCard])
+
+  const quizBack = useCallback(() => {
+    if (revealed) {
+      setRevealed(false)
+    } else if (index > 0) goPrevCard()
+  }, [revealed, index, goPrevCard])
+
+  const canGoBack = mode === 'cycle'
+    ? (cyclePhase === 'def' || index > 0)
+    : (revealed || index > 0)
 
   const handleRemoteKey = useCallback((e) => {
     if (e.key === 'Escape') {
@@ -60,42 +85,20 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
     }
 
     const delta = presentationPageDelta(e.key)
+    if (delta === 0) return
 
+    e.preventDefault()
     if (mode === 'cycle') {
-      if (delta === 1) {
-        e.preventDefault()
-        if (cyclePhase === 'term') setCyclePhase('def')
-        else goNextCard()
-      } else if (delta === -1) {
-        e.preventDefault()
-        if (cyclePhase === 'def') setCyclePhase('term')
-        else if (index > 0) goPrevCard()
-      }
+      if (delta === 1) cycleForward()
+      else cycleBack()
       return
     }
 
     if (mode === 'quiz') {
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault()
-        if (!revealed) setRevealed(true)
-        else goNextCard()
-        return
-      }
-      if (revealed && delta === 1) {
-        e.preventDefault()
-        goNextCard()
-        return
-      }
-      if (!revealed && delta !== 0) {
-        e.preventDefault()
-        setChoiceIndex(i => {
-          const n = choices.length || 4
-          if (delta === 1) return (i + 1) % n
-          return (i - 1 + n) % n
-        })
-      }
+      if (delta === 1) quizForward()
+      else quizBack()
     }
-  }, [mode, cyclePhase, index, revealed, choices.length, goNextCard, goPrevCard, onExit])
+  }, [mode, cycleForward, cycleBack, quizForward, quizBack, onExit])
 
   useEffect(() => {
     window.addEventListener('keydown', handleRemoteKey)
@@ -137,7 +140,29 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
   }
 
   const correctId = current?.id
-  const selected = choices[choiceIndex]
+  const correctChoiceIndex = choices.findIndex(ch => ch.id === correctId)
+
+  const nav = (
+    <div className="wb-flash-presenter__nav">
+      <button
+        type="button"
+        className="wb-flash-presenter__nav-btn"
+        onClick={mode === 'cycle' ? cycleBack : quizBack}
+        disabled={!canGoBack}
+      >
+        ← Back
+      </button>
+      <button
+        type="button"
+        className="wb-flash-presenter__nav-btn wb-flash-presenter__nav-btn--primary"
+        onClick={mode === 'cycle' ? cycleForward : quizForward}
+      >
+        {mode === 'cycle'
+          ? (cyclePhase === 'term' ? 'Show definition →' : 'Next card →')
+          : (revealed ? 'Next question →' : 'Show answer →')}
+      </button>
+    </div>
+  )
 
   return (
     <div className="wb-flash-presenter" ref={rootRef}>
@@ -155,23 +180,19 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
             {cyclePhase === 'term' ? current.front : current.back}
           </div>
           <p className="wb-flash-presenter__hint">
-            {cyclePhase === 'term'
-              ? 'Page Down → show definition · Page Up → previous'
-              : 'Page Down → next card · Page Up → hide definition'}
+            Remote: Page Down = forward · Page Up = back · Or use the buttons below
           </p>
+          {nav}
         </>
       ) : (
         <>
           <p className="wb-flash-presenter__label">Definition</p>
-          <div className="wb-flash-presenter__prompt">{current.back}</div>
+          <div className="wb-flash-presenter__prompt wb-flash-presenter__prompt--quiz">{current.back}</div>
           <ul className="wb-flash-presenter__choices">
             {choices.map((ch, i) => {
-              const isSelected = i === choiceIndex
               const isCorrect = ch.id === correctId
               let className = 'wb-flash-presenter__choice'
-              if (isSelected && !revealed) className += ' wb-flash-presenter__choice--active'
               if (revealed && isCorrect) className += ' wb-flash-presenter__choice--correct'
-              if (revealed && isSelected && !isCorrect) className += ' wb-flash-presenter__choice--wrong'
               return (
                 <li key={ch.id} className={className}>
                   <span className="wb-flash-presenter__choice-num">{i + 1}</span>
@@ -182,14 +203,15 @@ export default function FlashcardPresenter({ deck, mode, onExit }) {
           </ul>
           <p className="wb-flash-presenter__hint">
             {!revealed
-              ? 'Page Down / Up → highlight answer · Space → reveal'
-              : `Answer: ${current.front} · Page Down or Space → next`}
+              ? 'Page Down or Forward → reveal correct answer'
+              : `Answer: ${current.front} · Page Down or Forward → next`}
           </p>
-          {revealed && selected && (
-            <p className={`wb-flash-presenter__feedback ${selected.id === correctId ? 'ok' : 'miss'}`}>
-              {selected.id === correctId ? 'Highlighted choice is correct' : `Correct term: ${current.front}`}
+          {revealed && correctChoiceIndex >= 0 && (
+            <p className="wb-flash-presenter__feedback ok">
+              Correct: {current.front}
             </p>
           )}
+          {nav}
         </>
       )}
     </div>
