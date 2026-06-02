@@ -4,7 +4,8 @@
   --wb-accent: #457b9d;
   --wb-accent-light: #e8f2f8;
   --wb-touch: 48px;
-  --wb-toolbar: 80px;
+  --wb-toolbar-rail: 48px;
+  --wb-tool-flyout: 176px;
 }
 
 html, body, #root {
@@ -97,6 +98,21 @@ input[type='range'].wb-range::-moz-range-thumb {
 
 .wb-tool-panel {
   animation: wb-panel-in 0.18s ease-out;
+}
+
+@keyframes wb-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.wb-tool-flyout {
+  animation: wb-flyout-in 0.2s ease-out;
 }
 
 @keyframes wb-popover-in {

@@ -16,7 +16,12 @@ export const colors = {
 }
 
 export const sizes = {
-  toolbarWidth: 80,
+  /** Icon-only left rail (Proposed A layout) */
+  toolbarRailWidth: 48,
+  /** Tool options panel overlaid on canvas edge */
+  toolFlyoutWidth: 176,
+  /** @deprecated use toolbarRailWidth — board panel offset */
+  toolbarWidth: 48,
   touchMin: 48,
   touchComfort: 56,
   colorSwatch: 36,

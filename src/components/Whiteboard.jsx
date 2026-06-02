@@ -10,6 +10,7 @@ import {
 } from '../boardPages'
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
+import PopoverMenu from './PopoverMenu'
 import Tip from './Tip'
 import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResizeHandle } from '../uiTheme'
 import { ShapeGraphic, createShapeFields } from '../shapes'
@@ -188,6 +189,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [activePageId, setActivePageId] = useState(null)
   const pagesRef = useRef([])
   const [showBoardPanel, setShowBoardPanel] = useState(false)
+  const [topMenuOpen, setTopMenuOpen] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
   const [editingTextId, setEditingTextId] = useState(null)
   const [editingShapeId, setEditingShapeId] = useState(null)
@@ -1227,100 +1229,109 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         }}>{notification}</div>
       )}
 
-      {/* Top bar — large touch targets for interactive displays */}
+      {/* Top bar — slim row; tool options live in left flyout */}
       <div style={{
-        display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
-        background: colors.surface, borderBottom:`1px solid ${colors.border}`,
-        zIndex:10, flexWrap:'wrap', minHeight: 64,
+        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+        background: colors.surface, borderBottom: `1px solid ${colors.border}`,
+        zIndex: 10, flexShrink: 0, minHeight: 44,
       }}>
         <Tip label="Back to board list" side="bottom">
           <button type="button" onClick={onExitBoard}
-            style={touchBtn({ background: colors.accentLight, border:`2px solid ${colors.accent}`, color: colors.accent })}>
-            ← Boards
+            style={touchBtn({ minHeight: 40, padding: '8px 12px', fontSize: 14, background: colors.accentLight, border: `1px solid ${colors.accent}`, color: colors.accent })}>
+            ←
           </button>
         </Tip>
 
-        <span style={{
-          fontWeight:700, fontSize:18, color: colors.text,
-          maxWidth: 220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-        }}>
+        <button
+          type="button"
+          onClick={() => setShowBoardPanel(v => !v)}
+          title="Switch board"
+          style={{
+            border: 'none', background: 'transparent', padding: '4px 0',
+            fontWeight: 700, fontSize: 16, color: colors.text,
+            maxWidth: 'min(280px, 40vw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            textAlign: 'left', minHeight: 40,
+          }}
+        >
           {activeBoard?.name || 'Whiteboard'}
-        </span>
+          <span style={{ marginLeft: 6, fontSize: 12, color: colors.textMuted }}>▾</span>
+        </button>
 
-        <Tip label="Switch board" side="bottom">
-          <button type="button" onClick={() => setShowBoardPanel(v => !v)}
-            style={touchBtn({ padding: '10px 14px' })}>
-            📋
-          </button>
-        </Tip>
+        {saving && <span style={{ fontSize: 12, color: colors.textMuted, fontWeight: 500 }}>Saving…</span>}
 
-        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
+        <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
 
         <Tip label="Undo" side="bottom">
-          <button type="button" onClick={undo} style={iconOnlyBtn()} aria-label="Undo">↩</button>
+          <button type="button" onClick={undo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Undo">↩</button>
         </Tip>
         <Tip label="Redo" side="bottom">
-          <button type="button" onClick={redo} style={iconOnlyBtn()} aria-label="Redo">↪</button>
+          <button type="button" onClick={redo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Redo">↪</button>
         </Tip>
 
-        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
+        <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
 
         <Tip label="Zoom out" side="bottom">
           <button type="button" onClick={() => setZoom(z => Math.max(ZOOM_MIN, parseFloat((z - 0.25).toFixed(2))))}
-            style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom out">−</button>
+            style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom out">−</button>
         </Tip>
-        <span style={{ fontSize:16, fontWeight:700, minWidth:52, textAlign:'center', color: colors.text }}>{Math.round(zoom * 100)}%</span>
+        <button type="button" onClick={() => setZoom(1)} title="Reset zoom"
+          style={{
+            border: 'none', background: 'transparent', fontSize: 14, fontWeight: 700,
+            minWidth: 44, color: colors.text, minHeight: 40,
+          }}>
+          {Math.round(zoom * 100)}%
+        </button>
         <Tip label="Zoom in" side="bottom">
           <button type="button" onClick={() => setZoom(z => Math.min(ZOOM_MAX, parseFloat((z + 0.25).toFixed(2))))}
-            style={iconOnlyBtn({ fontSize: 28, fontWeight: 300 })} aria-label="Zoom in">+</button>
-        </Tip>
-        <Tip label="Reset zoom" side="bottom">
-          <button type="button" onClick={() => setZoom(1)} style={touchBtn({ minWidth: 52, padding: '10px 12px', fontSize: 14 })}>100%</button>
+            style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom in">+</button>
         </Tip>
 
-        <div style={{ width:1, height:36, background: colors.border, flexShrink:0 }} />
+        <div style={{ flex: 1, minWidth: 8 }} />
 
-        <label style={{ fontSize:14, fontWeight:600, color: colors.textMuted }}>
-          {tool === 'text' ? 'Text' : 'Pen'}
-        </label>
-        <input type="range" className="wb-range" min={1} max={30} step={1} value={tool==='text'?fontSize:width}
-          onChange={e => tool==='text' ? setFontSize(+e.target.value) : setWidth(+e.target.value)} />
-        <span style={{ fontSize:16, fontWeight:700, minWidth:28, color: colors.text }}>{tool==='text'?fontSize:width}</span>
-
-        {tool === 'draw' && (
-          <Tip label={highlight ? 'Pen mode' : 'Highlighter'} side="bottom">
-            <button type="button" onClick={() => setHighlight(v => !v)}
-              style={touchBtn({
-                background: highlight ? '#f6c90e' : '#f6f8fa',
-                border: highlight ? '2px solid #ca8a04' : `1px solid ${colors.border}`,
-              })}>
-              {highlight ? '✏️ Pen' : '🖍 Mark'}
+        <PopoverMenu
+          open={topMenuOpen}
+          onOpenChange={setTopMenuOpen}
+          minWidth={220}
+          trigger={({ toggle }) => (
+            <Tip label="More actions" side="bottom">
+              <button type="button" onClick={toggle} aria-expanded={topMenuOpen} aria-haspopup="dialog"
+                style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 22 })}>
+                ⋯
+              </button>
+            </Tip>
+          )}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button type="button" onClick={() => { handleExport(); setTopMenuOpen(false) }} disabled={!activeBoard}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              ⬇ Export PNG
             </button>
-          </Tip>
-        )}
-
-        {saving && <span style={{ fontSize:14, color: colors.textMuted, fontWeight:500 }}>Saving…</span>}
-
-        <div style={{ flex:1, minWidth: 8 }} />
-
-        <Tip label="Export PNG" side="bottom">
-          <button type="button" onClick={handleExport} disabled={!activeBoard} style={touchBtn()}>⬇</button>
-        </Tip>
-        <Tip label="Wipe pen &amp; highlighter only" side="bottom">
-          <button type="button" onClick={handleWipe} disabled={!activeBoard}
-            style={touchBtn({ background: colors.warnBg, color: colors.warn, border: '1px solid #fcd34d' })}>
-            🧽 Wipe
-          </button>
-        </Tip>
-        <Tip label="Clear this page" side="bottom">
-          <button type="button" onClick={() => { if(confirm('Clear everything on this page?')) { strokesRef.current=[]; const ctx=canvasRef.current?.getContext('2d'); ctx?.clearRect(0,0,canvasRef.current.width,canvasRef.current.height); setStickies([]); setTextBoxes([]); setShapes([]); setImages([]); scheduleSave({strokes:[],stickies:[],textBoxes:[],shapes:[],images:[]}) } }}
-            style={touchBtn({ background: colors.dangerBg, color: colors.danger, border: '1px solid #fecaca' })}>
-            🗑 Clear
-          </button>
-        </Tip>
-        <Tip label="Sign out" side="bottom">
-          <button type="button" onClick={handleSignOut} style={touchBtn({ fontSize: 14 })}>Sign out</button>
-        </Tip>
+            <button type="button" onClick={() => { handleWipe(); setTopMenuOpen(false) }} disabled={!activeBoard}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start', background: colors.warnBg, color: colors.warn }), border: 'none' }}>
+              🧽 Wipe pen &amp; highlighter
+            </button>
+            <button type="button" onClick={() => {
+              setTopMenuOpen(false)
+              if (confirm('Clear everything on this page?')) {
+                strokesRef.current = []
+                const ctx = canvasRef.current?.getContext('2d')
+                ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+                setStickies([])
+                setTextBoxes([])
+                setShapes([])
+                setImages([])
+                scheduleSave({ strokes: [], stickies: [], textBoxes: [], shapes: [], images: [] })
+              }
+            }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start', background: colors.dangerBg, color: colors.danger }), border: 'none' }}>
+              🗑 Clear page
+            </button>
+            <button type="button" onClick={() => { handleSignOut(); setTopMenuOpen(false) }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              Sign out
+            </button>
+          </div>
+        </PopoverMenu>
       </div>
 
       <div style={{ display:'flex', flex:1, overflow:'hidden', position:'relative' }}>
@@ -1613,8 +1624,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       }}>
         {pagesBarCollapsed ? (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-            minHeight: sizes.touchMin,
+            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+            minHeight: 40,
           }}>
             <Tip label="Show page tabs" side="top">
               <button
@@ -1748,15 +1759,6 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         )}
       </div>
 
-      {!pagesBarCollapsed && (
-      <div className="wb-help-footer" style={{
-        padding:'8px 16px', background: colors.surface, borderTop:`1px solid ${colors.border}`,
-        fontSize:13, color: colors.textMuted, display:'flex', gap:20, flexWrap:'wrap',
-      }}>
-        <span>Touch: pinch to zoom · middle-click drag to pan · tap page tab again to rename</span>
-        <span>Paste images from clipboard</span>
-      </div>
-      )}
     </div>
   )
 }

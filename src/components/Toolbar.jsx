@@ -72,25 +72,25 @@ function panelMode(tool, editingTextId, editingStickyId, editingShapeId) {
   return null
 }
 
-function ContextSection({ title, children }) {
+function ContextSection({ title, children, compact }) {
   return (
     <section className="wb-tool-panel" style={{
-      borderTop: `1px solid ${colors.border}`,
-      padding: '10px 6px 12px',
+      padding: compact ? '0' : '10px 0 12px',
       display: 'flex',
       flexDirection: 'column',
       gap: 8,
     }}>
-      <div style={{
-        fontSize: 10,
-        fontWeight: 800,
-        letterSpacing: 0.6,
-        textTransform: 'uppercase',
-        color: colors.textMuted,
-        textAlign: 'center',
-      }}>
-        {title}
-      </div>
+      {title && (
+        <div style={{
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: 0.6,
+          textTransform: 'uppercase',
+          color: colors.textMuted,
+        }}>
+          {title}
+        </div>
+      )}
       {children}
     </section>
   )
@@ -419,6 +419,15 @@ function TextFormatControls({
   )
 }
 
+const FLYOUT_TITLES = {
+  draw: 'Pen',
+  erase: 'Eraser',
+  text: 'Text',
+  sticky: 'Note',
+  shape: 'Shape',
+  select: 'Move',
+}
+
 export default function Toolbar({
   tool, setTool, color, setColor, highlightColor, setHighlightColor,
   width, setWidth, highlight, setHighlight,
@@ -432,6 +441,7 @@ export default function Toolbar({
   formatHint,
 }) {
   const [openMenu, setOpenMenu] = useState(null)
+  const [flyoutOpen, setFlyoutOpen] = useState(true)
   const mode = panelMode(tool, editingTextId, editingStickyId, editingShapeId)
   const isTextMode = mode === 'text'
   const isDrawMode = mode === 'draw'
@@ -447,28 +457,39 @@ export default function Toolbar({
   }
 
   useEffect(() => { setOpenMenu(null) }, [mode, highlight])
+  useEffect(() => { setFlyoutOpen(true) }, [mode])
+
+  const pickTool = (t) => {
+    const active = tool === t && !editingTextId && !editingStickyId && !editingShapeId
+    if (active) setFlyoutOpen(v => !v)
+    else {
+      setTool(t)
+      setFlyoutOpen(true)
+    }
+  }
 
   const toolBtn = (t, label, icon) => {
     const active = tool === t && !editingTextId && !editingStickyId && !editingShapeId
     return (
       <Tip key={t} label={label} side="right">
-        <button type="button" onClick={() => setTool(t)}
+        <button type="button" onClick={() => pickTool(t)}
+          aria-pressed={active}
           style={{
-            width: '100%',
-            minHeight: 52,
-            borderRadius: 10,
-            border: active ? `2px solid ${colors.accentDark}` : '2px solid transparent',
-            background: active ? colors.accent : 'transparent',
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            border: active ? `2px solid ${colors.accentDark}` : `1px solid ${colors.border}`,
+            background: active ? colors.accent : '#f6f8fa',
             color: active ? '#fff' : colors.text,
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 2,
-            padding: '4px 2px',
+            padding: 0,
+            fontSize: t === 'text' ? 18 : 20,
+            fontWeight: t === 'text' ? 800 : 400,
+            lineHeight: 1,
           }}>
-          <span style={{ fontSize: 24, lineHeight: 1 }} aria-hidden>{icon}</span>
-          <span style={{ fontSize: 10, fontWeight: 700 }}>{label}</span>
+          <span aria-hidden>{icon}</span>
         </button>
       </Tip>
     )
@@ -518,25 +539,10 @@ export default function Toolbar({
     </PopoverMenu>
   )
 
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      width: sizes.toolbarWidth,
-      minWidth: sizes.toolbarWidth,
-      background: colors.surface,
-      borderRight: `1px solid ${colors.border}`,
-      zIndex: 10,
-      overflowY: 'auto',
-      overflowX: 'hidden',
-      boxShadow: '2px 0 12px rgba(0,0,0,0.04)',
-    }}>
-      <div style={{ padding: '8px 6px 6px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {TOOLS.map(({ id, label, icon }) => toolBtn(id, label, icon))}
-      </div>
-
+  const flyoutBody = mode && (
+    <>
       {mode === 'draw' && (
-        <ContextSection title={highlight ? 'Highlighter' : 'Pen'}>
+        <ContextSection title={highlight ? 'Highlighter' : 'Pen'} compact>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Tip label="Pen" side="right">
               <button type="button" onClick={() => setHighlight(false)}
@@ -569,8 +575,8 @@ export default function Toolbar({
       )}
 
       {mode === 'erase' && (
-        <ContextSection title="Eraser">
-          <p style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 1.35, margin: 0 }}>
+        <ContextSection title="Eraser" compact>
+          <p style={{ fontSize: 11, color: colors.textMuted, lineHeight: 1.35, margin: 0 }}>
             Drag over ink to erase
           </p>
           <WidthMenuButton />
@@ -578,7 +584,7 @@ export default function Toolbar({
       )}
 
       {mode === 'text' && (
-        <ContextSection title={editingTextId ? 'Edit text' : 'Text'}>
+        <ContextSection title={editingTextId ? 'Edit text' : 'Text'} compact>
           <TextFormatControls
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
@@ -609,7 +615,7 @@ export default function Toolbar({
       )}
 
       {mode === 'sticky' && (
-        <ContextSection title={editingStickyId ? 'Edit note' : 'Sticky note'}>
+        <ContextSection title={editingStickyId ? 'Edit note' : 'Sticky note'} compact>
           <TextFormatControls
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
@@ -638,8 +644,8 @@ export default function Toolbar({
       )}
 
       {mode === 'shape' && (
-        <ContextSection title={editingShapeId ? 'Edit shape' : 'Shapes'}>
-          <p style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 1.35, margin: 0 }}>
+        <ContextSection title={editingShapeId ? 'Edit shape' : 'Shapes'} compact>
+          <p style={{ fontSize: 11, color: colors.textMuted, lineHeight: 1.35, margin: 0 }}>
             {editingShapeId ? 'Edit label text below' : 'Drag on canvas to draw a shape'}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -649,11 +655,11 @@ export default function Toolbar({
                   type="button"
                   onClick={() => setShapeKind(id)}
                   style={{
-                    minHeight: 44,
+                    minHeight: 40,
                     borderRadius: 8,
                     border: shapeKind === id ? `2px solid ${colors.accent}` : `1px solid ${colors.border}`,
                     background: shapeKind === id ? colors.accentLight : '#f6f8fa',
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: 700,
                     color: colors.text,
                   }}
@@ -725,12 +731,110 @@ export default function Toolbar({
       )}
 
       {mode === 'select' && (
-        <ContextSection title="Move">
-          <p style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 1.45, margin: 0 }}>
+        <ContextSection compact>
+          <p style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.45, margin: 0 }}>
             Drag items to move. Use corner handles to resize.
           </p>
         </ContextSection>
       )}
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: sizes.toolbarRailWidth,
+        minWidth: sizes.toolbarRailWidth,
+        background: colors.surface,
+        borderRight: `1px solid ${colors.border}`,
+        zIndex: 12,
+        flexShrink: 0,
+        padding: '8px 4px',
+        gap: 4,
+      }}>
+        {TOOLS.map(({ id, label, icon }) => toolBtn(id, label, icon))}
+        <div style={{ flex: 1, minHeight: 8 }} />
+        <Tip label={flyoutOpen ? 'Hide tool options' : 'Show tool options'} side="right">
+          <button
+            type="button"
+            onClick={() => setFlyoutOpen(v => !v)}
+            aria-expanded={flyoutOpen}
+            style={{
+              width: 40,
+              height: 32,
+              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              background: flyoutOpen ? colors.accentLight : '#f6f8fa',
+              color: colors.textMuted,
+              fontSize: 14,
+              fontWeight: 700,
+            }}
+          >
+            {flyoutOpen ? '‹' : '›'}
+          </button>
+        </Tip>
+      </div>
+
+      {flyoutOpen && mode && (
+          <aside
+            className="wb-tool-flyout"
+            style={{
+              position: 'absolute',
+              left: sizes.toolbarRailWidth,
+              top: 0,
+              bottom: 0,
+              width: sizes.toolFlyoutWidth,
+              background: colors.surface,
+              borderRight: `1px solid ${colors.border}`,
+              boxShadow: '4px 0 20px rgba(0,0,0,0.08)',
+              zIndex: 14,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              padding: '12px 10px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 4,
+            }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                color: colors.textMuted,
+              }}>
+                {FLYOUT_TITLES[mode] || mode}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFlyoutOpen(false)}
+                aria-label="Close"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  background: '#f6f8fa',
+                  fontSize: 16,
+                  color: colors.textMuted,
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {flyoutBody}
+          </aside>
+      )}
+    </>
   )
 }
