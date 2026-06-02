@@ -115,6 +115,24 @@ input[type='range'].wb-range::-moz-range-thumb {
   animation: wb-flyout-in 0.2s ease-out;
 }
 
+/* Presentation fullscreen — maximize canvas, keep page strip */
+.wb-root.wb-fullscreen {
+  background: #eef1f4;
+}
+
+.wb-root.wb-fullscreen .wb-chrome-top--full {
+  min-height: 40px;
+  padding: 4px 10px;
+}
+
+.wb-root.wb-fullscreen .wb-pages-bar {
+  border-top-color: #d8dee6;
+}
+
+.wb-fs-tools-tab:hover {
+  background: var(--wb-accent-light);
+}
+
 @keyframes wb-popover-in {
   from {
     opacity: 0;

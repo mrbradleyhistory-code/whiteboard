@@ -14,6 +14,13 @@ import PopoverMenu from './PopoverMenu'
 import Tip from './Tip'
 import { colors, sizes, touchBtn, iconOnlyBtn, canvasControlDelete, canvasResizeHandle } from '../uiTheme'
 import { ShapeGraphic, createShapeFields } from '../shapes'
+import {
+  getFullscreenElement,
+  requestFullscreen,
+  exitFullscreen,
+  isEditableTarget,
+  presentationPageDelta,
+} from '../presentation'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -161,6 +168,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const historyRef = useRef([])
   const historyIndexRef = useRef(-1)
   const scrollRef = useRef(null)
+  const rootRef = useRef(null)
+  const pagesBarCollapsedBeforeFsRef = useRef(null)
+  const lastPageNavAtRef = useRef(0)
   const zoomRef = useRef(1)
   const touchGestureRef = useRef({ active: false, lastDist: 0, lastMidX: 0, lastMidY: 0 })
   const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0, pointerId: null })
@@ -190,6 +200,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const pagesRef = useRef([])
   const [showBoardPanel, setShowBoardPanel] = useState(false)
   const [topMenuOpen, setTopMenuOpen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [fullscreenToolsOpen, setFullscreenToolsOpen] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
   const [editingTextId, setEditingTextId] = useState(null)
   const [editingShapeId, setEditingShapeId] = useState(null)
@@ -472,15 +484,78 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     restoreSnap(historyRef.current[historyIndexRef.current])
   }, [restoreSnap])
 
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (getFullscreenElement()) {
+        await exitFullscreen()
+        return
+      }
+      if (!rootRef.current) return
+      pagesBarCollapsedBeforeFsRef.current = pagesBarCollapsed
+      setPagesBarCollapsed(true)
+      setShowBoardPanel(false)
+      setTopMenuOpen(false)
+      setFullscreenToolsOpen(false)
+      await requestFullscreen(rootRef.current)
+    } catch {
+      notify('Fullscreen is not available in this browser')
+    }
+  }, [pagesBarCollapsed, notify])
+
   useEffect(() => {
-    const handler = (e) => {
+    const onFullscreenChange = () => {
+      const active = !!getFullscreenElement()
+      setIsFullscreen(active)
+      if (!active) {
+        setFullscreenToolsOpen(false)
+        if (pagesBarCollapsedBeforeFsRef.current !== null) {
+          setPagesBarCollapsed(pagesBarCollapsedBeforeFsRef.current)
+          pagesBarCollapsedBeforeFsRef.current = null
+        }
+      }
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+    }
+  }, [])
+
+  const handlePresentationNav = useCallback((e) => {
+    if (isEditableTarget(e.target)) return false
+    const pageDelta = presentationPageDelta(e.key)
+    if (!pageDelta) return false
+    e.preventDefault()
+    const now = Date.now()
+    if (now - lastPageNavAtRef.current < 400) return true
+    lastPageNavAtRef.current = now
+    goToAdjacentPage(pageDelta)
+    return true
+  }, [goToAdjacentPage])
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (handlePresentationNav(e)) return
+
+      if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target)) {
+        e.preventDefault()
+        toggleFullscreen()
+        return
+      }
+
       if (!(e.ctrlKey || e.metaKey)) return
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
       if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); redo() }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [undo, redo])
+    const onKeyUp = (e) => { handlePresentationNav(e) }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [undo, redo, toggleFullscreen, handlePresentationNav])
 
   useEffect(() => () => {
     if (drawRafRef.current != null) cancelAnimationFrame(drawRafRef.current)
@@ -1218,8 +1293,16 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     )
   }
 
+  const pageNavLabel = pages.length > 1
+    ? `${activePage?.name || 'Page'} · ${activePageIndex >= 0 ? activePageIndex + 1 : 1} / ${pages.length}`
+    : (activePage?.name || 'Page')
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#eef1f4' }}>
+    <div
+      ref={rootRef}
+      className={isFullscreen ? 'wb-root wb-fullscreen' : 'wb-root'}
+      style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#eef1f4' }}
+    >
       {notification && (
         <div style={{
           position:'fixed', top:20, left:'50%', transform:'translateX(-50%)',
@@ -1229,65 +1312,98 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         }}>{notification}</div>
       )}
 
-      {/* Top bar — slim row; tool options live in left flyout */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
-        background: colors.surface, borderBottom: `1px solid ${colors.border}`,
-        zIndex: 10, flexShrink: 0, minHeight: 44,
-      }}>
-        <Tip label="Back to board list" side="bottom">
-          <button type="button" onClick={onExitBoard}
-            style={touchBtn({ minHeight: 40, padding: '8px 12px', fontSize: 14, background: colors.accentLight, border: `1px solid ${colors.accent}`, color: colors.accent })}>
-            ←
-          </button>
-        </Tip>
+      {/* Top bar — slim row; minimal chrome in fullscreen */}
+      <div
+        className={isFullscreen ? 'wb-chrome-top wb-chrome-top--full' : 'wb-chrome-top'}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          background: colors.surface, borderBottom: `1px solid ${colors.border}`,
+          zIndex: 10, flexShrink: 0, minHeight: 44,
+        }}
+      >
+        {isFullscreen ? (
+          <>
+            <Tip label="Exit fullscreen (Esc)" side="bottom">
+              <button type="button" onClick={toggleFullscreen}
+                style={touchBtn({ minHeight: 40, padding: '8px 12px', fontSize: 14, background: colors.accent, color: '#fff', border: 'none' })}>
+                Exit fullscreen
+              </button>
+            </Tip>
+            <span style={{
+              fontWeight: 700, fontSize: 15, color: colors.text,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+            }}>
+              {pageNavLabel}
+            </span>
+            <span style={{ fontSize: 11, color: colors.textMuted, flexShrink: 0 }} title="Presenter remote">
+              Remote: ← → · Page Up/Down
+            </span>
+          </>
+        ) : (
+          <>
+            <Tip label="Back to board list" side="bottom">
+              <button type="button" onClick={onExitBoard}
+                style={touchBtn({ minHeight: 40, padding: '8px 12px', fontSize: 14, background: colors.accentLight, border: `1px solid ${colors.accent}`, color: colors.accent })}>
+                ←
+              </button>
+            </Tip>
 
-        <button
-          type="button"
-          onClick={() => setShowBoardPanel(v => !v)}
-          title="Switch board"
-          style={{
-            border: 'none', background: 'transparent', padding: '4px 0',
-            fontWeight: 700, fontSize: 16, color: colors.text,
-            maxWidth: 'min(280px, 40vw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            textAlign: 'left', minHeight: 40,
-          }}
-        >
-          {activeBoard?.name || 'Whiteboard'}
-          <span style={{ marginLeft: 6, fontSize: 12, color: colors.textMuted }}>▾</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => setShowBoardPanel(v => !v)}
+              title="Switch board"
+              style={{
+                border: 'none', background: 'transparent', padding: '4px 0',
+                fontWeight: 700, fontSize: 16, color: colors.text,
+                maxWidth: 'min(280px, 40vw)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                textAlign: 'left', minHeight: 40,
+              }}
+            >
+              {activeBoard?.name || 'Whiteboard'}
+              <span style={{ marginLeft: 6, fontSize: 12, color: colors.textMuted }}>▾</span>
+            </button>
 
-        {saving && <span style={{ fontSize: 12, color: colors.textMuted, fontWeight: 500 }}>Saving…</span>}
+            {saving && <span style={{ fontSize: 12, color: colors.textMuted, fontWeight: 500 }}>Saving…</span>}
 
-        <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
+            <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
 
-        <Tip label="Undo" side="bottom">
-          <button type="button" onClick={undo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Undo">↩</button>
-        </Tip>
-        <Tip label="Redo" side="bottom">
-          <button type="button" onClick={redo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Redo">↪</button>
-        </Tip>
+            <Tip label="Undo" side="bottom">
+              <button type="button" onClick={undo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Undo">↩</button>
+            </Tip>
+            <Tip label="Redo" side="bottom">
+              <button type="button" onClick={redo} style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 20 })} aria-label="Redo">↪</button>
+            </Tip>
 
-        <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
+            <div style={{ width: 1, height: 28, background: colors.border, flexShrink: 0 }} />
 
-        <Tip label="Zoom out" side="bottom">
-          <button type="button" onClick={() => setZoom(z => Math.max(ZOOM_MIN, parseFloat((z - 0.25).toFixed(2))))}
-            style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom out">−</button>
-        </Tip>
-        <button type="button" onClick={() => setZoom(1)} title="Reset zoom"
-          style={{
-            border: 'none', background: 'transparent', fontSize: 14, fontWeight: 700,
-            minWidth: 44, color: colors.text, minHeight: 40,
-          }}>
-          {Math.round(zoom * 100)}%
-        </button>
-        <Tip label="Zoom in" side="bottom">
-          <button type="button" onClick={() => setZoom(z => Math.min(ZOOM_MAX, parseFloat((z + 0.25).toFixed(2))))}
-            style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom in">+</button>
-        </Tip>
+            <Tip label="Zoom out" side="bottom">
+              <button type="button" onClick={() => setZoom(z => Math.max(ZOOM_MIN, parseFloat((z - 0.25).toFixed(2))))}
+                style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom out">−</button>
+            </Tip>
+            <button type="button" onClick={() => setZoom(1)} title="Reset zoom"
+              style={{
+                border: 'none', background: 'transparent', fontSize: 14, fontWeight: 700,
+                minWidth: 44, color: colors.text, minHeight: 40,
+              }}>
+              {Math.round(zoom * 100)}%
+            </button>
+            <Tip label="Zoom in" side="bottom">
+              <button type="button" onClick={() => setZoom(z => Math.min(ZOOM_MAX, parseFloat((z + 0.25).toFixed(2))))}
+                style={iconOnlyBtn({ minWidth: 36, minHeight: 40, fontSize: 22, fontWeight: 300 })} aria-label="Zoom in">+</button>
+            </Tip>
+
+            <Tip label="Fullscreen (F)" side="bottom">
+              <button type="button" onClick={toggleFullscreen}
+                style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 18 })} aria-label="Enter fullscreen">
+                ⛶
+              </button>
+            </Tip>
+          </>
+        )}
 
         <div style={{ flex: 1, minWidth: 8 }} />
 
+        {!isFullscreen && (
         <PopoverMenu
           open={topMenuOpen}
           onOpenChange={setTopMenuOpen}
@@ -1302,6 +1418,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           )}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button type="button" onClick={() => { toggleFullscreen(); setTopMenuOpen(false) }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              ⛶ Fullscreen
+            </button>
             <button type="button" onClick={() => { handleExport(); setTopMenuOpen(false) }} disabled={!activeBoard}
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
               ⬇ Export PNG
@@ -1332,9 +1452,44 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             </button>
           </div>
         </PopoverMenu>
+        )}
       </div>
 
       <div style={{ display:'flex', flex:1, overflow:'hidden', position:'relative' }}>
+        {isFullscreen && (
+          <Tip label={fullscreenToolsOpen ? 'Hide tools' : 'Show tools'} side="right">
+            <button
+              type="button"
+              className="wb-fs-tools-tab"
+              onClick={() => setFullscreenToolsOpen(v => !v)}
+              aria-expanded={fullscreenToolsOpen}
+              aria-label={fullscreenToolsOpen ? 'Hide tools' : 'Show tools'}
+              style={{
+                position: 'absolute',
+                left: fullscreenToolsOpen ? sizes.toolbarRailWidth : 0,
+                top: '42%',
+                transform: 'translateY(-50%)',
+                zIndex: 16,
+                width: 26,
+                height: 48,
+                padding: 0,
+                border: `1px solid ${colors.border}`,
+                borderLeft: fullscreenToolsOpen ? 'none' : undefined,
+                borderRadius: fullscreenToolsOpen ? '0 8px 8px 0' : '0 8px 8px 0',
+                background: colors.surface,
+                color: colors.accent,
+                fontSize: 16,
+                fontWeight: 700,
+                boxShadow: '2px 0 8px rgba(0,0,0,0.08)',
+                lineHeight: 1,
+              }}
+            >
+              {fullscreenToolsOpen ? '‹' : '›'}
+            </button>
+          </Tip>
+        )}
+
+        {(!isFullscreen || fullscreenToolsOpen) && (
         <Toolbar tool={tool} setTool={setTool} color={color} setColor={setColor}
           highlightColor={highlightColor} setHighlightColor={setHighlightColor}
           width={width} setWidth={setWidth} highlight={highlight} setHighlight={setHighlight}
@@ -1356,8 +1511,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           onToggleItalic={() => toggleItemFormat('italic')}
           onToggleUnderline={() => toggleItemFormat('underline')}
           formatHint={editingTextId || editingStickyId || editingShapeId ? 'Editing selection' : tool === 'text' ? 'New text defaults' : tool === 'shape' ? 'New shape defaults' : 'New note defaults'} />
+        )}
 
-        {showBoardPanel && (
+        {showBoardPanel && !isFullscreen && (
           <BoardPanel session={session} activeBoardId={activeBoard?.id}
             onSelect={(b) => {
               if (b) { loadBoard(b); setShowBoardPanel(false) }
@@ -1617,7 +1773,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         </div>
       </div>
 
-      <div style={{
+      <div className="wb-pages-bar" style={{
         background: colors.surface,
         borderTop: `1px solid ${colors.border}`,
         flexShrink: 0,
