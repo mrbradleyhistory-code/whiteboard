@@ -147,3 +147,132 @@ input[type='range'].wb-range::-moz-range-thumb {
 .wb-popover-menu {
   animation: wb-popover-in 0.15s ease-out;
 }
+
+/* Floating whiteboard timer */
+.wb-timer {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 100;
+  width: min(320px, calc(100vw - 32px));
+  background: #fff;
+  border: 1px solid #d8dee6;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  padding: 14px 16px;
+}
+
+.wb-timer--collapsed .wb-timer__display,
+.wb-timer--collapsed .wb-timer__controls,
+.wb-timer--collapsed .wb-timer__label,
+.wb-timer--collapsed .wb-timer__custom {
+  display: none;
+}
+
+.wb-timer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.wb-timer__title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.wb-timer__header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.wb-timer__icon-btn {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  color: #5c6570;
+}
+
+.wb-timer__icon-btn:hover {
+  background: #f6f8fa;
+}
+
+.wb-timer__display {
+  font-size: 48px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: #1a1f26;
+  margin: 8px 0 12px;
+  letter-spacing: 0.02em;
+}
+
+.wb-timer__controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wb-timer__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5c6570;
+  margin-bottom: 12px;
+}
+
+.wb-timer__select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #d8dee6;
+  font-size: 15px;
+}
+
+.wb-timer__custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.wb-timer__input {
+  width: 64px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d8dee6;
+  font-size: 16px;
+  text-align: center;
+}
+
+.wb-timer-launcher {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Modal */
+.wb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.wb-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}

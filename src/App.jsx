@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Auth from './components/Auth'
-import BoardHome from './components/BoardHome'
+import ClassHub from './components/ClassHub'
 import Whiteboard from './components/Whiteboard'
 
 export default function App() {
@@ -43,7 +43,7 @@ export default function App() {
   if (!session) return <Auth />
 
   if (!openBoard) {
-    return <BoardHome session={session} onOpenBoard={setOpenBoard} />
+    return <ClassHub session={session} onOpenBoard={setOpenBoard} />
   }
   return (
     <Whiteboard

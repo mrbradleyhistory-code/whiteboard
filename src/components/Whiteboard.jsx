@@ -21,6 +21,9 @@ import {
   isEditableTarget,
   presentationPageDelta,
 } from '../presentation'
+import { buildGroupStickies, viewportCenterFromScroll } from '../placeGroupOverlays'
+import WhiteboardTimer from './WhiteboardTimer'
+import InjectGroupsModal from './InjectGroupsModal'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -200,6 +203,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const pagesRef = useRef([])
   const [showBoardPanel, setShowBoardPanel] = useState(false)
   const [topMenuOpen, setTopMenuOpen] = useState(false)
+  const [timerVisible, setTimerVisible] = useState(true)
+  const [groupsModalOpen, setGroupsModalOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fullscreenToolsOpen, setFullscreenToolsOpen] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
@@ -534,14 +539,33 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     return true
   }, [goToAdjacentPage])
 
+  const handleInjectGroups = useCallback((groups) => {
+    const viewport = viewportCenterFromScroll(scrollRef.current, zoomRef.current)
+    const newStickies = buildGroupStickies(groups, viewport)
+    setStickies(prev => {
+      const n = [...prev, ...newStickies]
+      scheduleSave({ stickies: n })
+      return n
+    })
+    setNotification(`Placed ${groups.length} groups on board`)
+    setTimeout(() => setNotification(''), 2500)
+  }, [scheduleSave])
+
   useEffect(() => {
     const onKeyDown = (e) => {
       if (handlePresentationNav(e)) return
 
-      if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target)) {
-        e.preventDefault()
-        toggleFullscreen()
-        return
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target)) {
+        if (e.key === 'f') {
+          e.preventDefault()
+          toggleFullscreen()
+          return
+        }
+        if (e.key === 't' || e.key === 'T') {
+          e.preventDefault()
+          setTimerVisible(v => !v)
+          return
+        }
       }
 
       if (!(e.ctrlKey || e.metaKey)) return
@@ -1287,7 +1311,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           Could not open board: {loadError}
         </p>
         <button type="button" onClick={onExitBoard} style={touchBtn({ background: colors.accent, color: '#fff', border: 'none' })}>
-          ← Back to boards
+          ← Back to launchpad
         </button>
       </div>
     )
@@ -1312,6 +1336,19 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         }}>{notification}</div>
       )}
 
+      <WhiteboardTimer
+        userId={session.user.id}
+        visible={timerVisible}
+        onToggleVisible={() => setTimerVisible(v => !v)}
+      />
+
+      <InjectGroupsModal
+        userId={session.user.id}
+        open={groupsModalOpen}
+        onClose={() => setGroupsModalOpen(false)}
+        onInject={handleInjectGroups}
+      />
+
       {/* Top bar — slim row; minimal chrome in fullscreen */}
       <div
         className={isFullscreen ? 'wb-chrome-top wb-chrome-top--full' : 'wb-chrome-top'}
@@ -1335,6 +1372,14 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             }}>
               {pageNavLabel}
             </span>
+            <Tip label="Place groups" side="bottom">
+              <button type="button" onClick={() => setGroupsModalOpen(true)}
+                style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 16 })} aria-label="Place groups">👥</button>
+            </Tip>
+            <Tip label="Timer (T)" side="bottom">
+              <button type="button" onClick={() => setTimerVisible(true)}
+                style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 16 })} aria-label="Timer">⏱</button>
+            </Tip>
             <span style={{ fontSize: 11, color: colors.textMuted, flexShrink: 0 }} title="Presenter remote">
               Remote: ← → · Page Up/Down
             </span>
@@ -1418,6 +1463,14 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           )}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button type="button" onClick={() => { setGroupsModalOpen(true); setTopMenuOpen(false) }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              👥 Place groups
+            </button>
+            <button type="button" onClick={() => { setTimerVisible(true); setTopMenuOpen(false) }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              ⏱ Timer
+            </button>
             <button type="button" onClick={() => { toggleFullscreen(); setTopMenuOpen(false) }}
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
               ⛶ Fullscreen
