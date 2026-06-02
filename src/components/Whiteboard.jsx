@@ -551,7 +551,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         strokeColor: shapeStroke,
         fontSize, textColor, fontFamily,
         bold: pendingBold, italic: pendingItalic, underline: pendingUnderline,
-        textAlign, listStyle,
+        textAlign: 'center', listStyle,
       }),
     }
     const n = [...shapes, ns]
@@ -729,6 +729,15 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }, [dragging, scheduleSave])
   cancelDragResizeRef.current = cancelDragResize
 
+  const beginTextEdit = (id, displayEl) => {
+    const measured = displayEl?.offsetHeight
+    if (measured) {
+      setTextBoxes(prev => prev.map(x => x.id === id ? { ...x, height: measured } : x))
+    }
+    setEditingTextId(id)
+    setSelectedOverlay({ type: 'text', id })
+  }
+
   const handleEditTouchEnd = useCallback((e, type, id) => {
     if (touchGestureRef.current.active || e.touches.length > 0) return
     const pending = touchDragPendingRef.current
@@ -748,8 +757,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         setEditingShapeId(id)
         setSelectedOverlay({ type: 'shape', id })
       } else {
-        setEditingTextId(id)
-        setSelectedOverlay({ type: 'text', id })
+        beginTextEdit(id, document.getElementById(`textbox_${id}`))
       }
       lastTapRef.current = { time: 0, x: 0, y: 0, type: null, id: null }
       touchDragPendingRef.current = null
@@ -1434,8 +1442,9 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                     style={{ position:'absolute', inset:0 }}
                   />
                   <div style={{
-                    position:'relative', flex:1, zIndex:1, display:'flex', alignItems:'center',
-                    justifyContent:'center', padding:'8px 10px', minHeight:0, overflow:'hidden',
+                    position:'relative', flex:1, zIndex:1, minHeight:0, overflow:'hidden',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    padding:'8px 10px',
                   }}>
                     {editingShapeId === sh.id
                       ? <textarea autoFocus value={sh.text}
@@ -1443,16 +1452,18 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                           onBlur={() => { setEditingShapeId(null); scheduleSave() }}
                           onKeyDown={e => handleFormatKey(e, 'shape', sh.id)}
                           style={{
-                            width:'100%', height:'100%', border:'none', background:'transparent', resize:'none',
+                            width:'100%', maxHeight:'100%', border:'none', background:'transparent', resize:'none',
                             fontSize:sf, color:tc, fontFamily:ff, outline:'none', cursor:'text',
-                            textAlign: sh.textAlign || 'center', ...fmtStyle,
+                            textAlign: sh.textAlign || 'center', boxSizing:'border-box',
+                            lineHeight:1.35, ...fmtStyle,
                           }} />
                       : <div
                           onDoubleClick={() => { setEditingShapeId(sh.id); setSelectedOverlay({ type: 'shape', id: sh.id }) }}
                           onTouchEnd={e => handleEditTouchEnd(e, 'shape', sh.id)}
                           style={{
-                            width:'100%', fontSize:sf, color:tc, fontFamily:ff, wordBreak:'break-word',
-                            textAlign: sh.textAlign || 'center', ...fmtStyle,
+                            width:'100%', maxHeight:'100%', overflow:'hidden',
+                            fontSize:sf, color:tc, fontFamily:ff, wordBreak:'break-word',
+                            textAlign: sh.textAlign || 'center', lineHeight:1.35, ...fmtStyle,
                           }}>
                           {(sh.listStyle === 'bullet' || sh.listStyle === 'numbered')
                             ? sh.text.split('\n').map((line, i) => (
@@ -1527,20 +1538,48 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               const tw = t.width || 200
               const th = t.height || 60
               const fmtStyle = { fontWeight: t.bold?700:400, fontStyle: t.italic?'italic':'normal', textDecoration: t.underline?'underline':'none' }
+              const textBoxStyle = {
+                boxSizing: 'border-box',
+                width: '100%',
+                minHeight: th,
+                padding: 4,
+                lineHeight: 1.4,
+                fontSize: t.fontSize,
+                color: t.color,
+                fontFamily: ff,
+                textAlign: t.textAlign || 'left',
+                ...fmtStyle,
+              }
               return (
-                <div key={t.id} style={{ position:'absolute', left:t.x, top:t.y, width:tw, pointerEvents:'auto', cursor: tool==='select'?'move':'text' }}
+                <div key={t.id} id={`textbox_${t.id}`}
+                  style={{ position:'absolute', left:t.x, top:t.y, width:tw, minHeight:th, pointerEvents:'auto', cursor: tool==='select'?'move':'text' }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
                   onClick={tool === 'text' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'text', id: t.id }) } : undefined}>
                   {editingTextId === t.id
                     ? <textarea autoFocus value={t.text}
                         onChange={e => setTextBoxes(prev => prev.map(x => x.id===t.id?{...x,text:e.target.value}:x))}
-                        onBlur={() => { setEditingTextId(null); scheduleSave() }}
+                        onBlur={(e) => {
+                          const newH = Math.max(60, e.target.scrollHeight)
+                          setTextBoxes(prev => prev.map(x => x.id === t.id ? { ...x, height: newH } : x))
+                          setEditingTextId(null)
+                          scheduleSave()
+                        }}
                         onKeyDown={e => handleFormatKey(e, 'text', t.id)}
-                        style={{ fontSize:t.fontSize, color:t.color, fontFamily:ff, ...fmtStyle, border:'none', outline:'1.5px dashed #457b9d', background:'transparent', resize:'none', padding:4, width:'100%', height:th, lineHeight:1.4, display:'block', textAlign: t.textAlign || 'left' }} />
-                    : <div onDoubleClick={() => { setEditingTextId(t.id); setSelectedOverlay({ type: 'text', id: t.id }) }}
+                        style={{
+                          ...textBoxStyle,
+                          border:'none',
+                          outline:'1.5px dashed #457b9d',
+                          background:'transparent',
+                          resize:'none',
+                          display:'block',
+                          height: th,
+                          overflow: 'auto',
+                        }} />
+                    : <div
+                        onDoubleClick={(e) => beginTextEdit(t.id, e.currentTarget)}
                         onTouchEnd={e => handleEditTouchEnd(e, 'text', t.id)}
-                        style={{ fontSize:t.fontSize, color:t.color, fontFamily:ff, ...fmtStyle, wordBreak:'break-word', userSelect:'none', padding:4, minHeight:th, lineHeight:1.4, textAlign: t.textAlign || 'left' }}>
+                        style={{ ...textBoxStyle, wordBreak:'break-word', userSelect:'none' }}>
                         {(t.listStyle === 'bullet' || t.listStyle === 'numbered')
                           ? t.text.split('\n').map((line, i) => (
                               <div key={i} style={{ display:'flex', gap:4 }}>
