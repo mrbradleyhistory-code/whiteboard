@@ -1,26 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { presentationPageDelta } from '../presentation'
+import { shuffleCards, pickTermChoices } from '../flashcardStudy'
 import { colors, touchBtn } from '../uiTheme'
 
-function shuffle(arr) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
-function pickChoices(cards, correctCard, count = 4) {
-  const wrong = shuffle(cards.filter(c => c.id !== correctCard.id)).slice(0, count - 1)
-  const choices = shuffle([correctCard, ...wrong])
-  while (choices.length < count) {
-    choices.push({ id: `pad_${choices.length}`, front: '—', back: '—' })
-  }
-  return choices.slice(0, count)
-}
-
 export default function StudySession({ deck, mode, onBack }) {
-  const cards = useMemo(() => shuffle(deck.cards || []), [deck.id, mode])
+  const cards = useMemo(() => shuffleCards(deck.cards || []), [deck.id, mode])
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [gotIt, setGotIt] = useState(0)
@@ -29,16 +13,63 @@ export default function StudySession({ deck, mode, onBack }) {
   const [mcAnswered, setMcAnswered] = useState(0)
   const [mcFeedback, setMcFeedback] = useState(null)
   const [choices, setChoices] = useState([])
+  const [choiceIndex, setChoiceIndex] = useState(0)
 
   const current = cards[index]
   const done = index >= cards.length
 
   useEffect(() => {
     if (mode === 'mc' && current && !done) {
-      setChoices(pickChoices(cards, current))
+      setChoices(pickTermChoices(cards, current))
       setMcFeedback(null)
+      setChoiceIndex(0)
     }
   }, [index, mode, deck.id, done, current, cards])
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (done) return
+      const delta = presentationPageDelta(e.key)
+      if (mode === 'flip') {
+        if (delta === 1) {
+          e.preventDefault()
+          if (!flipped) setFlipped(true)
+          else {
+            setIndex(i => i + 1)
+            setFlipped(false)
+          }
+        } else if (delta === -1 && index > 0) {
+          e.preventDefault()
+          setIndex(i => i - 1)
+          setFlipped(false)
+        }
+        return
+      }
+      if (mode === 'mc' && !mcFeedback) {
+        if (delta !== 0) {
+          e.preventDefault()
+          setChoiceIndex(i => {
+            const n = choices.length || 4
+            return delta === 1 ? (i + 1) % n : (i - 1 + n) % n
+          })
+        }
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault()
+          const ch = choices[choiceIndex]
+          if (!ch) return
+          setMcAnswered(a => a + 1)
+          if (ch.id === current.id) setMcScore(s => s + 1)
+          setMcFeedback(ch.id)
+          setTimeout(() => {
+            setIndex(i => i + 1)
+            setMcFeedback(null)
+          }, 700)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mode, flipped, index, done, choices, choiceIndex, current, mcFeedback])
 
   if (!cards.length) {
     return (
@@ -52,7 +83,7 @@ export default function StudySession({ deck, mode, onBack }) {
   if (mode === 'mc' && cards.length < 4) {
     return (
       <div style={{ padding: 24 }}>
-        <p>Multiple choice needs at least 4 cards in the deck.</p>
+        <p>Quiz mode needs at least 4 cards in the deck.</p>
         <button type="button" onClick={onBack} style={touchBtn()}>Back</button>
       </div>
     )
@@ -106,7 +137,7 @@ export default function StudySession({ deck, mode, onBack }) {
           {flipped ? current.back : current.front}
         </button>
         <p style={{ textAlign: 'center', color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
-          {flipped ? 'Tap to show term' : 'Tap to reveal answer'}
+          Page Down → reveal / next · tap to flip
         </p>
         {flipped && (
           <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
@@ -125,9 +156,12 @@ export default function StudySession({ deck, mode, onBack }) {
     )
   }
 
+  const correctId = current.id
+
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 0' }}>
       <p style={{ color: colors.textMuted, marginBottom: 16 }}>Question {index + 1} of {cards.length}</p>
+      <p style={{ fontSize: 13, fontWeight: 700, color: colors.accent, margin: '0 0 8px', textTransform: 'uppercase' }}>Definition</p>
       <div style={{
         padding: 28,
         borderRadius: 16,
@@ -138,14 +172,16 @@ export default function StudySession({ deck, mode, onBack }) {
         marginBottom: 20,
         textAlign: 'center',
       }}>
-        {current.front}
+        {current.back}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {choices.map(ch => {
-          const isCorrect = ch.id === current.id
+        {choices.map((ch, i) => {
+          const isCorrect = ch.id === correctId
+          const isSelected = i === choiceIndex
           let bg = '#f6f8fa'
           if (mcFeedback && isCorrect) bg = '#d1fae5'
           if (mcFeedback === ch.id && !isCorrect) bg = colors.dangerBg
+          if (!mcFeedback && isSelected) bg = colors.accentLight
           return (
             <button
               key={ch.id}
@@ -160,13 +196,23 @@ export default function StudySession({ deck, mode, onBack }) {
                   setMcFeedback(null)
                 }, 700)
               }}
-              style={touchBtn({ width: '100%', justifyContent: 'flex-start', background: bg, fontSize: 16, textAlign: 'left' })}
+              style={touchBtn({
+                width: '100%',
+                justifyContent: 'flex-start',
+                background: bg,
+                fontSize: 16,
+                textAlign: 'left',
+                border: isSelected && !mcFeedback ? `2px solid ${colors.accent}` : undefined,
+              })}
             >
-              {ch.back}
+              <strong style={{ marginRight: 10 }}>{i + 1}.</strong> {ch.front}
             </button>
           )
         })}
       </div>
+      <p style={{ textAlign: 'center', color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
+        Page Down / Up → move highlight · Space → submit
+      </p>
       <button type="button" onClick={onBack} style={{ ...touchBtn(), marginTop: 24 }}>Exit</button>
     </div>
   )

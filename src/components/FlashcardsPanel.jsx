@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchDecks, createDeck, updateDeck, deleteDeck, newCardId, normalizeCards } from '../flashcardDecks'
 import { parseFlashcardImport } from '../flashcardImport'
+import FlashcardPresenter from './FlashcardPresenter'
 import StudySession from './StudySession'
 import { colors, sizes, touchBtn } from '../uiTheme'
 
@@ -15,6 +16,7 @@ export default function FlashcardsPanel({ userId }) {
   const [importText, setImportText] = useState('')
   const [importPreview, setImportPreview] = useState(null)
   const [study, setStudy] = useState(null)
+  const [present, setPresent] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -107,6 +109,16 @@ export default function FlashcardsPanel({ userId }) {
     e.target.value = ''
   }
 
+  if (present) {
+    return (
+      <FlashcardPresenter
+        deck={present.deck}
+        mode={present.mode}
+        onExit={() => setPresent(null)}
+      />
+    )
+  }
+
   if (study) {
     return (
       <div>
@@ -126,17 +138,31 @@ export default function FlashcardsPanel({ userId }) {
           onBlur={() => saveEditingDeck({ name: editingDeck.name.trim() })}
           style={{ width: '100%', fontSize: 22, fontWeight: 700, padding: '12px 14px', borderRadius: 10, border: `1px solid ${colors.border}`, marginBottom: 16 }}
         />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-          <button type="button" onClick={() => setStudy({ deck: editingDeck, mode: 'flip' })}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button type="button" onClick={() => setPresent({ deck: editingDeck, mode: 'cycle' })}
+            disabled={!(editingDeck.cards || []).length}
             style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>
-            Study (flip)
+            Present — cycle cards
+          </button>
+          <button type="button" onClick={() => setPresent({ deck: editingDeck, mode: 'quiz' })}
+            disabled={(editingDeck.cards || []).length < 4}
+            style={{ ...actionBtn, background: colors.accentDark, color: '#fff', border: 'none' }}>
+            Present — quiz
+          </button>
+          <button type="button" onClick={addCard} style={actionBtn}>+ Add card</button>
+        </div>
+        <p style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 20px' }}>
+          Present modes use fullscreen and your presenter remote (Page Down / Up). Quiz shows a definition; pick the matching term.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          <button type="button" onClick={() => setStudy({ deck: editingDeck, mode: 'flip' })} style={actionBtn}>
+            Practice (flip)
           </button>
           <button type="button" onClick={() => setStudy({ deck: editingDeck, mode: 'mc' })}
             disabled={(editingDeck.cards || []).length < 4}
             style={actionBtn}>
-            Study (multiple choice)
+            Practice (quiz)
           </button>
-          <button type="button" onClick={addCard} style={actionBtn}>+ Add card</button>
         </div>
 
         <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 16, marginBottom: 24 }}>
@@ -229,7 +255,12 @@ export default function FlashcardsPanel({ userId }) {
                 <div style={{ fontWeight: 700, fontSize: 18 }}>{d.name}</div>
                 <div style={{ fontSize: 14, color: colors.textMuted }}>{(d.cards || []).length} cards</div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => setPresent({ deck: d, mode: 'cycle' })}
+                  disabled={!(d.cards || []).length}
+                  style={{ ...actionBtn, background: colors.accentLight, border: `1px solid ${colors.accent}` }}>
+                  Present
+                </button>
                 <button type="button" onClick={() => setEditingDeck(d)} style={actionBtn}>Edit</button>
                 <button type="button" onClick={() => handleDeleteDeck(d.id)} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg }}>Delete</button>
               </div>

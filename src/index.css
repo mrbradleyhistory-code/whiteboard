@@ -276,3 +276,164 @@ input[type='range'].wb-range::-moz-range-thumb {
   overflow: auto;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
 }
+
+/* Fullscreen flashcard presenter (class display) */
+.wb-flash-presenter {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: #1a1f26;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 48px 40px;
+  box-sizing: border-box;
+}
+
+.wb-flash-presenter__bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #9aa3ad;
+  margin-bottom: 32px;
+  flex-shrink: 0;
+}
+
+.wb-flash-presenter__bar span:first-child {
+  flex: 1;
+  color: #d8dee6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-flash-presenter__exit {
+  border: 1px solid #5c6570;
+  background: transparent;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wb-flash-presenter__label {
+  font-size: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #457b9d;
+  margin: 0 0 16px;
+}
+
+.wb-flash-presenter__prompt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: clamp(32px, 6vw, 72px);
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 24px;
+  white-space: pre-wrap;
+}
+
+.wb-flash-presenter__choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  width: 100%;
+  align-self: center;
+}
+
+.wb-flash-presenter__choice {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 28px;
+  border-radius: 14px;
+  background: #2a3038;
+  border: 3px solid transparent;
+  font-size: clamp(22px, 3.5vw, 36px);
+  font-weight: 600;
+}
+
+.wb-flash-presenter__choice--active {
+  border-color: #457b9d;
+  background: #2d3f4d;
+  box-shadow: 0 0 0 2px rgba(69, 123, 157, 0.4);
+}
+
+.wb-flash-presenter__choice--correct {
+  border-color: #2a9d8f;
+  background: #1e3d38;
+}
+
+.wb-flash-presenter__choice--wrong {
+  border-color: #e63946;
+  background: #3d2224;
+}
+
+.wb-flash-presenter__choice-num {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #457b9d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.wb-flash-presenter__choice--correct .wb-flash-presenter__choice-num {
+  background: #2a9d8f;
+}
+
+.wb-flash-presenter__choice--wrong .wb-flash-presenter__choice-num {
+  background: #e63946;
+}
+
+.wb-flash-presenter__hint {
+  text-align: center;
+  font-size: 18px;
+  color: #9aa3ad;
+  margin-top: 28px;
+  flex-shrink: 0;
+}
+
+.wb-flash-presenter__feedback {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 16px;
+}
+
+.wb-flash-presenter__feedback.ok {
+  color: #6ee7b7;
+}
+
+.wb-flash-presenter__feedback.miss {
+  color: #fca5a5;
+}
+
+.wb-flash-presenter__done {
+  font-size: 48px;
+  margin: auto;
+  text-align: center;
+}
+
+.wb-flash-presenter__actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 32px;
+}
