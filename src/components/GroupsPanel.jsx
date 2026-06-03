@@ -34,8 +34,8 @@ export default function GroupsPanel({ userId }) {
   useEffect(() => {
     const loaded = loadClassData(userId)
     setData(loaded)
-    if (loaded.classes.length && !activeClassId) {
-      setActiveClassId(loaded.classes[0].id)
+    if (loaded.classes.length && !expandedClassId) {
+      setExpandedClassId(loaded.classes[0].id)
     }
   }, [userId])
 
@@ -76,8 +76,8 @@ export default function GroupsPanel({ userId }) {
     if (!confirm('Delete this class and its roster?')) return
     const next = { ...data, classes: data.classes.filter(c => c.id !== id) }
     persist(next)
-    if (activeClassId === id) {
-      setActiveClassId(next.classes[0]?.id || null)
+    if (expandedClassId === id) {
+      setExpandedClassId(next.classes[0]?.id || null)
       setEditableGroups(null)
     }
   }
