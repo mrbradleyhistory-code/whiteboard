@@ -282,6 +282,10 @@ input[type='range'].wb-range::-moz-range-thumb {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
 }
 
+.wb-modal--wide {
+  max-width: 520px;
+}
+
 /* Fullscreen flashcard presenter (class display) */
 .wb-flash-presenter {
   position: fixed;

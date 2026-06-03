@@ -7,9 +7,12 @@ import {
   exportClassDataJson,
   importClassDataJson,
   parseRosterPaste,
+  studentNameById,
 } from '../localClassData'
 import { createRng, generateSimpleGroups, generateJigsawGroups } from '../grouping'
-import { colors, sizes, touchBtn } from '../uiTheme'
+import { cloneGroups, createSavedArrangement } from '../groupArrangements'
+import GroupEditor from './GroupEditor'
+import { colors, touchBtn } from '../uiTheme'
 
 const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
 
@@ -17,14 +20,15 @@ export default function GroupsPanel({ userId }) {
   const [data, setData] = useState({ classes: [] })
   const [activeClassId, setActiveClassId] = useState(null)
   const [rosterPaste, setRosterPaste] = useState('')
-  const [neverA, setNeverA] = useState('')
-  const [neverB, setNeverB] = useState('')
+  const [neverApartSelected, setNeverApartSelected] = useState([])
   const [alwaysSelected, setAlwaysSelected] = useState([])
   const [groupMode, setGroupMode] = useState('simple')
+  const [sizingMode, setSizingMode] = useState('byCount')
   const [groupCount, setGroupCount] = useState(4)
+  const [studentsPerGroup, setStudentsPerGroup] = useState(4)
   const [pieceCount, setPieceCount] = useState(4)
   const [seed, setSeed] = useState('')
-  const [result, setResult] = useState(null)
+  const [editableGroups, setEditableGroups] = useState(null)
   const [genError, setGenError] = useState('')
 
   useEffect(() => {
@@ -42,6 +46,13 @@ export default function GroupsPanel({ userId }) {
 
   const activeClass = data.classes.find(c => c.id === activeClassId)
 
+  const updateClass = (id, patch) => {
+    persist({
+      ...data,
+      classes: data.classes.map(c => (c.id === id ? { ...c, ...patch } : c)),
+    })
+  }
+
   const addClass = () => {
     const c = createClass(`Class ${data.classes.length + 1}`)
     const next = { ...data, classes: [...data.classes, c] }
@@ -53,23 +64,17 @@ export default function GroupsPanel({ userId }) {
     if (!confirm('Delete this class and its roster?')) return
     const next = { ...data, classes: data.classes.filter(c => c.id !== id) }
     persist(next)
-    if (activeClassId === id) setActiveClassId(next.classes[0]?.id || null)
-  }
-
-  const updateClass = (id, patch) => {
-    persist({
-      ...data,
-      classes: data.classes.map(c => (c.id === id ? { ...c, ...patch } : c)),
-    })
+    if (activeClassId === id) {
+      setActiveClassId(next.classes[0]?.id || null)
+      setEditableGroups(null)
+    }
   }
 
   const addStudentsFromPaste = () => {
     if (!activeClass) return
     const newOnes = parseRosterPaste(rosterPaste)
     if (!newOnes.length) return
-    updateClass(activeClass.id, {
-      students: [...activeClass.students, ...newOnes],
-    })
+    updateClass(activeClass.id, { students: [...activeClass.students, ...newOnes] })
     setRosterPaste('')
   }
 
@@ -77,31 +82,36 @@ export default function GroupsPanel({ userId }) {
     if (!activeClass) return
     const students = activeClass.students.filter(s => s.id !== studentId)
     const constraints = {
-      neverTogether: activeClass.constraints.neverTogether.filter(
-        ([a, b]) => a !== studentId && b !== studentId,
-      ),
-      alwaysTogether: activeClass.constraints.alwaysTogether
-        .map(cluster => cluster.filter(id => id !== studentId))
+      neverApart: activeClass.constraints.neverApart
+        .map(cluster => cluster.filter(x => x !== studentId))
         .filter(c => c.length >= 2),
+      alwaysTogether: activeClass.constraints.alwaysTogether
+        .map(cluster => cluster.filter(x => x !== studentId))
+        .filter(c => c.length >= 2),
+      neverTogether: [],
     }
     updateClass(activeClass.id, { students, constraints })
   }
 
-  const addNeverTogether = () => {
-    if (!activeClass || !neverA || !neverB || neverA === neverB) return
-    const pair = [neverA, neverB].sort()
-    const exists = activeClass.constraints.neverTogether.some(
-      ([a, b]) => a === pair[0] && b === pair[1],
-    )
-    if (exists) return
+  const addNeverApart = () => {
+    if (!activeClass || neverApartSelected.length < 2) return
     updateClass(activeClass.id, {
       constraints: {
         ...activeClass.constraints,
-        neverTogether: [...activeClass.constraints.neverTogether, pair],
+        neverApart: [...activeClass.constraints.neverApart, [...neverApartSelected]],
       },
     })
-    setNeverA('')
-    setNeverB('')
+    setNeverApartSelected([])
+  }
+
+  const removeNeverApart = (index) => {
+    if (!activeClass) return
+    updateClass(activeClass.id, {
+      constraints: {
+        ...activeClass.constraints,
+        neverApart: activeClass.constraints.neverApart.filter((_, i) => i !== index),
+      },
+    })
   }
 
   const addAlwaysTogether = () => {
@@ -115,11 +125,28 @@ export default function GroupsPanel({ userId }) {
     setAlwaysSelected([])
   }
 
-  const toggleAlwaysSelect = (id) => {
-    setAlwaysSelected(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
-    )
+  const removeAlwaysTogether = (index) => {
+    if (!activeClass) return
+    updateClass(activeClass.id, {
+      constraints: {
+        ...activeClass.constraints,
+        alwaysTogether: activeClass.constraints.alwaysTogether.filter((_, i) => i !== index),
+      },
+    })
   }
+
+  const toggleSelect = (setter, id) => {
+    setter(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  }
+
+  const genSettings = () => ({
+    groupMode,
+    sizingMode,
+    groupCount,
+    studentsPerGroup,
+    pieceCount,
+    seed,
+  })
 
   const generate = () => {
     if (!activeClass?.students.length) {
@@ -133,26 +160,47 @@ export default function GroupsPanel({ userId }) {
 
     let out
     if (groupMode === 'jigsaw') {
-      out = generateJigsawGroups(
-        activeClass.students,
-        activeClass.constraints,
-        pieceCount,
-        rng,
-      )
+      out = generateJigsawGroups(activeClass.students, activeClass.constraints, pieceCount, rng)
     } else {
-      out = generateSimpleGroups(
-        activeClass.students,
-        activeClass.constraints,
+      out = generateSimpleGroups(activeClass.students, activeClass.constraints, {
+        sizingMode,
         groupCount,
-        rng,
-      )
+        studentsPerGroup,
+      }, rng)
     }
     if (out.error) {
       setGenError(out.error)
-      setResult(null)
+      setEditableGroups(null)
     } else {
-      setResult(out)
+      setEditableGroups(cloneGroups(out.groups))
     }
+  }
+
+  const saveArrangement = (name) => {
+    if (!activeClass || !editableGroups?.length) return
+    const entry = createSavedArrangement(name, editableGroups, genSettings())
+    updateClass(activeClass.id, {
+      savedArrangements: [entry, ...(activeClass.savedArrangements || [])],
+    })
+  }
+
+  const loadArrangement = (arr) => {
+    setEditableGroups(cloneGroups(arr.groups))
+    const s = arr.settings || {}
+    if (s.groupMode) setGroupMode(s.groupMode)
+    if (s.sizingMode) setSizingMode(s.sizingMode)
+    if (s.groupCount != null) setGroupCount(s.groupCount)
+    if (s.studentsPerGroup != null) setStudentsPerGroup(s.studentsPerGroup)
+    if (s.pieceCount != null) setPieceCount(s.pieceCount)
+    if (s.seed != null) setSeed(s.seed)
+    setGenError('')
+  }
+
+  const deleteArrangement = (arrId) => {
+    if (!activeClass || !confirm('Delete this saved grouping?')) return
+    updateClass(activeClass.id, {
+      savedArrangements: activeClass.savedArrangements.filter(a => a.id !== arrId),
+    })
   }
 
   const handleExport = () => {
@@ -178,6 +226,7 @@ export default function GroupsPanel({ userId }) {
       if (!confirm('Replace all local class data with imported file?')) return
       persist(imported)
       setActiveClassId(imported.classes[0]?.id || null)
+      setEditableGroups(null)
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -206,7 +255,7 @@ export default function GroupsPanel({ userId }) {
             <button
               key={c.id}
               type="button"
-              onClick={() => setActiveClassId(c.id)}
+              onClick={() => { setActiveClassId(c.id); setEditableGroups(null) }}
               style={touchBtn({
                 background: activeClassId === c.id ? colors.accent : colors.surface,
                 color: activeClassId === c.id ? '#fff' : colors.text,
@@ -251,35 +300,47 @@ export default function GroupsPanel({ userId }) {
             ))}
           </ul>
 
-          <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Constraints</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <select value={neverA} onChange={e => setNeverA(e.target.value)} style={{ flex: 1, minWidth: 120, padding: 10, borderRadius: 8, border: `1px solid ${colors.border}` }}>
-              <option value="">Student A…</option>
-              {activeClass.students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select value={neverB} onChange={e => setNeverB(e.target.value)} style={{ flex: 1, minWidth: 120, padding: 10, borderRadius: 8, border: `1px solid ${colors.border}` }}>
-              <option value="">Student B…</option>
-              {activeClass.students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <button type="button" onClick={addNeverTogether} style={actionBtn}>Never together</button>
-          </div>
-          {activeClass.constraints.neverTogether.length > 0 && (
-            <ul style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 12px' }}>
-              {activeClass.constraints.neverTogether.map(([a, b], i) => {
-                const na = activeClass.students.find(s => s.id === a)?.name || a
-                const nb = activeClass.students.find(s => s.id === b)?.name || b
-                return <li key={i}>{na} ≠ {nb}</li>
-              })}
-            </ul>
-          )}
-
-          <p style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 8px' }}>Always together (select 2+, then add)</p>
+          <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Never in the same group (select 2+ students)</h3>
+          <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 8px' }}>
+            Add a cluster of students who must not be grouped together — not only pairs.
+          </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
             {activeClass.students.map(s => (
               <button
                 key={s.id}
                 type="button"
-                onClick={() => toggleAlwaysSelect(s.id)}
+                onClick={() => toggleSelect(setNeverApartSelected, s.id)}
+                style={touchBtn({
+                  padding: '6px 12px',
+                  fontSize: 13,
+                  background: neverApartSelected.includes(s.id) ? colors.warnBg : '#f6f8fa',
+                  color: neverApartSelected.includes(s.id) ? colors.warn : colors.text,
+                  border: neverApartSelected.includes(s.id) ? `1px solid ${colors.warn}` : undefined,
+                })}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={addNeverApart} style={{ ...actionBtn, marginBottom: 12 }}>Add never-apart cluster</button>
+          {activeClass.constraints.neverApart.length > 0 && (
+            <ul style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 16px', padding: 0, listStyle: 'none' }}>
+              {activeClass.constraints.neverApart.map((cluster, i) => (
+                <li key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', gap: 8 }}>
+                  <span>{cluster.map(id => studentNameById(activeClass.students, id)).join(' · ')}</span>
+                  <button type="button" onClick={() => removeNeverApart(i)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 600 }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Always in the same group (select 2+)</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {activeClass.students.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => toggleSelect(setAlwaysSelected, s.id)}
                 style={touchBtn({
                   padding: '6px 12px',
                   fontSize: 13,
@@ -291,7 +352,17 @@ export default function GroupsPanel({ userId }) {
               </button>
             ))}
           </div>
-          <button type="button" onClick={addAlwaysTogether} style={{ ...actionBtn, marginBottom: 16 }}>Add cluster</button>
+          <button type="button" onClick={addAlwaysTogether} style={{ ...actionBtn, marginBottom: 12 }}>Add always-together cluster</button>
+          {activeClass.constraints.alwaysTogether.length > 0 && (
+            <ul style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 16px', padding: 0, listStyle: 'none' }}>
+              {activeClass.constraints.alwaysTogether.map((cluster, i) => (
+                <li key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', gap: 8 }}>
+                  <span>{cluster.map(id => studentNameById(activeClass.students, id)).join(' · ')}</span>
+                  <button type="button" onClick={() => removeAlwaysTogether(i)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 600 }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <h3 style={{ fontSize: 16, margin: '0 0 12px' }}>Generate groups</h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -304,44 +375,71 @@ export default function GroupsPanel({ userId }) {
               Jigsaw
             </label>
           </div>
-          {groupMode === 'simple' ? (
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              Number of groups
-              <input type="number" min={1} max={30} value={groupCount} onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
-                style={{ marginLeft: 8, width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-            </label>
-          ) : (
+
+          {groupMode === 'simple' && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="radio" checked={sizingMode === 'byCount'} onChange={() => setSizingMode('byCount')} />
+                  Number of groups
+                  <input type="number" min={1} max={30} value={groupCount} onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
+                    style={{ width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="radio" checked={sizingMode === 'bySize'} onChange={() => setSizingMode('bySize')} />
+                  Students per group
+                  <input type="number" min={2} max={30} value={studentsPerGroup} onChange={e => setStudentsPerGroup(parseInt(e.target.value, 10) || 2)}
+                    style={{ width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {groupMode === 'jigsaw' && (
             <label style={{ display: 'block', marginBottom: 12 }}>
               Expert pieces (topics)
               <input type="number" min={2} max={12} value={pieceCount} onChange={e => setPieceCount(parseInt(e.target.value, 10) || 2)}
                 style={{ marginLeft: 8, width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
             </label>
           )}
+
           <label style={{ display: 'block', marginBottom: 12, fontSize: 14, color: colors.textMuted }}>
             Optional seed (same seed = same groups)
             <input value={seed} onChange={e => setSeed(e.target.value)} placeholder="e.g. tuesday-v1"
               style={{ display: 'block', width: '100%', maxWidth: 280, marginTop: 6, padding: 10, borderRadius: 8, border: `1px solid ${colors.border}` }} />
           </label>
           <button type="button" onClick={generate} style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>
-            Generate preview
+            Generate groups
           </button>
           {genError && <p style={{ color: colors.danger, marginTop: 12 }}>{genError}</p>}
+
+          {(activeClass.savedArrangements || []).length > 0 && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${colors.border}` }}>
+              <h4 style={{ margin: '0 0 10px', fontSize: 15 }}>Saved groupings</h4>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activeClass.savedArrangements.map(arr => (
+                  <li key={arr.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, flex: 1, minWidth: 120 }}>{arr.name}</span>
+                    <span style={{ fontSize: 13, color: colors.textMuted }}>{arr.groups?.length || 0} groups</span>
+                    <button type="button" onClick={() => loadArrangement(arr)} style={actionBtn}>Load</button>
+                    <button type="button" onClick={() => deleteArrangement(arr.id)} style={{ ...actionBtn, color: colors.danger }}>Delete</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
-      {result?.groups && (
+      {editableGroups?.length > 0 && (
         <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 20 }}>
-          <h3 style={{ margin: '0 0 16px' }}>Preview — open a board and use Groups in the menu to place on canvas</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            {result.groups.map(g => (
-              <div key={g.id} style={{ padding: 14, background: '#f6f8fa', borderRadius: 10, border: `1px solid ${colors.border}` }}>
-                <strong>{g.label}</strong>
-                <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 14 }}>
-                  {g.members.map(m => <li key={m.id}>{m.name}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <h3 style={{ margin: '0 0 8px' }}>Groups</h3>
+          <GroupEditor
+            groups={editableGroups}
+            onChange={setEditableGroups}
+            onSave={saveArrangement}
+            savePlaceholder={`e.g. ${activeClass?.name || 'Class'} — Unit 1`}
+          />
         </div>
       )}
 

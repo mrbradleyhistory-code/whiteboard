@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import { loadClassData } from '../localClassData'
 import { createRng, generateSimpleGroups, generateJigsawGroups } from '../grouping'
+import { cloneGroups } from '../groupArrangements'
 import { colors, touchBtn } from '../uiTheme'
 
 export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
   const [data, setData] = useState({ classes: [] })
   const [classId, setClassId] = useState('')
+  const [source, setSource] = useState('generate')
+  const [savedArrId, setSavedArrId] = useState('')
   const [groupMode, setGroupMode] = useState('simple')
+  const [sizingMode, setSizingMode] = useState('byCount')
   const [groupCount, setGroupCount] = useState(4)
+  const [studentsPerGroup, setStudentsPerGroup] = useState(4)
   const [pieceCount, setPieceCount] = useState(4)
   const [seed, setSeed] = useState('')
   const [preview, setPreview] = useState(null)
@@ -17,12 +22,34 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
     if (!open || !userId) return
     const loaded = loadClassData(userId)
     setData(loaded)
-    setClassId(loaded.classes[0]?.id || '')
+    const first = loaded.classes[0]
+    setClassId(first?.id || '')
+    setSavedArrId(first?.savedArrangements?.[0]?.id || '')
+    setSource(first?.savedArrangements?.length ? 'saved' : 'generate')
     setPreview(null)
     setError('')
   }, [open, userId])
 
   const activeClass = data.classes.find(c => c.id === classId)
+  const savedList = activeClass?.savedArrangements || []
+
+  useEffect(() => {
+    if (!activeClass) return
+    if (savedList.length && !savedList.find(a => a.id === savedArrId)) {
+      setSavedArrId(savedList[0].id)
+    }
+  }, [classId, activeClass, savedList, savedArrId])
+
+  const loadSaved = () => {
+    const arr = savedList.find(a => a.id === savedArrId)
+    if (!arr?.groups?.length) {
+      setError('No saved grouping selected.')
+      setPreview(null)
+      return
+    }
+    setError('')
+    setPreview(cloneGroups(arr.groups))
+  }
 
   const generate = () => {
     if (!activeClass?.students.length) {
@@ -36,15 +63,24 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
     if (groupMode === 'jigsaw') {
       out = generateJigsawGroups(activeClass.students, activeClass.constraints, pieceCount, rng)
     } else {
-      out = generateSimpleGroups(activeClass.students, activeClass.constraints, groupCount, rng)
+      out = generateSimpleGroups(activeClass.students, activeClass.constraints, {
+        sizingMode,
+        groupCount,
+        studentsPerGroup,
+      }, rng)
     }
     if (out.error) {
       setError(out.error)
       setPreview(null)
     } else {
       setError('')
-      setPreview(out.groups)
+      setPreview(cloneGroups(out.groups))
     }
+  }
+
+  const buildPreview = () => {
+    if (source === 'saved') loadSaved()
+    else generate()
   }
 
   const place = () => {
@@ -57,7 +93,7 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
 
   return (
     <div className="wb-modal-backdrop" onClick={onClose} role="presentation">
-      <div className="wb-modal" onClick={e => e.stopPropagation()} role="dialog" aria-labelledby="inject-groups-title">
+      <div className="wb-modal wb-modal--wide" onClick={e => e.stopPropagation()} role="dialog" aria-labelledby="inject-groups-title">
         <h2 id="inject-groups-title" style={{ margin: '0 0 16px', fontSize: 22 }}>Place groups on board</h2>
 
         {data.classes.length === 0 ? (
@@ -76,30 +112,56 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
               </select>
             </label>
 
-            <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-              <label><input type="radio" checked={groupMode === 'simple'} onChange={() => setGroupMode('simple')} /> Simple</label>
-              <label><input type="radio" checked={groupMode === 'jigsaw'} onChange={() => setGroupMode('jigsaw')} /> Jigsaw</label>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+              <label><input type="radio" checked={source === 'saved'} onChange={() => setSource('saved')} disabled={!savedList.length} /> Saved grouping</label>
+              <label><input type="radio" checked={source === 'generate'} onChange={() => setSource('generate')} /> Generate new</label>
             </div>
 
-            {groupMode === 'simple' ? (
+            {source === 'saved' ? (
               <label style={{ display: 'block', marginBottom: 12 }}>
-                Groups
-                <input type="number" min={1} max={30} value={groupCount} onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
-                  style={{ marginLeft: 8, width: 64, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                Saved name
+                <select value={savedArrId} onChange={e => setSavedArrId(e.target.value)}
+                  style={{ display: 'block', width: '100%', marginTop: 6, padding: 12, borderRadius: 8, border: `1px solid ${colors.border}` }}>
+                  {savedList.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.groups?.length || 0} groups)</option>
+                  ))}
+                </select>
               </label>
             ) : (
-              <label style={{ display: 'block', marginBottom: 12 }}>
-                Pieces
-                <input type="number" min={2} max={12} value={pieceCount} onChange={e => setPieceCount(parseInt(e.target.value, 10) || 2)}
-                  style={{ marginLeft: 8, width: 64, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-              </label>
+              <>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                  <label><input type="radio" checked={groupMode === 'simple'} onChange={() => setGroupMode('simple')} /> Simple</label>
+                  <label><input type="radio" checked={groupMode === 'jigsaw'} onChange={() => setGroupMode('jigsaw')} /> Jigsaw</label>
+                </div>
+                {groupMode === 'simple' ? (
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <input type="radio" checked={sizingMode === 'byCount'} onChange={() => setSizingMode('byCount')} />
+                      Groups
+                      <input type="number" min={1} max={30} value={groupCount} onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
+                        style={{ width: 64, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input type="radio" checked={sizingMode === 'bySize'} onChange={() => setSizingMode('bySize')} />
+                      Per group
+                      <input type="number" min={2} max={30} value={studentsPerGroup} onChange={e => setStudentsPerGroup(parseInt(e.target.value, 10) || 2)}
+                        style={{ width: 64, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                    </label>
+                  </div>
+                ) : (
+                  <label style={{ display: 'block', marginBottom: 12 }}>
+                    Pieces
+                    <input type="number" min={2} max={12} value={pieceCount} onChange={e => setPieceCount(parseInt(e.target.value, 10) || 2)}
+                      style={{ marginLeft: 8, width: 64, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                  </label>
+                )}
+                <input value={seed} onChange={e => setSeed(e.target.value)} placeholder="Optional seed"
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${colors.border}`, marginBottom: 12 }} />
+              </>
             )}
 
-            <input value={seed} onChange={e => setSeed(e.target.value)} placeholder="Optional seed"
-              style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${colors.border}`, marginBottom: 12 }} />
-
-            <button type="button" onClick={generate} style={{ ...touchBtn({ width: '100%', background: colors.accentLight, border: `1px solid ${colors.accent}` }), marginBottom: 12 }}>
-              Generate preview
+            <button type="button" onClick={buildPreview} style={{ ...touchBtn({ width: '100%', background: colors.accentLight, border: `1px solid ${colors.accent}` }), marginBottom: 12 }}>
+              {source === 'saved' ? 'Load preview' : 'Generate preview'}
             </button>
 
             {error && <p style={{ color: colors.danger, marginBottom: 12 }}>{error}</p>}
