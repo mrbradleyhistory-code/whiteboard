@@ -20,8 +20,8 @@ export default function ClassHub({ session, onOpenBoard }) {
   const signOut = async () => { await supabase.auth.signOut() }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#eef1f4', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: colors.surface, borderBottom: `1px solid ${colors.border}` }}>
+    <div className="wb-class-hub" style={{ height: '100vh', background: '#eef1f4', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: colors.surface, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: colors.text }}>Class Launchpad</h1>
         <button type="button" onClick={signOut} style={touchBtn({ fontSize: 15 })}>Sign out</button>
       </header>
@@ -33,6 +33,7 @@ export default function ClassHub({ session, onOpenBoard }) {
         background: colors.surface,
         borderBottom: `1px solid ${colors.border}`,
         flexWrap: 'wrap',
+        flexShrink: 0,
       }}>
         {TABS.map(t => (
           <button
@@ -51,7 +52,18 @@ export default function ClassHub({ session, onOpenBoard }) {
         ))}
       </nav>
 
-      <main style={{ flex: 1, maxWidth: 800, width: '100%', margin: '0 auto', padding: '36px 28px', boxSizing: 'border-box' }}>
+      <main className="wb-class-hub__main" style={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        maxWidth: 800,
+        width: '100%',
+        margin: '0 auto',
+        padding: '36px 28px',
+        boxSizing: 'border-box',
+      }}>
         {tab === 'boards' && <BoardsPanel session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'flashcards' && <FlashcardsPanel userId={userId} />}
         {tab === 'groups' && <GroupsPanel userId={userId} />}

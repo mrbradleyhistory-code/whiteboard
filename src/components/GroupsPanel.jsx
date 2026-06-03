@@ -242,7 +242,7 @@ export default function GroupsPanel({ userId }) {
             Add to roster
           </button>
 
-          <ul style={{ listStyle: 'none', margin: '0 0 20px', padding: 0, maxHeight: 200, overflow: 'auto' }}>
+          <ul style={{ listStyle: 'none', margin: '0 0 20px', padding: 0 }}>
             {activeClass.students.map(s => (
               <li key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${colors.border}` }}>
                 <span>{s.name}</span>
