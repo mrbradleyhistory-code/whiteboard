@@ -18,7 +18,7 @@ const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
 
 export default function GroupsPanel({ userId }) {
   const [data, setData] = useState({ classes: [] })
-  const [activeClassId, setActiveClassId] = useState(null)
+  const [expandedClassId, setExpandedClassId] = useState(null)
   const [rosterPaste, setRosterPaste] = useState('')
   const [neverApartSelected, setNeverApartSelected] = useState([])
   const [alwaysSelected, setAlwaysSelected] = useState([])
@@ -44,7 +44,19 @@ export default function GroupsPanel({ userId }) {
     setData(next)
   }
 
-  const activeClass = data.classes.find(c => c.id === activeClassId)
+  const activeClass = data.classes.find(c => c.id === expandedClassId)
+
+  const toggleClassExpanded = (id) => {
+    if (expandedClassId === id) {
+      setExpandedClassId(null)
+      setEditableGroups(null)
+    } else {
+      setExpandedClassId(id)
+      setEditableGroups(null)
+      setNeverApartSelected([])
+      setAlwaysSelected([])
+    }
+  }
 
   const updateClass = (id, patch) => {
     persist({
@@ -57,7 +69,7 @@ export default function GroupsPanel({ userId }) {
     const c = createClass(`Class ${data.classes.length + 1}`)
     const next = { ...data, classes: [...data.classes, c] }
     persist(next)
-    setActiveClassId(c.id)
+    setExpandedClassId(c.id)
   }
 
   const removeClass = (id) => {
@@ -225,7 +237,7 @@ export default function GroupsPanel({ userId }) {
       }
       if (!confirm('Replace all local class data with imported file?')) return
       persist(imported)
-      setActiveClassId(imported.classes[0]?.id || null)
+      setExpandedClassId(imported.classes[0]?.id || null)
       setEditableGroups(null)
     }
     reader.readAsText(file)
@@ -249,34 +261,51 @@ export default function GroupsPanel({ userId }) {
         </button>
       </div>
 
-      {data.classes.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          {data.classes.map(c => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => { setActiveClassId(c.id); setEditableGroups(null) }}
-              style={touchBtn({
-                background: activeClassId === c.id ? colors.accent : colors.surface,
-                color: activeClassId === c.id ? '#fff' : colors.text,
-                border: `1px solid ${activeClassId === c.id ? colors.accentDark : colors.border}`,
-              })}
-            >
-              {c.name} ({c.students.length})
-            </button>
-          ))}
-        </div>
-      )}
+      {data.classes.map(c => {
+        const expanded = expandedClassId === c.id
+        return (
+        <div
+          key={c.id}
+          style={{
+            background: colors.surface,
+            borderRadius: 12,
+            border: `1px solid ${expanded ? colors.accent : colors.border}`,
+            marginBottom: 12,
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => toggleClassExpanded(c.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              width: '100%',
+              padding: '14px 16px',
+              border: 'none',
+              background: expanded ? colors.accentLight : colors.surface,
+              cursor: 'pointer',
+              textAlign: 'left',
+              fontSize: 16,
+              fontWeight: 600,
+              color: colors.text,
+            }}
+          >
+            <span style={{ fontSize: 12, color: colors.textMuted, width: 14 }} aria-hidden>{expanded ? '▾' : '▸'}</span>
+            <span style={{ flex: 1 }}>{c.name}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted }}>{c.students.length} students</span>
+          </button>
 
-      {activeClass && (
-        <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 20, marginBottom: 24 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+          {expanded && (
+        <div style={{ padding: '0 20px 20px', borderTop: `1px solid ${colors.border}` }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '16px 0', flexWrap: 'wrap' }}>
             <input
-              value={activeClass.name}
-              onChange={e => updateClass(activeClass.id, { name: e.target.value })}
+              value={c.name}
+              onChange={e => updateClass(c.id, { name: e.target.value })}
               style={{ flex: 1, fontSize: 18, fontWeight: 600, padding: '10px 12px', borderRadius: 8, border: `1px solid ${colors.border}`, minWidth: 160 }}
             />
-            <button type="button" onClick={() => removeClass(activeClass.id)} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg }}>Delete class</button>
+            <button type="button" onClick={() => removeClass(c.id)} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg }}>Delete class</button>
           </div>
 
           <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Roster (one name per line)</h3>
@@ -322,7 +351,7 @@ export default function GroupsPanel({ userId }) {
               </button>
             ))}
           </div>
-          <button type="button" onClick={addNeverApart} style={{ ...actionBtn, marginBottom: 12 }}>Add never-apart cluster</button>
+          <button type="button" onClick={addNeverApart} style={{ ...actionBtn, marginBottom: 12 }}>Never together</button>
           {activeClass.constraints.neverApart.length > 0 && (
             <ul style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 16px', padding: 0, listStyle: 'none' }}>
               {activeClass.constraints.neverApart.map((cluster, i) => (
@@ -413,11 +442,11 @@ export default function GroupsPanel({ userId }) {
           </button>
           {genError && <p style={{ color: colors.danger, marginTop: 12 }}>{genError}</p>}
 
-          {(activeClass.savedArrangements || []).length > 0 && (
+          {(c.savedArrangements || []).length > 0 && (
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${colors.border}` }}>
               <h4 style={{ margin: '0 0 10px', fontSize: 15 }}>Saved groupings</h4>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {activeClass.savedArrangements.map(arr => (
+                {c.savedArrangements.map(arr => (
                   <li key={arr.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, flex: 1, minWidth: 120 }}>{arr.name}</span>
                     <span style={{ fontSize: 13, color: colors.textMuted }}>{arr.groups?.length || 0} groups</span>
@@ -428,20 +457,23 @@ export default function GroupsPanel({ userId }) {
               </ul>
             </div>
           )}
-        </div>
-      )}
 
-      {editableGroups?.length > 0 && (
-        <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 20 }}>
-          <h3 style={{ margin: '0 0 8px' }}>Groups</h3>
-          <GroupEditor
-            groups={editableGroups}
-            onChange={setEditableGroups}
-            onSave={saveArrangement}
-            savePlaceholder={`e.g. ${activeClass?.name || 'Class'} — Unit 1`}
-          />
+          {editableGroups?.length > 0 && expandedClassId === c.id && (
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${colors.border}` }}>
+              <h3 style={{ margin: '0 0 8px' }}>Groups</h3>
+              <GroupEditor
+                groups={editableGroups}
+                onChange={setEditableGroups}
+                onSave={saveArrangement}
+                savePlaceholder={`e.g. ${c.name || 'Class'} — Unit 1`}
+              />
+            </div>
+          )}
         </div>
-      )}
+          )}
+        </div>
+        )
+      })}
 
       {!data.classes.length && (
         <div style={{ padding: 40, textAlign: 'center', background: colors.surface, borderRadius: 14, border: `2px dashed ${colors.border}` }}>
