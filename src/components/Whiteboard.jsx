@@ -65,6 +65,11 @@ const isTouchPointer = (e) => e.type.startsWith('touch')
 const shouldIgnoreOverlayPointer = (target) =>
   target.closest('textarea, button, input')
 
+const getOverlayCanvasPoint = (canvas, clientX, clientY, zoom) => {
+  const r = canvas.getBoundingClientRect()
+  return { x: (clientX - r.left) / zoom, y: (clientY - r.top) / zoom }
+}
+
 const canvasPos = (clientX, clientY, canvas) => {
   const r = canvas.getBoundingClientRect()
   const scaleX = canvas.width / r.width
@@ -167,6 +172,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const drawing = useRef(false)
   const currentStroke = useRef(null)
   const dragOffset = useRef({ x:0, y:0 })
+  const dragActiveRef = useRef(null) // { type, id, pointerId }
+  const dragPendingPosRef = useRef(null)
+  const dragMoveRafRef = useRef(null)
+  const dragCaptureElRef = useRef(null)
   const resizeRef = useRef(null) // { id, startX, startY, startW, startH }
   const saveTimer = useRef(null)
   const historyRef = useRef([])
@@ -826,9 +835,29 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }
 
   const cancelDragResize = useCallback(() => {
+    if (dragMoveRafRef.current) {
+      cancelAnimationFrame(dragMoveRafRef.current)
+      dragMoveRafRef.current = null
+    }
+    const drag = dragActiveRef.current
+    const pos = dragPendingPosRef.current
+    if (drag && pos) {
+      const { type, id } = drag
+      const { x, y } = pos
+      if (type === 'sticky') setStickies(prev => prev.map(s => s.id === id ? { ...s, x, y } : s))
+      else if (type === 'text') setTextBoxes(prev => prev.map(t => t.id === id ? { ...t, x, y } : t))
+      else if (type === 'shape') setShapes(prev => prev.map(s => s.id === id ? { ...s, x, y } : s))
+      else if (type === 'image') setImages(prev => prev.map(i => i.id === id ? { ...i, x, y } : i))
+      dragPendingPosRef.current = null
+    }
+    if (dragCaptureElRef.current && drag?.pointerId != null) {
+      try { dragCaptureElRef.current.releasePointerCapture(drag.pointerId) } catch (_) {}
+    }
+    dragCaptureElRef.current = null
+    dragActiveRef.current = null
     touchDragPendingRef.current = null
     if (resizeRef.current) { resizeRef.current = null; scheduleSave() }
-    else if (dragging) { setDragging(null); scheduleSave() }
+    else if (drag || dragging) { setDragging(null); scheduleSave() }
   }, [dragging, scheduleSave])
   cancelDragResizeRef.current = cancelDragResize
 
@@ -873,6 +902,36 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   }, [])
 
   // --- Drag ---
+  const queueDragPosition = useCallback((type, id, x, y) => {
+    dragPendingPosRef.current = { x, y }
+    if (dragMoveRafRef.current) return
+    dragMoveRafRef.current = requestAnimationFrame(() => {
+      dragMoveRafRef.current = null
+      const drag = dragActiveRef.current
+      const pos = dragPendingPosRef.current
+      if (!drag || !pos || drag.type !== type || drag.id !== id) return
+      if (type === 'sticky') setStickies(prev => prev.map(s => s.id === id ? { ...s, x: pos.x, y: pos.y } : s))
+      else if (type === 'text') setTextBoxes(prev => prev.map(t => t.id === id ? { ...t, x: pos.x, y: pos.y } : t))
+      else if (type === 'shape') setShapes(prev => prev.map(s => s.id === id ? { ...s, x: pos.x, y: pos.y } : s))
+      else if (type === 'image') setImages(prev => prev.map(i => i.id === id ? { ...i, x: pos.x, y: pos.y } : i))
+    })
+  }, [])
+
+  const beginOverlayDrag = (e, type, id, item) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const { clientX, clientY } = pointerXY(e)
+    const pt = getOverlayCanvasPoint(canvas, clientX, clientY, zoomRef.current)
+    dragOffset.current = { x: pt.x - item.x, y: pt.y - item.y }
+    dragActiveRef.current = { type, id, pointerId: e.pointerId ?? null }
+    dragCaptureElRef.current = e.currentTarget
+    setDragging({ type, id })
+    if (e.pointerId != null && e.currentTarget?.setPointerCapture) {
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    }
+    e.preventDefault()
+  }
+
   const onDragStart = (e, type, id) => {
     if (e.button === 1 || middlePanRef.current.active) return
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
@@ -881,16 +940,19 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     if (type === 'sticky' || type === 'text' || type === 'image' || type === 'shape') setSelectedOverlay({ type, id })
     const items = type === 'sticky' ? stickies : type === 'text' ? textBoxes : type === 'shape' ? shapes : images
     const item = items.find(i => i.id === id)
+    if (!item) return
+    // Images use pointer events — start drag immediately for predictable 1:1 movement.
+    if (type === 'image') {
+      beginOverlayDrag(e, type, id, item)
+      return
+    }
     const { clientX, clientY } = pointerXY(e)
     if (isTouchPointer(e)) {
       touchDragPendingRef.current = { type, id, startX: clientX, startY: clientY, moved: false, item }
       e.preventDefault()
       return
     }
-    const r = canvasRef.current.getBoundingClientRect()
-    const z = zoomRef.current
-    dragOffset.current = { x: (clientX - r.left) / z - item.x, y: (clientY - r.top) / z - item.y }
-    setDragging({ type, id })
+    beginOverlayDrag(e, type, id, item)
   }
 
   const toggleItemFormat = (field) => {
@@ -988,21 +1050,25 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
 
   const onDragMove = useCallback((e) => {
     const pending = touchDragPendingRef.current
-    if (pending && !dragging && isTouchPointer(e)) {
+    if (pending && !dragActiveRef.current && isTouchPointer(e)) {
       const { clientX, clientY } = pointerXY(e)
       if (Math.hypot(clientX - pending.startX, clientY - pending.startY) < TOUCH_DRAG_THRESHOLD) return
       pending.moved = true
-      const r = canvasRef.current.getBoundingClientRect()
-      const z = zoomRef.current
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const pt = getOverlayCanvasPoint(canvas, clientX, clientY, zoomRef.current)
       dragOffset.current = {
-        x: (clientX - r.left) / z - pending.item.x,
-        y: (clientY - r.top) / z - pending.item.y,
+        x: pt.x - pending.item.x,
+        y: pt.y - pending.item.y,
       }
+      dragActiveRef.current = { type: pending.type, id: pending.id, pointerId: null }
       setDragging({ type: pending.type, id: pending.id })
       touchDragPendingRef.current = null
     }
-    if (!resizeRef.current && !dragging) return
-    if (e.cancelable && isTouchPointer(e)) e.preventDefault()
+    const drag = dragActiveRef.current
+    if (!resizeRef.current && !drag) return
+    if (drag?.pointerId != null && e.pointerId != null && drag.pointerId !== e.pointerId) return
+    if (e.cancelable && (isTouchPointer(e) || e.pointerType === 'touch' || e.pointerType === 'pen')) e.preventDefault()
     const { clientX, clientY } = pointerXY(e)
     const z = zoomRef.current
     if (resizeRef.current) {
@@ -1025,26 +1091,31 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       }
       return
     }
-    const r = canvasRef.current.getBoundingClientRect()
-    const x = (clientX - r.left) / z - dragOffset.current.x
-    const y = (clientY - r.top) / z - dragOffset.current.y
-    if (dragging.type === 'sticky') setStickies(prev => prev.map(s => s.id===dragging.id ? {...s,x,y} : s))
-    else if (dragging.type === 'text') setTextBoxes(prev => prev.map(t => t.id===dragging.id ? {...t,x,y} : t))
-    else if (dragging.type === 'shape') setShapes(prev => prev.map(s => s.id===dragging.id ? {...s,x,y} : s))
-    else if (dragging.type === 'image') setImages(prev => prev.map(i => i.id===dragging.id ? {...i,x,y} : i))
-  }, [dragging])
+    const canvas = canvasRef.current
+    if (!canvas || !drag) return
+    const pt = getOverlayCanvasPoint(canvas, clientX, clientY, z)
+    const x = pt.x - dragOffset.current.x
+    const y = pt.y - dragOffset.current.y
+    queueDragPosition(drag.type, drag.id, x, y)
+  }, [queueDragPosition])
 
   const onDragEnd = useCallback(() => {
     cancelDragResize()
   }, [cancelDragResize])
 
   useEffect(() => {
+    window.addEventListener('pointermove', onDragMove)
+    window.addEventListener('pointerup', onDragEnd)
+    window.addEventListener('pointercancel', onDragEnd)
     window.addEventListener('mousemove', onDragMove)
     window.addEventListener('mouseup', onDragEnd)
     window.addEventListener('touchmove', onDragMove, { passive: false })
     window.addEventListener('touchend', onDragEnd)
     window.addEventListener('touchcancel', onDragEnd)
     return () => {
+      window.removeEventListener('pointermove', onDragMove)
+      window.removeEventListener('pointerup', onDragEnd)
+      window.removeEventListener('pointercancel', onDragEnd)
       window.removeEventListener('mousemove', onDragMove)
       window.removeEventListener('mouseup', onDragEnd)
       window.removeEventListener('touchmove', onDragMove)
@@ -1635,24 +1706,29 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                 if (e.target !== e.currentTarget) return
                 if (tool === 'select' || tool === 'text' || tool === 'sticky' || tool === 'shape') clearOverlaySelection()
               }}>
-          {/* Images under ink so pen/highlighter draw on top */}
-          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0 }}>
-            {images.map(img => (
+          {/* Images under ink while drawing; above ink in Move mode for easier grabs */}
+          <div style={{
+            position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none',
+            zIndex: tool === 'select' ? (dragging?.type === 'image' ? 5 : 3) : 0,
+          }}>
+            {images.map(img => {
+              const isDraggingImage = dragging?.type === 'image' && dragging?.id === img.id
+              return (
               <div key={img.id} id={'img_'+img.id}
-                style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none', cursor:'move' }}
-                onMouseDown={e => onDragStart(e,'image',img.id)}
-                onTouchStart={e => onDragStart(e,'image',img.id)}>
-                <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none' }} draggable={false} alt="" />
+                className={`wb-image-wrap${isDraggingImage ? ' wb-image-wrap--dragging' : ''}`}
+                style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none' }}
+                onPointerDown={tool === 'select' ? e => onDragStart(e,'image',img.id) : undefined}>
+                <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none', pointerEvents:'none' }} draggable={false} alt="" />
                 {showImageControls(img.id) && (
                   <button type="button" onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}); clearOverlaySelection() }}
                     style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
                 )}
                 {showImageControls(img.id) && (
-                  <div onMouseDown={e => onResizeStart(e, img)} onTouchStart={e => onResizeStart(e, img)}
+                  <div onPointerDown={e => onResizeStart(e, img)}
                     style={canvasResizeHandle} role="presentation" />
                 )}
               </div>
-            ))}
+            )})}
           </div>
 
           <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
