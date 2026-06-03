@@ -1,4 +1,6 @@
-const STORAGE_VERSION = 2
+import { createDefaultSeatingChart, normalizeSeatingChart, newSeatingChartId } from './seatingChart'
+
+const STORAGE_VERSION = 4
 
 export function storageKey(userId) {
   return `wb-class-data:${userId}`
@@ -34,14 +36,15 @@ export function normalizeConstraints(raw = {}) {
 }
 
 export function normalizeClass(c) {
+  const students = (c.students || []).map(s => ({
+    id: s.id || newStudentId(),
+    name: String(s.name || '').trim(),
+    tags: Array.isArray(s.tags) ? s.tags.map(String) : [],
+  })).filter(s => s.name)
   return {
     id: c.id || newClassId(),
     name: String(c.name || 'New class'),
-    students: (c.students || []).map(s => ({
-      id: s.id || newStudentId(),
-      name: String(s.name || '').trim(),
-      tags: Array.isArray(s.tags) ? s.tags.map(String) : [],
-    })).filter(s => s.name),
+    students,
     constraints: normalizeConstraints(c.constraints),
     savedArrangements: Array.isArray(c.savedArrangements)
       ? c.savedArrangements.map(a => ({
@@ -50,6 +53,15 @@ export function normalizeClass(c) {
           createdAt: a.createdAt || new Date().toISOString(),
           groups: Array.isArray(a.groups) ? a.groups : [],
           settings: a.settings || {},
+        }))
+      : [],
+    seatingChart: normalizeSeatingChart(c.seatingChart, students.map(s => s.id)),
+    savedSeatingCharts: Array.isArray(c.savedSeatingCharts)
+      ? c.savedSeatingCharts.map(entry => ({
+          id: entry.id || newSeatingChartId(),
+          name: String(entry.name || 'Seating chart'),
+          createdAt: entry.createdAt || new Date().toISOString(),
+          chart: normalizeSeatingChart(entry.chart, students.map(s => s.id)),
         }))
       : [],
   }
@@ -62,6 +74,8 @@ export function createClass(name = 'New class') {
     students: [],
     constraints: { neverApart: [], alwaysTogether: [], neverTogether: [] },
     savedArrangements: [],
+    seatingChart: createDefaultSeatingChart(),
+    savedSeatingCharts: [],
   }
 }
 

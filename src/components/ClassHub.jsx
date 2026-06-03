@@ -58,7 +58,7 @@ export default function ClassHub({ session, onOpenBoard }) {
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        maxWidth: 800,
+        maxWidth: 960,
         width: '100%',
         margin: '0 auto',
         padding: '36px 28px',

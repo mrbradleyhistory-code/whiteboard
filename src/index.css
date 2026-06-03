@@ -298,6 +298,92 @@ input[type='range'].wb-range::-moz-range-thumb {
   will-change: left, top;
 }
 
+.wb-seating__grid-wrap {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.wb-seating__grid {
+  display: grid;
+  gap: 8px;
+  min-width: min-content;
+}
+
+.wb-seating__aisle {
+  min-height: 52px;
+}
+
+.wb-seating__aisle--add {
+  border: 2px dashed #d8dee6;
+  border-radius: 10px;
+  background: transparent;
+  color: #5c6570;
+  font-size: 12px;
+}
+
+.wb-seating__seat {
+  min-height: 52px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 2px dashed var(--wb-accent, #457b9d);
+  background: #f6f8fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  touch-action: none;
+}
+
+.wb-seating__seat--filled {
+  border-style: solid;
+  background: #fff;
+}
+
+.wb-seating__seat--layout {
+  border-color: #d8dee6;
+}
+
+.wb-seating__empty {
+  font-size: 12px;
+  color: #5c6570;
+}
+
+.wb-seating__name {
+  display: block;
+  width: 100%;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: grab;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.wb-seating__pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-seating__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid #d8dee6;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: grab;
+  touch-action: none;
+}
+
+.wb-seating__chip--picked {
+  background: #e8f2f8;
+  border-color: #457b9d;
+  box-shadow: 0 0 0 2px #457b9d33;
+}
+
 /* Fullscreen flashcard presenter (class display) */
 .wb-flash-presenter {
   position: fixed;

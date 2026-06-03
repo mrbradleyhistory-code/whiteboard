@@ -22,8 +22,10 @@ import {
   presentationPageDelta,
 } from '../presentation'
 import { buildGroupStickies, viewportCenterFromScroll } from '../placeGroupOverlays'
+import { buildSeatingStickies } from '../placeSeatingOverlays'
 import WhiteboardTimer from './WhiteboardTimer'
 import InjectGroupsModal from './InjectGroupsModal'
+import InjectSeatingModal from './InjectSeatingModal'
 import { buildPagesFromPngFiles } from '../importPngPages'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
@@ -216,6 +218,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   const [topMenuOpen, setTopMenuOpen] = useState(false)
   const [timerVisible, setTimerVisible] = useState(true)
   const [groupsModalOpen, setGroupsModalOpen] = useState(false)
+  const [seatingModalOpen, setSeatingModalOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fullscreenToolsOpen, setFullscreenToolsOpen] = useState(false)
   const [editingStickyId, setEditingStickyId] = useState(null)
@@ -559,6 +562,18 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
       return n
     })
     setNotification(`Placed ${groups.length} groups on board`)
+    setTimeout(() => setNotification(''), 2500)
+  }, [scheduleSave])
+
+  const handleInjectSeating = useCallback(({ name, chart, students }) => {
+    const viewport = viewportCenterFromScroll(scrollRef.current, zoomRef.current)
+    const newStickies = buildSeatingStickies({ name, chart }, students, viewport)
+    setStickies(prev => {
+      const n = [...prev, ...newStickies]
+      scheduleSave({ stickies: n })
+      return n
+    })
+    setNotification(`Placed seating chart "${name}" on board`)
     setTimeout(() => setNotification(''), 2500)
   }, [scheduleSave])
 
@@ -1453,6 +1468,13 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         onInject={handleInjectGroups}
       />
 
+      <InjectSeatingModal
+        userId={session.user.id}
+        open={seatingModalOpen}
+        onClose={() => setSeatingModalOpen(false)}
+        onInject={handleInjectSeating}
+      />
+
       {/* Top bar — slim row; minimal chrome in fullscreen */}
       <div
         className={isFullscreen ? 'wb-chrome-top wb-chrome-top--full' : 'wb-chrome-top'}
@@ -1479,6 +1501,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             <Tip label="Place groups" side="bottom">
               <button type="button" onClick={() => setGroupsModalOpen(true)}
                 style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 16 })} aria-label="Place groups">👥</button>
+            </Tip>
+            <Tip label="Place seating chart" side="bottom">
+              <button type="button" onClick={() => setSeatingModalOpen(true)}
+                style={iconOnlyBtn({ minWidth: 40, minHeight: 40, fontSize: 16 })} aria-label="Place seating chart">🪑</button>
             </Tip>
             <Tip label="Timer (T)" side="bottom">
               <button type="button" onClick={() => setTimerVisible(true)}
@@ -1570,6 +1596,10 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             <button type="button" onClick={() => { setGroupsModalOpen(true); setTopMenuOpen(false) }}
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
               👥 Place groups
+            </button>
+            <button type="button" onClick={() => { setSeatingModalOpen(true); setTopMenuOpen(false) }}
+              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+              🪑 Place seating chart
             </button>
             <button type="button" onClick={() => { setTimerVisible(true); setTopMenuOpen(false) }}
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>

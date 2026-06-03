@@ -12,6 +12,8 @@ import {
 import { createRng, generateSimpleGroups, generateJigsawGroups } from '../grouping'
 import { cloneGroups, createSavedArrangement } from '../groupArrangements'
 import GroupEditor from './GroupEditor'
+import SeatingChartEditor from './SeatingChartEditor'
+import { createSavedSeatingChart, purgeStudentFromClassSeating } from '../seatingChart'
 import { colors, touchBtn } from '../uiTheme'
 
 const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
@@ -102,7 +104,11 @@ export default function GroupsPanel({ userId }) {
         .filter(c => c.length >= 2),
       neverTogether: [],
     }
-    updateClass(activeClass.id, { students, constraints })
+    updateClass(activeClass.id, {
+      students,
+      constraints,
+      ...purgeStudentFromClassSeating(activeClass, studentId),
+    })
   }
 
   const addNeverApart = () => {
@@ -393,7 +399,32 @@ export default function GroupsPanel({ userId }) {
             </ul>
           )}
 
-          <h3 style={{ fontSize: 16, margin: '0 0 12px' }}>Generate groups</h3>
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${colors.border}` }}>
+            <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Seating chart</h3>
+            <SeatingChartEditor
+              students={c.students}
+              constraints={c.constraints}
+              chart={c.seatingChart}
+              onChange={nextChart => updateClass(c.id, { seatingChart: nextChart })}
+              savedCharts={c.savedSeatingCharts || []}
+              savePlaceholder={`e.g. ${c.name || 'Class'} — Week 1`}
+              onSave={name => {
+                const entry = createSavedSeatingChart(name, c.seatingChart)
+                updateClass(c.id, {
+                  savedSeatingCharts: [entry, ...(c.savedSeatingCharts || [])],
+                })
+              }}
+              onLoad={nextChart => updateClass(c.id, { seatingChart: nextChart })}
+              onDelete={entryId => {
+                if (!confirm('Delete this saved seating chart?')) return
+                updateClass(c.id, {
+                  savedSeatingCharts: (c.savedSeatingCharts || []).filter(s => s.id !== entryId),
+                })
+              }}
+            />
+          </div>
+
+          <h3 style={{ fontSize: 16, margin: '24px 0 12px' }}>Generate groups</h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="radio" checked={groupMode === 'simple'} onChange={() => setGroupMode('simple')} />
