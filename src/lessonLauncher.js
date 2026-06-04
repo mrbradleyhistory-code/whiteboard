@@ -116,6 +116,7 @@ export function normalizeLesson(raw) {
     learningTarget: String(raw.learningTarget || '').trim(),
     successCriteria: String(raw.successCriteria || '').trim(),
     boardId: raw.boardId || null,
+    classId: raw.classId || null,
     sections,
     createdAt: raw.createdAt || now,
     updatedAt: raw.updatedAt || now,

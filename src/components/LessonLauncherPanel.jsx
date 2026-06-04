@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadClassData } from '../localClassData'
 import { supabase } from '../supabaseClient'
 import {
   createEmptyLesson,
@@ -11,6 +12,7 @@ import {
 } from '../lessonLauncher'
 import TemplateBanksPanel from './TemplateBanksPanel'
 import LessonEditor from './LessonEditor'
+import LessonRunSetup from './LessonRunSetup'
 import LessonRunner from './LessonRunner'
 import {
   HubAlert,
@@ -25,7 +27,7 @@ import {
   HubToolbar,
 } from './hubUi'
 
-export default function LessonLauncherPanel({ userId, onOpenBoard }) {
+export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   const [view, setView] = useState('lessons')
   const [blocks, setBlocks] = useState([])
   const [targetTemplates, setTargetTemplates] = useState([])
@@ -35,7 +37,9 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [editingLesson, setEditingLesson] = useState(null)
-  const [runningLesson, setRunningLesson] = useState(null)
+  const [runSetupLesson, setRunSetupLesson] = useState(null)
+  const [runningSession, setRunningSession] = useState(null)
+  const [classes, setClasses] = useState([])
   const [saveStatus, setSaveStatus] = useState('saved')
   const savedSnapshotRef = useRef('')
 
@@ -67,6 +71,10 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
   }, [userId])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setClasses(loadClassData(userId).classes)
+  }, [userId])
 
   useEffect(() => {
     markDirty()
@@ -167,6 +175,10 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
     }
   }
 
+  const beginRun = (lesson) => {
+    setRunSetupLesson(lessons.find(l => l.id === lesson.id) || lesson)
+  }
+
   const handleRunLesson = async (lesson, { requireSaved = false } = {}) => {
     const inList = lessons.some(l => l.id === lesson.id)
     if (requireSaved && !inList) {
@@ -175,11 +187,16 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
       setEditingLesson(lesson)
       const saved = await handleSaveLesson()
       if (!saved) return
-      const fresh = lessons.find(l => l.id === lesson.id) || lesson
-      setRunningLesson(fresh)
+      beginRun(saved)
       return
     }
-    setRunningLesson(lessons.find(l => l.id === lesson.id) || lesson)
+    beginRun(lesson)
+  }
+
+  const startRunning = (lesson, classId) => {
+    const activeClass = classId ? classes.find(c => c.id === classId) : null
+    setRunningSession({ lesson, activeClass })
+    setRunSetupLesson(null)
   }
 
   const leaveEditor = () => {
@@ -191,23 +208,32 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
     setSaveStatus('saved')
   }
 
-  const boardName = runningLesson?.boardId
-    ? boards.find(b => b.id === runningLesson.boardId)?.name
+  const runningLesson = runningSession?.lesson
+
+  const runningBoard = runningLesson?.boardId
+    ? boards.find(b => b.id === runningLesson.boardId) || null
     : null
 
-  const openLessonBoard = () => {
-    if (!runningLesson?.boardId) return
-    const board = boards.find(b => b.id === runningLesson.boardId)
-    if (board) onOpenBoard(board)
+  if (runSetupLesson) {
+    return (
+      <LessonRunSetup
+        userId={userId}
+        lesson={runSetupLesson}
+        defaultClassId={runSetupLesson.classId}
+        onStart={classId => startRunning(runSetupLesson, classId)}
+        onCancel={() => setRunSetupLesson(null)}
+      />
+    )
   }
 
-  if (runningLesson) {
+  if (runningSession) {
     return (
       <LessonRunner
+        session={session}
         lesson={runningLesson}
-        boardName={boardName}
-        onOpenBoard={runningLesson.boardId ? openLessonBoard : null}
-        onExit={() => setRunningLesson(null)}
+        board={runningBoard}
+        activeClass={runningSession.activeClass}
+        onExit={() => setRunningSession(null)}
       />
     )
   }
@@ -236,6 +262,7 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
           targetTemplates={targetTemplates}
           onSaveTargetTemplates={handleSaveTargetTemplates}
           boards={boards}
+          classes={classes}
           onChange={setEditingLesson}
           onSave={handleSaveLesson}
           onDuplicate={handleDuplicateWhileEditing}
@@ -254,7 +281,7 @@ export default function LessonLauncherPanel({ userId, onOpenBoard }) {
                 if (!saved) return
                 toRun = saved
               }
-              setRunningLesson(toRun)
+              beginRun(toRun)
             }}
           >
             Run lesson

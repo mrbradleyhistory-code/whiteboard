@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LESSON_SECTIONS,
   formatDuration,
   lessonAgendaSteps,
   lessonDeadlineItems,
 } from '../lessonLauncher'
+import LessonRunnerBoard from './LessonRunnerBoard'
+import RunnerClassTools from './RunnerClassTools'
 
 function playBeep() {
   try {
@@ -21,19 +22,43 @@ function playBeep() {
   } catch (_) { /* ignore */ }
 }
 
-export default function LessonRunner({ lesson, boardName, onOpenBoard, onExit }) {
+/** Timer display: mm:ss when ≥1 min, otherwise seconds only */
+function formatRunnerClock(sec) {
+  const s = Math.max(0, Math.floor(sec))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  if (m === 0) return `${r}s`
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
+export default function LessonRunner({
+  session,
+  lesson,
+  board,
+  activeClass,
+  onExit,
+}) {
   const agendaSteps = useMemo(() => lessonAgendaSteps(lesson), [lesson])
   const deadlines = useMemo(() => lessonDeadlineItems(lesson), [lesson])
+  const hasBoard = Boolean(board?.id)
 
   const [stepIndex, setStepIndex] = useState(0)
   const [remainingSec, setRemainingSec] = useState(0)
   const [running, setRunning] = useState(false)
+  const [showTargets, setShowTargets] = useState(false)
+  const [boardPanel, setBoardPanel] = useState(hasBoard ? 'docked' : 'collapsed')
+  const [injectRequest, setInjectRequest] = useState(null)
   const endAtRef = useRef(null)
   const rafRef = useRef(null)
+
+  useEffect(() => {
+    if (hasBoard) setBoardPanel(prev => (prev === 'collapsed' ? prev : 'docked'))
+  }, [board?.id, hasBoard])
 
   const current = agendaSteps[stepIndex] || null
   const item = current?.item || null
   const sectionId = current?.sectionId || 'warmup'
+  const hasTimer = item?.durationSec > 0 && sectionId !== 'deadline'
 
   useEffect(() => {
     if (!item?.durationSec) {
@@ -90,17 +115,48 @@ export default function LessonRunner({ lesson, boardName, onOpenBoard, onExit })
     if (index >= 0 && index < agendaSteps.length) setStepIndex(index)
   }
 
+  const ensureBoardVisible = () => {
+    if (!hasBoard) {
+      window.alert('Link a whiteboard to this lesson in the editor.')
+      return false
+    }
+    if (boardPanel === 'collapsed') setBoardPanel('docked')
+    return true
+  }
+
+  const placeGroupsOnBoard = (groups) => {
+    if (!ensureBoardVisible()) return
+    setInjectRequest({ type: 'groups', groups, id: Date.now() })
+  }
+
+  const placeSeatingOnBoard = (payload) => {
+    if (!ensureBoardVisible()) return
+    setInjectRequest({ type: 'seating', ...payload, id: Date.now() })
+  }
+
+  const ltPreview = lesson.learningTarget?.trim()
+  const scPreview = lesson.successCriteria?.trim()
+
   return (
-    <div className="wb-lesson-runner">
+    <div className={`wb-lesson-runner${boardPanel === 'fullscreen' ? ' wb-lesson-runner--board-fs' : ''}`}>
       <header className="wb-lesson-runner__header">
         <div className="wb-lesson-runner__header-main">
           <h1 className="wb-lesson-runner__title">{lesson.title}</h1>
-          {boardName && <p className="wb-lesson-runner__board">Board: {boardName}</p>}
+          <p className="wb-lesson-runner__meta">
+            {activeClass && <span>{activeClass.name}</span>}
+            {activeClass && hasBoard && <span aria-hidden> · </span>}
+            {hasBoard && <span>Board: {board.name}</span>}
+            {!activeClass && !hasBoard && <span>Lesson in progress</span>}
+          </p>
         </div>
         <div className="wb-lesson-runner__header-actions">
-          {lesson.boardId && onOpenBoard && (
-            <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--primary" onClick={onOpenBoard}>
-              Open board
+          {hasBoard && boardPanel === 'collapsed' && (
+            <button
+              type="button"
+              className="wb-lesson-runner__btn wb-lesson-runner__btn--primary"
+              onClick={() => setBoardPanel('docked')}
+            >
+              Show board
             </button>
           )}
           <button type="button" className="wb-lesson-runner__btn" onClick={onExit}>
@@ -109,119 +165,178 @@ export default function LessonRunner({ lesson, boardName, onOpenBoard, onExit })
         </div>
       </header>
 
-      <div className="wb-lesson-runner__targets wb-lesson-runner__targets--always">
-        <div className="wb-lesson-runner__target-card">
-          <h2>Learning target</h2>
-          <p>{lesson.learningTarget || '—'}</p>
-        </div>
-        <div className="wb-lesson-runner__target-card">
-          <h2>Success criteria</h2>
-          <p>{lesson.successCriteria || '—'}</p>
-        </div>
-      </div>
-
-      <div className="wb-lesson-runner__body">
-        <aside className="wb-lesson-runner__agenda" aria-label="Lesson agenda">
-          <h2 className="wb-lesson-runner__panel-title">Agenda</h2>
-          {agendaSteps.length === 0 ? (
-            <p className="wb-lesson-runner__panel-empty">No agenda steps yet.</p>
-          ) : (
-            <ul className="wb-lesson-runner__agenda-list">
-              {agendaSteps.map((step, index) => (
-                <li key={`${step.sectionId}-${step.item.id}`}>
-                  <button
-                    type="button"
-                    className={`wb-lesson-runner__agenda-item${index === stepIndex ? ' wb-lesson-runner__agenda-item--active' : ''}`}
-                    onClick={() => jumpTo(index)}
-                  >
-                    <span className="wb-lesson-runner__agenda-section">{step.sectionLabel}</span>
-                    <span className="wb-lesson-runner__agenda-name">{step.item.title}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+      {(ltPreview || scPreview) && (
+        <div className={`wb-lesson-runner__targets${showTargets ? ' wb-lesson-runner__targets--open' : ''}`}>
+          <button
+            type="button"
+            className="wb-lesson-runner__targets-toggle"
+            onClick={() => setShowTargets(open => !open)}
+            aria-expanded={showTargets}
+          >
+            <span>Learning target &amp; success criteria</span>
+            <span className="wb-lesson-runner__targets-chevron" aria-hidden>{showTargets ? '▲' : '▼'}</span>
+          </button>
+          {!showTargets && ltPreview && (
+            <p className="wb-lesson-runner__targets-preview">{ltPreview}</p>
           )}
-        </aside>
-
-        <main className="wb-lesson-runner__main">
-          {!item ? (
-            <p className="wb-lesson-runner__empty">Add steps in the lesson editor to build your agenda.</p>
-          ) : (
-            <>
-              <div className="wb-lesson-runner__step-meta">
-                <span className="wb-lesson-runner__step-label">
-                  {current.sectionLabel} · {item.title}
-                </span>
-                {agendaSteps.length > 1 && (
-                  <span className="wb-lesson-runner__step-pos">
-                    {stepIndex + 1} of {agendaSteps.length}
-                  </span>
-                )}
+          {showTargets && (
+            <div className="wb-lesson-runner__targets-grid">
+              <div className="wb-lesson-runner__target-card">
+                <h2>Learning target</h2>
+                <p>{lesson.learningTarget || '—'}</p>
               </div>
-
-              <div className="wb-lesson-runner__directions" role="region" aria-label="Directions for class">
-                {sectionId === 'deadline' && item.dueLabel && (
-                  <p className="wb-lesson-runner__due">Due: {item.dueLabel}</p>
-                )}
-                {item.directions || (
-                  <span className="wb-lesson-runner__directions-placeholder">No directions for this step.</span>
-                )}
+              <div className="wb-lesson-runner__target-card">
+                <h2>Success criteria</h2>
+                <p>{lesson.successCriteria || '—'}</p>
               </div>
+            </div>
+          )}
+        </div>
+      )}
 
-              {item.durationSec > 0 && sectionId !== 'deadline' && (
-                <div className="wb-lesson-runner__timer">
-                  <span className="wb-lesson-runner__timer-display">{formatDuration(remainingSec)}</span>
-                  <div className="wb-lesson-runner__timer-actions">
-                    {!running ? (
-                      <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--primary" onClick={startTimer}>
-                        Start timer
-                      </button>
-                    ) : (
-                      <button type="button" className="wb-lesson-runner__btn" onClick={pauseTimer}>
-                        Pause
-                      </button>
-                    )}
-                    <button type="button" className="wb-lesson-runner__btn" onClick={resetTimer}>
-                      Reset
+      <div className="wb-lesson-runner__workspace">
+        <div className="wb-lesson-runner__body">
+          <aside className="wb-lesson-runner__agenda" aria-label="Lesson agenda">
+            <h2 className="wb-lesson-runner__panel-title">Agenda</h2>
+            {agendaSteps.length === 0 ? (
+              <p className="wb-lesson-runner__panel-empty">No agenda steps yet.</p>
+            ) : (
+              <ul className="wb-lesson-runner__agenda-list">
+                {agendaSteps.map((step, index) => (
+                  <li key={`${step.sectionId}-${step.item.id}`}>
+                    <button
+                      type="button"
+                      className={`wb-lesson-runner__agenda-item${index === stepIndex ? ' wb-lesson-runner__agenda-item--active' : ''}`}
+                      onClick={() => jumpTo(index)}
+                    >
+                      <span className="wb-lesson-runner__agenda-section">{step.sectionLabel}</span>
+                      <span className="wb-lesson-runner__agenda-name">{step.item.title}</span>
+                      {step.item.durationSec > 0 && step.sectionId !== 'deadline' && (
+                        <span className="wb-lesson-runner__agenda-duration">
+                          {formatDuration(step.item.durationSec)}
+                        </span>
+                      )}
                     </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+
+          <main className="wb-lesson-runner__main">
+            {!item ? (
+              <p className="wb-lesson-runner__empty">Add steps in the lesson editor to build your agenda.</p>
+            ) : (
+              <div className="wb-lesson-runner__stage">
+                <div className="wb-lesson-runner__step-meta">
+                  <span className="wb-lesson-runner__step-label">
+                    {current.sectionLabel} · {item.title}
+                  </span>
+                  {agendaSteps.length > 1 && (
+                    <span className="wb-lesson-runner__step-pos">
+                      {stepIndex + 1} / {agendaSteps.length}
+                    </span>
+                  )}
+                </div>
+
+                <div className="wb-lesson-runner__directions-wrap">
+                  <div className="wb-lesson-runner__directions" role="region" aria-label="Directions for class">
+                    {sectionId === 'deadline' && item.dueLabel && (
+                      <p className="wb-lesson-runner__due">Due: {item.dueLabel}</p>
+                    )}
+                    {item.directions ? (
+                      <p className="wb-lesson-runner__directions-text">{item.directions}</p>
+                    ) : (
+                      <span className="wb-lesson-runner__directions-placeholder">No directions for this step.</span>
+                    )}
                   </div>
                 </div>
-              )}
 
-              {agendaSteps.length > 1 && (
-                <div className="wb-lesson-runner__nav">
-                  <button type="button" className="wb-lesson-runner__btn" onClick={() => goStep(-1)} disabled={stepIndex === 0}>
-                    Previous
-                  </button>
-                  <button type="button" className="wb-lesson-runner__btn" onClick={() => goStep(1)} disabled={stepIndex >= agendaSteps.length - 1}>
-                    Next
-                  </button>
+                <div className="wb-lesson-runner__stage-footer">
+                  {hasTimer && (
+                    <div className="wb-lesson-runner__timer">
+                      <span className="wb-lesson-runner__timer-display">{formatRunnerClock(remainingSec)}</span>
+                      <div className="wb-lesson-runner__timer-actions">
+                        {!running ? (
+                          <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--primary" onClick={startTimer}>
+                            Start
+                          </button>
+                        ) : (
+                          <button type="button" className="wb-lesson-runner__btn" onClick={pauseTimer}>
+                            Pause
+                          </button>
+                        )}
+                        <button type="button" className="wb-lesson-runner__btn" onClick={resetTimer}>
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {agendaSteps.length > 1 && (
+                    <div className="wb-lesson-runner__nav">
+                      <button type="button" className="wb-lesson-runner__btn" onClick={() => goStep(-1)} disabled={stepIndex === 0}>
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        className="wb-lesson-runner__btn wb-lesson-runner__btn--primary"
+                        onClick={() => goStep(1)}
+                        disabled={stepIndex >= agendaSteps.length - 1}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-        </main>
+              </div>
+            )}
+          </main>
 
-        <aside className="wb-lesson-runner__deadlines" aria-label="Deadlines">
-          <h2 className="wb-lesson-runner__panel-title">Deadlines</h2>
-          {deadlines.length === 0 ? (
-            <p className="wb-lesson-runner__panel-empty">No deadlines for this lesson.</p>
-          ) : (
-            <ul className="wb-lesson-runner__deadline-list">
-              {deadlines.map(d => (
-                <li key={d.id} className="wb-lesson-runner__deadline-card">
-                  <div className="wb-lesson-runner__deadline-title">{d.title}</div>
-                  {d.dueLabel && (
-                    <div className="wb-lesson-runner__deadline-due">{d.dueLabel}</div>
-                  )}
-                  {d.directions && (
-                    <p className="wb-lesson-runner__deadline-desc">{d.directions}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
+          <aside className="wb-lesson-runner__rail" aria-label="Deadlines and class tools">
+            <section className="wb-lesson-runner__rail-block">
+              <h2 className="wb-lesson-runner__panel-title">Deadlines</h2>
+              {deadlines.length === 0 ? (
+                <p className="wb-lesson-runner__panel-empty">None for this lesson.</p>
+              ) : (
+                <ul className="wb-lesson-runner__deadline-list">
+                  {deadlines.map(d => (
+                    <li key={d.id} className="wb-lesson-runner__deadline-card">
+                      <div className="wb-lesson-runner__deadline-title">{d.title}</div>
+                      {d.dueLabel && (
+                        <div className="wb-lesson-runner__deadline-due">{d.dueLabel}</div>
+                      )}
+                      {d.directions && (
+                        <p className="wb-lesson-runner__deadline-desc">{d.directions}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {activeClass && (
+              <RunnerClassTools
+                activeClass={activeClass}
+                hasLinkedBoard={hasBoard}
+                onPlaceGroups={placeGroupsOnBoard}
+                onPlaceSeating={placeSeatingOnBoard}
+                variant="rail"
+              />
+            )}
+          </aside>
+        </div>
+
+        {hasBoard && session && (
+          <LessonRunnerBoard
+            session={session}
+            board={board}
+            panelMode={boardPanel}
+            onPanelModeChange={setBoardPanel}
+            injectRequest={injectRequest}
+            onInjectHandled={() => setInjectRequest(null)}
+          />
+        )}
       </div>
     </div>
   )

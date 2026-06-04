@@ -21,6 +21,7 @@ import {
   isEditableTarget,
   presentationPageDelta,
 } from '../presentation'
+import { consumePendingInject } from '../lessonPendingInject'
 import { buildGroupStickies, viewportCenterFromScroll } from '../placeGroupOverlays'
 import { buildSeatingStickies } from '../placeSeatingOverlays'
 import WhiteboardTimer from './WhiteboardTimer'
@@ -173,7 +174,14 @@ const drawStrokeDot = (ctx, stroke) => {
   ctx.globalCompositeOperation = 'source-over'
 }
 
-export default function Whiteboard({ session, boardSummary, onExitBoard }) {
+export default function Whiteboard({
+  session,
+  boardSummary,
+  onExitBoard,
+  embedMode = false,
+  injectRequest = null,
+  onInjectRequestHandled,
+}) {
   const canvasRef = useRef(null)
   const strokeCanvasRef = useRef(null)
   const strokesRef = useRef([])
@@ -582,6 +590,40 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
     setNotification(`Placed seating chart "${name}" on board`)
     setTimeout(() => setNotification(''), 2500)
   }, [scheduleSave])
+
+  useEffect(() => {
+    if (!activeBoard) return
+    if (injectRequest) return
+    const pending = consumePendingInject()
+    if (!pending) return
+    requestAnimationFrame(() => {
+      if (pending.type === 'groups' && pending.groups?.length) {
+        handleInjectGroups(pending.groups)
+      } else if (pending.type === 'seating' && pending.chart) {
+        handleInjectSeating({
+          name: pending.name || 'Seating',
+          chart: pending.chart,
+          students: pending.students || [],
+        })
+      }
+    })
+  }, [activeBoard, handleInjectGroups, handleInjectSeating, injectRequest])
+
+  useEffect(() => {
+    if (!activeBoard || !injectRequest) return
+    requestAnimationFrame(() => {
+      if (injectRequest.type === 'groups' && injectRequest.groups?.length) {
+        handleInjectGroups(injectRequest.groups)
+      } else if (injectRequest.type === 'seating' && injectRequest.chart) {
+        handleInjectSeating({
+          name: injectRequest.name || 'Seating',
+          chart: injectRequest.chart,
+          students: injectRequest.students || [],
+        })
+      }
+      onInjectRequestHandled?.()
+    })
+  }, [activeBoard, injectRequest, handleInjectGroups, handleInjectSeating, onInjectRequestHandled])
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -1436,7 +1478,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           Could not open board: {loadError}
         </p>
         <button type="button" onClick={onExitBoard} style={touchBtn({ background: colors.accent, color: '#fff', border: 'none' })}>
-          ← Back to launchpad
+          {embedMode ? 'Dismiss' : '← Back to launchpad'}
         </button>
       </div>
     )
@@ -1449,8 +1491,18 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
   return (
     <div
       ref={rootRef}
-      className={isFullscreen ? 'wb-root wb-fullscreen' : 'wb-root'}
-      style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'#eef1f4' }}
+      className={[
+        'wb-root',
+        isFullscreen ? 'wb-fullscreen' : '',
+        embedMode ? 'wb-root--embed' : '',
+      ].filter(Boolean).join(' ')}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: embedMode ? '100%' : '100vh',
+        overflow: 'hidden',
+        background: '#eef1f4',
+      }}
     >
       {notification && (
         <div style={{
@@ -1461,11 +1513,13 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
         }}>{notification}</div>
       )}
 
-      <WhiteboardTimer
-        userId={session.user.id}
-        visible={timerVisible}
-        onToggleVisible={() => setTimerVisible(v => !v)}
-      />
+      {!embedMode && (
+        <WhiteboardTimer
+          userId={session.user.id}
+          visible={timerVisible}
+          onToggleVisible={() => setTimerVisible(v => !v)}
+        />
+      )}
 
       <InjectGroupsModal
         userId={session.user.id}
@@ -1652,10 +1706,12 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start', background: colors.dangerBg, color: colors.danger }), border: 'none' }}>
               🗑 Clear page
             </button>
-            <button type="button" onClick={() => { handleSignOut(); setTopMenuOpen(false) }}
-              style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
-              Sign out
-            </button>
+            {!embedMode && (
+              <button type="button" onClick={() => { handleSignOut(); setTopMenuOpen(false) }}
+                style={{ ...touchBtn({ width: '100%', justifyContent: 'flex-start' }), border: 'none' }}>
+                Sign out
+              </button>
+            )}
           </div>
         </PopoverMenu>
         )}
@@ -1719,7 +1775,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
           formatHint={editingTextId || editingStickyId || editingShapeId ? 'Editing selection' : tool === 'text' ? 'New text defaults' : tool === 'shape' ? 'New shape defaults' : 'New note defaults'} />
         )}
 
-        {showBoardPanel && !isFullscreen && (
+        {showBoardPanel && !isFullscreen && !embedMode && (
           <BoardPanel session={session} activeBoardId={activeBoard?.id}
             onSelect={(b) => {
               if (b) { loadBoard(b); setShowBoardPanel(false) }

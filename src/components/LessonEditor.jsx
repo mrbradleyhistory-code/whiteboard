@@ -272,6 +272,7 @@ export default function LessonEditor({
   targetTemplates,
   onSaveTargetTemplates,
   boards,
+  classes = [],
   onChange,
   onSave,
   onDuplicate,
@@ -398,6 +399,23 @@ export default function LessonEditor({
             ))}
           </select>
         </label>
+        {classes.length > 0 && (
+          <label className="wb-lesson-field">
+            <span>Default class (when running)</span>
+            <select
+              className="wb-hub-input"
+              value={lesson.classId || ''}
+              onChange={e => patchLesson({ classId: e.target.value || null })}
+            >
+              <option value="">Choose each time</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.students?.length || 0} students)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </HubPanelBlock>
 
       <p className="wb-hub-hint" style={{ marginBottom: 20 }}>
