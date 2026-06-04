@@ -398,6 +398,48 @@ input[type='range'].wb-range::-moz-range-thumb {
   box-shadow: 0 0 0 2px #457b9d33;
 }
 
+.wb-class-section {
+  border-top: 1px solid #d8dee6;
+  margin-top: 4px;
+}
+
+.wb-class-section__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1f26;
+  touch-action: manipulation;
+}
+
+.wb-class-section__chevron {
+  font-size: 12px;
+  color: #5c6570;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.wb-class-section__title {
+  flex: 1;
+}
+
+.wb-class-section__summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: #5c6570;
+}
+
+.wb-class-section__body {
+  padding: 0 4px 16px;
+}
+
 /* Fullscreen flashcard presenter (class display) */
 .wb-flash-presenter {
   position: fixed;

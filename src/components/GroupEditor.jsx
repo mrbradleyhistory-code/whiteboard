@@ -38,7 +38,7 @@ export default function GroupEditor({
   return (
     <div>
       <p style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 16px' }}>
-        Drag names between groups to adjust. Rename each group below. Open a board → Groups to place on the canvas.
+        Drag names between groups to adjust. Rename each group below. Open a board → menu to place on the canvas.
       </p>
       <div style={{
         display: 'grid',

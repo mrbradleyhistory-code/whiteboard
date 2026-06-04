@@ -9,7 +9,7 @@ import TimerPresetsPanel from './TimerPresetsPanel'
 const TABS = [
   { id: 'boards', label: 'Boards' },
   { id: 'flashcards', label: 'Flashcards' },
-  { id: 'groups', label: 'Groups' },
+  { id: 'tools', label: 'Class tools' },
   { id: 'timers', label: 'Timer presets' },
 ]
 
@@ -66,7 +66,7 @@ export default function ClassHub({ session, onOpenBoard }) {
       }}>
         {tab === 'boards' && <BoardsPanel session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'flashcards' && <FlashcardsPanel userId={userId} />}
-        {tab === 'groups' && <GroupsPanel userId={userId} />}
+        {tab === 'tools' && <GroupsPanel userId={userId} />}
         {tab === 'timers' && <TimerPresetsPanel userId={userId} />}
       </main>
     </div>

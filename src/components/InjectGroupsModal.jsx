@@ -53,7 +53,7 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
 
   const generate = () => {
     if (!activeClass?.students.length) {
-      setError('No students in this class. Add a roster in Class Hub → Groups.')
+      setError('No students in this class. Add a roster in Class Hub → Class tools.')
       return
     }
     const rng = seed.trim()
@@ -98,7 +98,7 @@ export default function InjectGroupsModal({ userId, open, onClose, onInject }) {
 
         {data.classes.length === 0 ? (
           <p style={{ color: colors.textMuted }}>
-            No classes saved locally. Go back to Class Hub → Groups to add a roster.
+            No classes saved locally. Go back to Class Hub → Class tools to add a roster.
           </p>
         ) : (
           <>

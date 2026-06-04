@@ -62,11 +62,11 @@ export default function InjectSeatingModal({ userId, open, onClose, onInject }) 
 
         {data.classes.length === 0 ? (
           <p style={{ color: colors.textMuted }}>
-            No classes saved locally. Go to Class Hub → Groups to build a seating chart.
+            No classes saved locally. Go to Class Hub → Class tools to build a seating chart.
           </p>
         ) : savedList.length === 0 ? (
           <p style={{ color: colors.textMuted }}>
-            No saved seating charts yet. In Class Hub → Groups, fill a chart and click Save seating chart.
+            No saved seating charts yet. In Class Hub → Class tools, fill a chart and click Save seating chart.
           </p>
         ) : (
           <>
