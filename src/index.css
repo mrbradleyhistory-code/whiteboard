@@ -313,6 +313,20 @@ input[type='range'].wb-range::-moz-range-thumb {
   min-height: 52px;
 }
 
+.wb-seating__void {
+  min-height: 52px;
+}
+
+.wb-seating__void--add {
+  border: 2px dashed #d8dee6;
+  border-radius: 10px;
+  background: transparent;
+  color: #5c6570;
+  font-size: 11px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
 .wb-seating__aisle--add {
   border: 2px dashed #d8dee6;
   border-radius: 10px;

@@ -1,4 +1,4 @@
-import { seatKey } from './seatingChart'
+import { listSeats } from './seatingChart'
 
 const SEAT_COLORS = ['#f6e05e', '#90cdf4', '#9ae6b4', '#feb2b2', '#e9d8fd']
 
@@ -15,13 +15,11 @@ const stickyDefaults = {
 
 /**
  * Build stickies that mirror a saved seating chart on the whiteboard.
- * @param {{ name: string, chart: object }} saved
- * @param {{ id: string, name: string }[]} students
- * @param {{ centerX: number, centerY: number, zoom?: number }} viewport
  */
 export function buildSeatingStickies(saved, students, viewport) {
   const { name, chart } = saved
   const byId = new Map(students.map(s => [s.id, s.name]))
+  const seats = listSeats(chart)
   const { centerX, centerY, zoom = 1 } = viewport
 
   const seatW = 148
@@ -70,29 +68,24 @@ export function buildSeatingStickies(saved, students, viewport) {
     ...stickyDefaults,
   })
 
-  for (let row = 0; row < chart.rows; row++) {
-    for (let col = 0; col < chart.cols; col++) {
-      const key = seatKey(row, col)
-      if (chart.disabled?.includes(key)) continue
+  for (const seat of seats) {
+    const studentId = chart.assignments?.[seat.key]
+    const label = studentId ? (byId.get(studentId) || 'Unknown') : '—'
+    const x = gridX + seat.col * (seatW + gap) / zoom
+    const y = gridY + seat.row * (seatH + gap) / zoom
 
-      const studentId = chart.assignments?.[key]
-      const label = studentId ? (byId.get(studentId) || 'Unknown') : '—'
-      const x = gridX + col * (seatW + gap) / zoom
-      const y = gridY + row * (seatH + gap) / zoom
-
-      stickies.push({
-        id: uid(),
-        x,
-        y,
-        text: label,
-        color: studentId ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length] : '#f6f8fa',
-        width: Math.round(seatW / zoom),
-        height: Math.round(seatH / zoom),
-        fontSize: Math.max(13, Math.round(15 / zoom)),
-        bold: !!studentId,
-        ...stickyDefaults,
-      })
-    }
+    stickies.push({
+      id: uid(),
+      x,
+      y,
+      text: label,
+      color: studentId ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length] : '#f6f8fa',
+      width: Math.round(seatW / zoom),
+      height: Math.round(seatH / zoom),
+      fontSize: Math.max(13, Math.round(15 / zoom)),
+      bold: !!studentId,
+      ...stickyDefaults,
+    })
   }
 
   return stickies

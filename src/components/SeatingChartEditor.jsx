@@ -1,16 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRng } from '../grouping'
 import {
+  applyGridLayout,
+  autoFillRemainingSeating,
   autoFillSeating,
   assignedCount,
   clearAllAssignments,
   cloneChart,
+  createCustomSeatingChart,
   listSeats,
   placeStudent,
-  resizeChart,
+  resizeCanvas,
   seatKey,
   studentAtSeat,
-  toggleSeatDisabled,
+  switchLayoutType,
+  toggleSeatAt,
   unassignedStudents,
 } from '../seatingChart'
 import { colors, touchBtn } from '../uiTheme'
@@ -30,20 +34,34 @@ export default function SeatingChartEditor({
 }) {
   const [layoutRows, setLayoutRows] = useState(chart.rows)
   const [layoutCols, setLayoutCols] = useState(chart.cols)
-  const [layoutMode, setLayoutMode] = useState(false)
+  const [designMode, setDesignMode] = useState(false)
   const [seed, setSeed] = useState('')
   const [fillError, setFillError] = useState('')
   const [dragStudentId, setDragStudentId] = useState(null)
   const [pickStudentId, setPickStudentId] = useState(null)
   const [saveName, setSaveName] = useState('')
 
+  useEffect(() => {
+    setLayoutRows(chart.rows)
+    setLayoutCols(chart.cols)
+  }, [chart.rows, chart.cols])
+
+  const isCustom = chart.layout === 'custom'
+  const seatKeys = new Set(listSeats(chart).map(s => s.key))
   const unassigned = unassignedStudents(students, chart.assignments)
-  const seatCount = listSeats(chart).length
+  const seatCount = seatKeys.size
+  const manualCount = assignedCount(chart)
 
   const studentName = (id) => students.find(s => s.id === id)?.name || id
 
-  const applyGridSize = () => {
-    onChange(resizeChart(chart, layoutRows, layoutCols))
+  const applyCanvasSize = () => {
+    onChange(isCustom ? resizeCanvas(chart, layoutRows, layoutCols) : applyGridLayout(chart, layoutRows, layoutCols))
+    setFillError('')
+  }
+
+  const setLayout = (layout) => {
+    setDesignMode(false)
+    onChange(switchLayoutType(chart, layout))
     setFillError('')
   }
 
@@ -60,7 +78,7 @@ export default function SeatingChartEditor({
   }
 
   const assignToSeat = (key, studentId) => {
-    if (!studentId) return
+    if (!studentId || !seatKeys.has(key)) return
     onChange({
       ...chart,
       assignments: placeStudent(chart.assignments, key, studentId),
@@ -70,18 +88,13 @@ export default function SeatingChartEditor({
     setFillError('')
   }
 
-  const handleSeatDrop = (e, key) => {
-    e.preventDefault()
-    const studentId = dragStudentId || e.dataTransfer.getData('text/plain')
-    if (!studentId) return
-    assignToSeat(key, studentId)
-  }
-
-  const handleSeatClick = (key) => {
-    if (layoutMode) {
-      onChange(toggleSeatDisabled(chart, key))
+  const handleCellClick = (row, col) => {
+    const key = seatKey(row, col)
+    if (designMode) {
+      onChange(toggleSeatAt(chart, row, col))
       return
     }
+    if (!seatKeys.has(key)) return
     if (pickStudentId) {
       assignToSeat(key, pickStudentId)
       return
@@ -95,11 +108,19 @@ export default function SeatingChartEditor({
     }
   }
 
-  const handleAutoFill = () => {
+  const handleSeatDrop = (e, key) => {
+    e.preventDefault()
+    const studentId = dragStudentId || e.dataTransfer.getData('text/plain')
+    if (!studentId) return
+    assignToSeat(key, studentId)
+  }
+
+  const runFill = (preserve) => {
     const rng = seed.trim()
       ? createRng(seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0))
       : Math.random
-    const { chart: next, error } = autoFillSeating(students, constraints, chart, rng)
+    const fn = preserve ? autoFillRemainingSeating : autoFillSeating
+    const { chart: next, error } = fn(students, constraints, chart, rng)
     if (error) {
       setFillError(error)
       return
@@ -108,59 +129,123 @@ export default function SeatingChartEditor({
     onChange(next)
   }
 
-  const handleClearAssignments = () => {
-    setFillError('')
-    onChange(clearAllAssignments(chart))
-    setPickStudentId(null)
+  const renderCell = (row, col) => {
+    const key = seatKey(row, col)
+    const hasSeat = seatKeys.has(key)
+    const studentId = hasSeat ? studentAtSeat(chart.assignments, key) : null
+
+    if (!hasSeat) {
+      if (!designMode) {
+        return <div key={key} className="wb-seating__void" aria-hidden />
+      }
+      return (
+        <button
+          key={key}
+          type="button"
+          className="wb-seating__void wb-seating__void--add"
+          onClick={() => handleCellClick(row, col)}
+        >
+          + desk
+        </button>
+      )
+    }
+
+    return (
+      <button
+        key={key}
+        type="button"
+        className={`wb-seating__seat${studentId ? ' wb-seating__seat--filled' : ''}${designMode ? ' wb-seating__seat--layout' : ''}`}
+        onClick={() => handleCellClick(row, col)}
+        onDragOver={designMode ? undefined : handleDragOver}
+        onDrop={designMode ? undefined : e => handleSeatDrop(e, key)}
+      >
+        {studentId ? (
+          <span
+            draggable={!designMode}
+            onDragStart={e => handleDragStart(e, studentId)}
+            onDragEnd={() => setDragStudentId(null)}
+            className="wb-seating__name"
+          >
+            {studentName(studentId)}
+          </span>
+        ) : (
+          <span className="wb-seating__empty">{designMode ? 'Remove desk' : 'Seat'}</span>
+        )}
+      </button>
+    )
   }
 
   return (
     <div className="wb-seating">
       <p style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 12px' }}>
-        Set rows and columns, drag students into seats, or auto-fill. Save layouts to project on a whiteboard (board menu → Place seating chart).
+        Choose a rectangle grid or draw a custom room shape. Place students by hand, then auto-fill the rest.
+        Save layouts to project on a whiteboard.
       </p>
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+          <input
+            type="radio"
+            checked={!isCustom}
+            onChange={() => setLayout('grid')}
+          />
+          Rectangle grid
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+          <input
+            type="radio"
+            checked={isCustom}
+            onChange={() => { if (!isCustom) setLayout('custom') }}
+          />
+          Custom room
+        </label>
+      </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-          Rows
+          Canvas rows
           <input
             type="number"
             min={1}
-            max={20}
+            max={24}
             value={layoutRows}
             onChange={e => setLayoutRows(parseInt(e.target.value, 10) || 1)}
             style={{ width: 56, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }}
           />
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-          Columns
+          Canvas columns
           <input
             type="number"
             min={1}
-            max={20}
+            max={24}
             value={layoutCols}
             onChange={e => setLayoutCols(parseInt(e.target.value, 10) || 1)}
             style={{ width: 56, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }}
           />
         </label>
-        <button type="button" onClick={applyGridSize} style={actionBtn}>Apply layout</button>
+        <button type="button" onClick={applyCanvasSize} style={actionBtn}>
+          {isCustom ? 'Apply canvas size' : 'Apply grid'}
+        </button>
         <button
           type="button"
-          onClick={() => setLayoutMode(m => !m)}
+          onClick={() => setDesignMode(m => !m)}
           style={{
             ...actionBtn,
-            background: layoutMode ? colors.warnBg : colors.surface,
-            color: layoutMode ? colors.warn : colors.text,
-            border: `1px solid ${layoutMode ? colors.warn : colors.border}`,
+            background: designMode ? colors.warnBg : colors.surface,
+            color: designMode ? colors.warn : colors.text,
+            border: `1px solid ${designMode ? colors.warn : colors.border}`,
           }}
         >
-          {layoutMode ? 'Done editing seats' : 'Edit seats'}
+          {designMode ? 'Done designing' : isCustom ? 'Design room' : 'Edit desks'}
         </button>
       </div>
 
-      {layoutMode && (
+      {designMode && (
         <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 12px' }}>
-          Tap a desk to remove it from the layout (aisle, empty space, etc.).
+          {isCustom
+            ? 'Tap empty space to add a desk, or tap a desk to remove it. Arrange desks to match your room.'
+            : 'Tap a desk to remove it from the grid (aisles, etc.), or tap + desk to add it back.'}
         </p>
       )}
 
@@ -171,59 +256,15 @@ export default function SeatingChartEditor({
         <div className="wb-seating__grid-wrap">
           <div
             className="wb-seating__grid"
-            style={{
-              gridTemplateColumns: `repeat(${chart.cols}, minmax(72px, 1fr))`,
-            }}
+            style={{ gridTemplateColumns: `repeat(${chart.cols}, minmax(64px, 1fr))` }}
           >
             {Array.from({ length: chart.rows }, (_, row) =>
-              Array.from({ length: chart.cols }, (_, col) => {
-                const key = seatKey(row, col)
-                const disabled = chart.disabled?.includes(key)
-                if (disabled) {
-                  if (layoutMode) {
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className="wb-seating__aisle wb-seating__aisle--add"
-                        onClick={() => onChange(toggleSeatDisabled(chart, key))}
-                      >
-                        + seat
-                      </button>
-                    )
-                  }
-                  return <div key={key} className="wb-seating__aisle" aria-hidden />
-                }
-                const studentId = studentAtSeat(chart.assignments, key)
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`wb-seating__seat${studentId ? ' wb-seating__seat--filled' : ''}${layoutMode ? ' wb-seating__seat--layout' : ''}`}
-                    onClick={() => handleSeatClick(key)}
-                    onDragOver={layoutMode ? undefined : handleDragOver}
-                    onDrop={layoutMode ? undefined : e => handleSeatDrop(e, key)}
-                  >
-                    {studentId ? (
-                      <span
-                        draggable={!layoutMode}
-                        onDragStart={e => handleDragStart(e, studentId)}
-                        onDragEnd={() => setDragStudentId(null)}
-                        className="wb-seating__name"
-                      >
-                        {studentName(studentId)}
-                      </span>
-                    ) : (
-                      <span className="wb-seating__empty">{layoutMode ? 'Remove' : 'Seat'}</span>
-                    )}
-                  </button>
-                )
-              }),
+              Array.from({ length: chart.cols }, (_, col) => renderCell(row, col)),
             )}
           </div>
         </div>
         <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: 'center' }}>
-          {seatCount} seats · {unassigned.length} unassigned
+          {seatCount} desks · {manualCount} placed · {unassigned.length} unassigned
         </div>
       </div>
 
@@ -246,7 +287,7 @@ export default function SeatingChartEditor({
           </div>
           {pickStudentId && (
             <p style={{ fontSize: 13, color: colors.accent, margin: '8px 0 0' }}>
-              Tap a seat to place the selected student.
+              Tap a desk to place the selected student.
             </p>
           )}
         </div>
@@ -255,12 +296,16 @@ export default function SeatingChartEditor({
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
         <button
           type="button"
-          onClick={handleAutoFill}
+          onClick={() => runFill(true)}
+          disabled={!unassigned.length || !seatCount}
           style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}
         >
-          Auto-fill seats
+          Fill remaining seats
         </button>
-        <button type="button" onClick={handleClearAssignments} style={actionBtn}>
+        <button type="button" onClick={() => runFill(false)} style={actionBtn}>
+          Auto-fill all
+        </button>
+        <button type="button" onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }} style={actionBtn}>
           Clear assignments
         </button>
         <label style={{ fontSize: 14, color: colors.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -273,6 +318,9 @@ export default function SeatingChartEditor({
           />
         </label>
       </div>
+      <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 12px' }}>
+        Place students manually first, then use Fill remaining to seat everyone else using your never-together and keep-together rules.
+      </p>
       {fillError && <p style={{ color: colors.danger, margin: '0 0 12px' }}>{fillError}</p>}
 
       {onSave && (
@@ -322,7 +370,8 @@ export default function SeatingChartEditor({
               <li key={entry.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600, flex: 1, minWidth: 120 }}>{entry.name}</span>
                 <span style={{ fontSize: 13, color: colors.textMuted }}>
-                  {assignedCount(entry.chart)} seated · {entry.chart.rows}×{entry.chart.cols}
+                  {assignedCount(entry.chart)} seated · {listSeats(entry.chart).length} desks
+                  {entry.chart.layout === 'custom' ? ' · custom' : ''}
                 </span>
                 {onLoad && (
                   <button type="button" onClick={() => onLoad(cloneChart(entry.chart))} style={actionBtn}>

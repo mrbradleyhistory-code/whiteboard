@@ -9,20 +9,64 @@ export function parseSeatKey(key) {
   return { row: r, col: c, key }
 }
 
-export function createDefaultSeatingChart(rows = 5, cols = 6) {
-  return { rows, cols, disabled: [], assignments: {} }
+function seatDef(row, col) {
+  return { row, col, key: seatKey(row, col) }
 }
 
-export function listSeats(chart) {
+/** Build seat list from legacy rows/cols/disabled or explicit seatDefs. */
+export function getSeatDefs(chart) {
+  if (Array.isArray(chart?.seatDefs) && chart.seatDefs.length) {
+    return chart.seatDefs
+      .map(s => {
+        const row = Number(s.row)
+        const col = Number(s.col)
+        return seatDef(row, col)
+      })
+      .filter(s => Number.isFinite(s.row) && Number.isFinite(s.col))
+  }
   const seats = []
-  for (let row = 0; row < chart.rows; row++) {
-    for (let col = 0; col < chart.cols; col++) {
+  const rows = chart?.rows || 5
+  const cols = chart?.cols || 6
+  const disabled = new Set(chart?.disabled || [])
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
       const key = seatKey(row, col)
-      if (chart.disabled?.includes(key)) continue
-      seats.push({ row, col, key })
+      if (!disabled.has(key)) seats.push(seatDef(row, col))
     }
   }
   return seats
+}
+
+export function createDefaultSeatingChart(rows = 5, cols = 6, layout = 'grid') {
+  const seatDefs = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      seatDefs.push(seatDef(row, col))
+    }
+  }
+  return {
+    layout,
+    rows,
+    cols,
+    seatDefs,
+    disabled: [],
+    assignments: {},
+  }
+}
+
+export function createCustomSeatingChart(canvasRows = 12, canvasCols = 14) {
+  return {
+    layout: 'custom',
+    rows: canvasRows,
+    cols: canvasCols,
+    seatDefs: [],
+    disabled: [],
+    assignments: {},
+  }
+}
+
+export function listSeats(chart) {
+  return getSeatDefs(chart)
 }
 
 export function seatDistance(a, b) {
@@ -36,15 +80,12 @@ const NEIGHBOR_DELTAS = [
 
 export function seatNeighbors(seat, chart, { includeDiagonal = true } = {}) {
   const deltas = includeDiagonal ? NEIGHBOR_DELTAS : NEIGHBOR_DELTAS.slice(0, 4)
-  const disabled = new Set(chart.disabled || [])
+  const byKey = new Map(getSeatDefs(chart).map(s => [s.key, s]))
   const out = []
   for (const [dr, dc] of deltas) {
-    const row = seat.row + dr
-    const col = seat.col + dc
-    if (row < 0 || col < 0 || row >= chart.rows || col >= chart.cols) continue
-    const key = seatKey(row, col)
-    if (disabled.has(key)) continue
-    out.push({ row, col, key })
+    const key = seatKey(seat.row + dr, seat.col + dc)
+    const n = byKey.get(key)
+    if (n) out.push(n)
   }
   return out
 }
@@ -58,19 +99,10 @@ export function unassignedStudents(students, assignments) {
   return students.filter(s => !assigned.has(s.id))
 }
 
-export function seatByStudent(assignments = {}) {
-  const map = new Map()
-  for (const [key, studentId] of Object.entries(assignments)) {
-    if (studentId) map.set(studentId, key)
-  }
-  return map
-}
-
 export function studentAtSeat(assignments, key) {
   return assignments?.[key] || null
 }
 
-/** Remove a student from every seat, then optionally place at a new seat. */
 export function placeStudent(assignments, seatKeyValue, studentId) {
   const next = { ...assignments }
   for (const key of Object.keys(next)) {
@@ -80,68 +112,122 @@ export function placeStudent(assignments, seatKeyValue, studentId) {
   return next
 }
 
-export function clearSeat(assignments, seatKeyValue) {
-  if (!assignments?.[seatKeyValue]) return assignments
-  return { ...assignments, [seatKeyValue]: null }
-}
-
 export function clearAllAssignments(chart) {
   return { ...chart, assignments: {} }
 }
 
-export function resizeChart(chart, rows, cols) {
-  const nextRows = Math.max(1, Math.min(20, rows))
-  const nextCols = Math.max(1, Math.min(20, cols))
-  const valid = new Set()
-  for (let r = 0; r < nextRows; r++) {
-    for (let c = 0; c < nextCols; c++) valid.add(seatKey(r, c))
-  }
-  const disabled = (chart.disabled || []).filter(k => valid.has(k))
+function pruneAssignments(chart, seatKeys) {
+  const valid = new Set(seatKeys)
   const assignments = {}
-  for (const [key, studentId] of Object.entries(chart.assignments || {})) {
-    if (valid.has(key) && !disabled.includes(key) && studentId) {
-      assignments[key] = studentId
-    }
+  for (const [key, id] of Object.entries(chart.assignments || {})) {
+    if (valid.has(key) && id) assignments[key] = id
   }
-  return { rows: nextRows, cols: nextCols, disabled, assignments }
+  return assignments
 }
 
-export function toggleSeatDisabled(chart, key) {
-  const disabled = new Set(chart.disabled || [])
-  const assignments = { ...chart.assignments }
-  if (disabled.has(key)) {
-    disabled.delete(key)
-  } else {
-    disabled.add(key)
-    assignments[key] = null
+export function setSeatDefs(chart, seatDefs) {
+  const keys = seatDefs.map(s => s.key)
+  const maxRow = seatDefs.reduce((m, s) => Math.max(m, s.row), 0)
+  const maxCol = seatDefs.reduce((m, s) => Math.max(m, s.col), 0)
+  return {
+    ...chart,
+    seatDefs,
+    rows: Math.max(chart.rows || 1, maxRow + 1),
+    cols: Math.max(chart.cols || 1, maxCol + 1),
+    disabled: [],
+    assignments: pruneAssignments(chart, keys),
   }
-  return { ...chart, disabled: [...disabled], assignments }
+}
+
+/** Rectangle grid: set rows/cols and fill every cell with a seat. */
+export function applyGridLayout(chart, rows, cols) {
+  const nextRows = Math.max(1, Math.min(24, rows))
+  const nextCols = Math.max(1, Math.min(24, cols))
+  const seatDefs = []
+  for (let row = 0; row < nextRows; row++) {
+    for (let col = 0; col < nextCols; col++) {
+      seatDefs.push(seatDef(row, col))
+    }
+  }
+  return {
+    ...chart,
+    layout: 'grid',
+    rows: nextRows,
+    cols: nextCols,
+    seatDefs,
+    disabled: [],
+    assignments: pruneAssignments(chart, seatDefs.map(s => s.key)),
+  }
+}
+
+export function resizeCanvas(chart, rows, cols) {
+  const nextRows = Math.max(1, Math.min(24, rows))
+  const nextCols = Math.max(1, Math.min(24, cols))
+  const seatDefs = getSeatDefs(chart).filter(s => s.row < nextRows && s.col < nextCols)
+  return {
+    ...chart,
+    rows: nextRows,
+    cols: nextCols,
+    seatDefs,
+    assignments: pruneAssignments(chart, seatDefs.map(s => s.key)),
+  }
+}
+
+export function toggleSeatAt(chart, row, col) {
+  const key = seatKey(row, col)
+  const defs = getSeatDefs(chart)
+  const exists = defs.some(s => s.key === key)
+  if (exists) {
+    const nextDefs = defs.filter(s => s.key !== key)
+    const assignments = { ...chart.assignments }
+    delete assignments[key]
+    return setSeatDefs(chart, nextDefs)
+  }
+  return setSeatDefs(chart, [...defs, seatDef(row, col)])
+}
+
+export function switchLayoutType(chart, layout) {
+  if (layout === 'custom') {
+    return {
+      ...chart,
+      layout: 'custom',
+      rows: Math.max(chart.rows || 12, 12),
+      cols: Math.max(chart.cols || 14, 14),
+      seatDefs: getSeatDefs(chart),
+      disabled: [],
+    }
+  }
+  return applyGridLayout(chart, chart.rows || 5, chart.cols || 6)
 }
 
 export function normalizeSeatingChart(raw, studentIds = []) {
-  const rows = Math.max(1, Math.min(20, raw?.rows || 5))
-  const cols = Math.max(1, Math.min(20, raw?.cols || 6))
   const idSet = new Set(studentIds)
-  const allKeys = new Set()
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) allKeys.add(seatKey(r, c))
+  const layout = raw?.layout === 'custom' ? 'custom' : 'grid'
+  const rows = Math.max(1, Math.min(24, raw?.rows || (layout === 'custom' ? 12 : 5)))
+  const cols = Math.max(1, Math.min(24, raw?.cols || (layout === 'custom' ? 14 : 6)))
+
+  let seatDefs = []
+  if (Array.isArray(raw?.seatDefs) && raw.seatDefs.length) {
+    seatDefs = raw.seatDefs
+      .map(s => seatDef(Number(s.row), Number(s.col)))
+      .filter(s => s.row >= 0 && s.row < rows && s.col >= 0 && s.col < cols)
+  } else {
+    const disabled = new Set(raw?.disabled || [])
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const key = seatKey(row, col)
+        if (!disabled.has(key)) seatDefs.push(seatDef(row, col))
+      }
+    }
   }
-  const disabled = Array.isArray(raw?.disabled)
-    ? raw.disabled.filter(k => allKeys.has(k))
-    : []
-  const disabledSet = new Set(disabled)
+
+  const keys = new Set(seatDefs.map(s => s.key))
   const assignments = {}
   for (const [key, studentId] of Object.entries(raw?.assignments || {})) {
-    if (!allKeys.has(key) || disabledSet.has(key)) continue
-    if (studentId && idSet.has(studentId)) assignments[key] = studentId
+    if (keys.has(key) && studentId && idSet.has(studentId)) assignments[key] = studentId
   }
-  return { rows, cols, disabled, assignments }
-}
 
-function alwaysClusters(constraints) {
-  return (constraints?.alwaysTogether || [])
-    .map(cluster => cluster.filter(Boolean))
-    .filter(c => c.length >= 2)
+  return { layout, rows, cols, seatDefs, disabled: [], assignments }
 }
 
 function buildSeatMap(chart) {
@@ -162,9 +248,12 @@ function seatForStudent(assignments, seatMap) {
   return out
 }
 
-/**
- * Score a candidate seat for one student. Higher is better.
- */
+function alwaysClusters(constraints) {
+  return (constraints?.alwaysTogether || [])
+    .map(cluster => cluster.filter(Boolean))
+    .filter(c => c.length >= 2)
+}
+
 export function scoreSeatPlacement(studentId, seat, assignments, chart, constraints) {
   const never = neverApartClusters(constraints)
   const always = alwaysClusters(constraints)
@@ -211,11 +300,11 @@ function pickBestSeat(candidates, studentId, assignments, chart, constraints) {
   return best
 }
 
-function placeCluster(cluster, assignments, chart, constraints, rng) {
+function placeCluster(cluster, assignments, chart, constraints, rng, lockedKeys) {
   const seatMap = buildSeatMap(chart)
   const seats = listSeats(chart)
   const occupied = occupiedKeys(assignments)
-  const openSeats = seats.filter(s => !occupied.has(s.key))
+  const openSeats = seats.filter(s => !occupied.has(s.key) && !lockedKeys.has(s.key))
   if (cluster.length > openSeats.length) {
     return { assignments: null, error: 'Not enough open seats for an always-together group.' }
   }
@@ -239,7 +328,7 @@ function placeCluster(cluster, assignments, chart, constraints, rng) {
     const adjacent = new Map()
     for (const anchor of anchorSeats) {
       for (const n of seatNeighbors(anchor, chart)) {
-        if (!occupied.has(n.key)) adjacent.set(n.key, n)
+        if (!occupied.has(n.key) && !lockedKeys.has(n.key)) adjacent.set(n.key, n)
       }
     }
 
@@ -248,7 +337,7 @@ function placeCluster(cluster, assignments, chart, constraints, rng) {
       : null
 
     if (!target) {
-      const remaining = seats.filter(s => !occupiedKeys(next).has(s.key))
+      const remaining = seats.filter(s => !occupiedKeys(next).has(s.key) && !lockedKeys.has(s.key))
       target = pickBestSeat(remaining, studentId, next, chart, constraints)
     }
     if (!target) {
@@ -269,35 +358,50 @@ function constraintWeight(studentId, never, always) {
   return weight
 }
 
-/**
- * Auto-fill seating using never-apart and always-together rules.
- */
-export function autoFillSeating(students, constraints, chart, rng = Math.random) {
+function runAutoFill(students, constraints, chart, rng, { preserveExisting = false } = {}) {
   const seats = listSeats(chart)
-  if (!students.length) return { chart: clearAllAssignments(chart), error: 'Add students first.' }
-  if (students.length > seats.length) {
-    return { chart: null, error: `Need at least ${students.length} seats (currently ${seats.length}). Add rows/columns or enable seats.` }
+  if (!seats.length) {
+    return { chart: null, error: 'Add at least one desk to the layout.' }
+  }
+  if (!students.length) {
+    return { chart: clearAllAssignments(chart), error: 'Add students first.' }
+  }
+
+  let assignments = preserveExisting ? { ...(chart.assignments || {}) } : {}
+  const lockedKeys = preserveExisting ? occupiedKeys(assignments) : new Set()
+
+  const assigned = assignedStudentIds(assignments)
+  const toPlace = students.filter(s => !assigned.has(s.id))
+  const openCount = seats.filter(s => !occupiedKeys(assignments).has(s.key)).length
+
+  if (toPlace.length > openCount) {
+    return {
+      chart: null,
+      error: `Need ${toPlace.length} open seats but only ${openCount} available. Add desks or clear some seats.`,
+    }
   }
 
   const never = neverApartClusters(constraints)
   const always = alwaysClusters(constraints)
-  let assignments = {}
-
   const byId = new Map(students.map(s => [s.id, s]))
-  const inCluster = new Set()
-  for (const cluster of always) cluster.forEach(id => inCluster.add(id))
 
-  const sortedClusters = [...always].sort((a, b) => b.length - a.length)
+  const sortedClusters = [...always]
+    .map(cluster => cluster.filter(id => byId.has(id) && !assigned.has(id)))
+    .filter(c => c.length >= 2)
+    .sort((a, b) => b.length - a.length)
+
   for (const cluster of sortedClusters) {
-    const members = cluster.filter(id => byId.has(id))
-    if (members.length < 2) continue
-    const out = placeCluster(members, assignments, chart, constraints, rng)
+    const out = placeCluster(cluster, assignments, chart, constraints, rng, lockedKeys)
     if (out.error) return { chart: null, error: out.error }
     assignments = out.assignments
+    for (const key of lockedKeys) {
+      const id = chart.assignments?.[key]
+      if (id) assignments[key] = id
+    }
   }
 
   const remaining = shuffle(
-    students.filter(s => !assignedStudentIds(assignments).has(s.id)),
+    toPlace.filter(s => !assignedStudentIds(assignments).has(s.id)),
     rng,
   )
   remaining.sort((a, b) => constraintWeight(b.id, never, always) - constraintWeight(a.id, never, always))
@@ -315,6 +419,22 @@ export function autoFillSeating(students, constraints, chart, rng = Math.random)
   return { chart: { ...chart, assignments }, error: null }
 }
 
+/** Fill every seat from scratch. */
+export function autoFillSeating(students, constraints, chart, rng = Math.random) {
+  if (students.length > listSeats(chart).length) {
+    return {
+      chart: null,
+      error: `Need at least ${students.length} desks (currently ${listSeats(chart).length}).`,
+    }
+  }
+  return runAutoFill(students, constraints, chart, rng, { preserveExisting: false })
+}
+
+/** Keep manual placements; fill only empty desks for remaining students. */
+export function autoFillRemainingSeating(students, constraints, chart, rng = Math.random) {
+  return runAutoFill(students, constraints, chart, rng, { preserveExisting: true })
+}
+
 export function purgeStudentFromChart(chart, studentId) {
   if (!chart) return chart
   const assignments = { ...chart.assignments }
@@ -330,11 +450,14 @@ export function newSeatingChartId() {
 
 export function cloneChart(chart) {
   if (!chart) return createDefaultSeatingChart()
+  const normalized = normalizeSeatingChart(chart, [])
   return {
-    rows: chart.rows,
-    cols: chart.cols,
-    disabled: [...(chart.disabled || [])],
-    assignments: { ...(chart.assignments || {}) },
+    layout: normalized.layout,
+    rows: normalized.rows,
+    cols: normalized.cols,
+    seatDefs: normalized.seatDefs.map(s => ({ ...s })),
+    disabled: [],
+    assignments: { ...(normalized.assignments || {}) },
   }
 }
 
@@ -359,4 +482,14 @@ export function purgeStudentFromClassSeating(classObj, studentId) {
 
 export function assignedCount(chart) {
   return Object.values(chart?.assignments || {}).filter(Boolean).length
+}
+
+// Legacy aliases
+export function resizeChart(chart, rows, cols) {
+  return chart.layout === 'custom' ? resizeCanvas(chart, rows, cols) : applyGridLayout(chart, rows, cols)
+}
+
+export function toggleSeatDisabled(chart, key) {
+  const { row, col } = parseSeatKey(key)
+  return toggleSeatAt(chart, row, col)
 }
