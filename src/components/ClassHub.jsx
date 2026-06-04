@@ -4,8 +4,10 @@ import BoardsPanel from './BoardsPanel'
 import FlashcardsPanel from './FlashcardsPanel'
 import GroupsPanel from './GroupsPanel'
 import TimerPresetsPanel from './TimerPresetsPanel'
+import LessonLauncherPanel from './LessonLauncherPanel'
 
 const TABS = [
+  { id: 'lessons', label: 'Lesson Launcher', icon: '🚀' },
   { id: 'boards', label: 'Boards', icon: '📋' },
   { id: 'flashcards', label: 'Flashcards', icon: '🃏' },
   { id: 'tools', label: 'Class tools', icon: '🛠' },
@@ -13,7 +15,7 @@ const TABS = [
 ]
 
 export default function ClassHub({ session, onOpenBoard }) {
-  const [tab, setTab] = useState('boards')
+  const [tab, setTab] = useState('lessons')
   const userId = session.user.id
 
   const signOut = async () => { await supabase.auth.signOut() }
@@ -47,6 +49,7 @@ export default function ClassHub({ session, onOpenBoard }) {
       </nav>
 
       <main className="wb-class-hub__main" role="tabpanel">
+        {tab === 'lessons' && <LessonLauncherPanel userId={userId} onOpenBoard={onOpenBoard} />}
         {tab === 'boards' && <BoardsPanel session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'flashcards' && <FlashcardsPanel userId={userId} />}
         {tab === 'tools' && <GroupsPanel userId={userId} />}
