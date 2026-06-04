@@ -14,9 +14,14 @@ import { cloneGroups, createSavedArrangement } from '../groupArrangements'
 import GroupEditor from './GroupEditor'
 import SeatingChartEditor from './SeatingChartEditor'
 import { createSavedSeatingChart, purgeStudentFromClassSeating } from '../seatingChart'
-import { colors, touchBtn } from '../uiTheme'
-
-const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
+import {
+  HubButton,
+  HubChip,
+  HubEmpty,
+  HubFileButton,
+  HubPanel,
+  HubToolbar,
+} from './hubUi'
 
 const DEFAULT_SECTIONS = { roster: true, grouping: false, seating: false }
 
@@ -290,67 +295,46 @@ export default function GroupsPanel({ userId }) {
   }
 
   return (
-    <div>
-      <h2 style={{ fontSize: 26, fontWeight: 700, margin: '0 0 8px', color: colors.text }}>Class tools</h2>
-      <p style={{ color: colors.textMuted, fontSize: 16, margin: '0 0 8px' }}>
-        Rosters, grouping, and seating charts stay in this browser only. Export JSON to back up or move devices.
-      </p>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
-        <button type="button" onClick={handleExport} style={actionBtn}>Export JSON</button>
-        <label style={actionBtn}>
+    <HubPanel
+      title="Class tools"
+      lead="Rosters, grouping, and seating charts stay in this browser only. Export JSON to back up or move devices."
+    >
+      <HubToolbar>
+        <HubButton onClick={handleExport}>Export JSON</HubButton>
+        <HubFileButton accept=".json,application/json" onChange={handleImport}>
           Import JSON
-          <input type="file" accept=".json,application/json" onChange={handleImport} style={{ display: 'none' }} />
-        </label>
-        <button type="button" onClick={addClass} style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>
-          + Add class
-        </button>
-      </div>
+        </HubFileButton>
+        <HubButton variant="primary" onClick={addClass}>+ Add class</HubButton>
+      </HubToolbar>
 
       {data.classes.map(c => {
         const expanded = expandedClassId === c.id
         return (
         <div
           key={c.id}
-          style={{
-            background: colors.surface,
-            borderRadius: 12,
-            border: `1px solid ${expanded ? colors.accent : colors.border}`,
-            marginBottom: 12,
-            overflow: 'hidden',
-          }}
+          className={`wb-hub-class-card${expanded ? ' wb-hub-class-card--open' : ''}`}
         >
           <button
             type="button"
+            className="wb-hub-class-card__head"
             onClick={() => toggleClassExpanded(c.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              width: '100%',
-              padding: '14px 16px',
-              border: 'none',
-              background: expanded ? colors.accentLight : colors.surface,
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontSize: 16,
-              fontWeight: 600,
-              color: colors.text,
-            }}
+            aria-expanded={expanded}
           >
-            <span style={{ fontSize: 12, color: colors.textMuted, width: 14 }} aria-hidden>{expanded ? '▾' : '▸'}</span>
-            <span style={{ flex: 1 }}>{c.name}</span>
-            <span style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted }}>{c.students.length} students</span>
+            <span className="wb-hub-class-card__chevron" aria-hidden>{expanded ? '▾' : '▸'}</span>
+            <span className="wb-hub-class-card__name">{c.name}</span>
+            <span className="wb-hub-class-card__count">{c.students.length} students</span>
           </button>
 
           {expanded && (
-        <div style={{ padding: '0 16px 16px', borderTop: `1px solid ${colors.border}` }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '16px 0', flexWrap: 'wrap' }}>
+        <div className="wb-hub-class-card__body">
+          <div className="wb-hub-field-row">
             <input
+              className="wb-hub-input wb-hub-class-card__name-input"
               value={c.name}
               onChange={e => updateClass(c.id, { name: e.target.value })}
-              style={{ flex: 1, fontSize: 18, fontWeight: 600, padding: '10px 12px', borderRadius: 8, border: `1px solid ${colors.border}`, minWidth: 160 }}
+              aria-label="Class name"
             />
-            <button type="button" onClick={() => removeClass(c.id)} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg }}>Delete class</button>
+            <HubButton variant="danger" onClick={() => removeClass(c.id)}>Delete class</HubButton>
           </div>
 
           <CollapsibleSection
@@ -359,86 +343,74 @@ export default function GroupsPanel({ userId }) {
             open={classSections(c.id).roster}
             onToggle={() => toggleSection(c.id, 'roster')}
           >
-            <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Roster (one name per line)</h3>
+            <h3 className="wb-hub-subheading">Roster (one name per line)</h3>
             <textarea
+              className="wb-hub-textarea"
               value={rosterPaste}
               onChange={e => setRosterPaste(e.target.value)}
               placeholder="Paste names…"
               rows={4}
-              style={{ width: '100%', fontSize: 15, padding: 12, borderRadius: 8, border: `1px solid ${colors.border}`, marginBottom: 8 }}
             />
-            <button type="button" onClick={addStudentsFromPaste} style={{ ...actionBtn, marginBottom: 16, background: colors.accentLight, border: `1px solid ${colors.accent}` }}>
+            <HubButton variant="primary" onClick={addStudentsFromPaste} style={{ marginBottom: 16 }}>
               Add to roster
-            </button>
+            </HubButton>
 
-            <ul style={{ listStyle: 'none', margin: '0 0 20px', padding: 0 }}>
+            <ul className="wb-hub-roster-list">
               {c.students.map(s => (
-                <li key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${colors.border}` }}>
+                <li key={s.id}>
                   <span>{s.name}</span>
-                  <button type="button" onClick={() => removeStudent(s.id)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 600 }}>Remove</button>
+                  <HubButton variant="ghost" onClick={() => removeStudent(s.id)}>Remove</HubButton>
                 </li>
               ))}
             </ul>
 
-            <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Never in the same group (select 2+ students)</h3>
-            <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 8px' }}>
+            <h3 className="wb-hub-subheading">Never in the same group (select 2+ students)</h3>
+            <p className="wb-hub-hint">
               Students who must not be grouped or seated together.
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            <div className="wb-hub-chip-grid">
               {c.students.map(s => (
-                <button
+                <HubChip
                   key={s.id}
-                  type="button"
+                  variant="warn"
+                  selected={neverApartSelected.includes(s.id)}
                   onClick={() => toggleSelect(setNeverApartSelected, s.id)}
-                  style={touchBtn({
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    background: neverApartSelected.includes(s.id) ? colors.warnBg : '#f6f8fa',
-                    color: neverApartSelected.includes(s.id) ? colors.warn : colors.text,
-                    border: neverApartSelected.includes(s.id) ? `1px solid ${colors.warn}` : undefined,
-                  })}
                 >
                   {s.name}
-                </button>
+                </HubChip>
               ))}
             </div>
-            <button type="button" onClick={addNeverApart} style={{ ...actionBtn, marginBottom: 12 }}>Never together</button>
+            <HubButton onClick={addNeverApart} style={{ marginBottom: 12 }}>Never together</HubButton>
             {c.constraints.neverApart.length > 0 && (
-              <ul style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 16px', padding: 0, listStyle: 'none' }}>
+              <ul className="wb-hub-constraint-list">
                 {c.constraints.neverApart.map((cluster, i) => (
-                  <li key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', gap: 8 }}>
+                  <li key={i}>
                     <span>{cluster.map(id => studentNameById(c.students, id)).join(' · ')}</span>
-                    <button type="button" onClick={() => removeNeverApart(i)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 600 }}>Remove</button>
+                    <HubButton variant="ghost" onClick={() => removeNeverApart(i)}>Remove</HubButton>
                   </li>
                 ))}
               </ul>
             )}
 
-            <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Always in the same group (select 2+)</h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            <h3 className="wb-hub-subheading">Always in the same group (select 2+)</h3>
+            <div className="wb-hub-chip-grid">
               {c.students.map(s => (
-                <button
+                <HubChip
                   key={s.id}
-                  type="button"
+                  selected={alwaysSelected.includes(s.id)}
                   onClick={() => toggleSelect(setAlwaysSelected, s.id)}
-                  style={touchBtn({
-                    padding: '6px 12px',
-                    fontSize: 13,
-                    background: alwaysSelected.includes(s.id) ? colors.accent : '#f6f8fa',
-                    color: alwaysSelected.includes(s.id) ? '#fff' : colors.text,
-                  })}
                 >
                   {s.name}
-                </button>
+                </HubChip>
               ))}
             </div>
-            <button type="button" onClick={addAlwaysTogether} style={{ ...actionBtn, marginBottom: 0 }}>Add always-together cluster</button>
+            <HubButton onClick={addAlwaysTogether}>Add always-together cluster</HubButton>
             {c.constraints.alwaysTogether.length > 0 && (
-              <ul style={{ fontSize: 14, color: colors.textMuted, margin: '12px 0 0', padding: 0, listStyle: 'none' }}>
+              <ul className="wb-hub-constraint-list" style={{ marginTop: 12 }}>
                 {c.constraints.alwaysTogether.map((cluster, i) => (
-                  <li key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', gap: 8 }}>
+                  <li key={i}>
                     <span>{cluster.map(id => studentNameById(c.students, id)).join(' · ')}</span>
-                    <button type="button" onClick={() => removeAlwaysTogether(i)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 600 }}>Remove</button>
+                    <HubButton variant="ghost" onClick={() => removeAlwaysTogether(i)}>Remove</HubButton>
                   </li>
                 ))}
               </ul>
@@ -451,64 +423,84 @@ export default function GroupsPanel({ userId }) {
             open={classSections(c.id).grouping}
             onToggle={() => toggleSection(c.id, 'grouping')}
           >
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="wb-hub-radio-row">
+              <label>
                 <input type="radio" checked={groupMode === 'simple'} onChange={() => setGroupMode('simple')} />
                 Simple
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label>
                 <input type="radio" checked={groupMode === 'jigsaw'} onChange={() => setGroupMode('jigsaw')} />
                 Jigsaw
               </label>
             </div>
 
             {groupMode === 'simple' && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="radio" checked={sizingMode === 'byCount'} onChange={() => setSizingMode('byCount')} />
-                    Number of groups
-                    <input type="number" min={1} max={30} value={groupCount} onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
-                      style={{ width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input type="radio" checked={sizingMode === 'bySize'} onChange={() => setSizingMode('bySize')} />
-                    Students per group
-                    <input type="number" min={2} max={30} value={studentsPerGroup} onChange={e => setStudentsPerGroup(parseInt(e.target.value, 10) || 2)}
-                      style={{ width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-                  </label>
-                </div>
+              <div className="wb-hub-radio-stack">
+                <label>
+                  <input type="radio" checked={sizingMode === 'byCount'} onChange={() => setSizingMode('byCount')} />
+                  Number of groups
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    className="wb-hub-input"
+                    value={groupCount}
+                    onChange={e => setGroupCount(parseInt(e.target.value, 10) || 1)}
+                  />
+                </label>
+                <label>
+                  <input type="radio" checked={sizingMode === 'bySize'} onChange={() => setSizingMode('bySize')} />
+                  Students per group
+                  <input
+                    type="number"
+                    min={2}
+                    max={30}
+                    className="wb-hub-input"
+                    value={studentsPerGroup}
+                    onChange={e => setStudentsPerGroup(parseInt(e.target.value, 10) || 2)}
+                  />
+                </label>
               </div>
             )}
 
             {groupMode === 'jigsaw' && (
-              <label style={{ display: 'block', marginBottom: 12 }}>
+              <label className="wb-hub-radio-row" style={{ display: 'block', marginBottom: 12 }}>
                 Expert pieces (topics)
-                <input type="number" min={2} max={12} value={pieceCount} onChange={e => setPieceCount(parseInt(e.target.value, 10) || 2)}
-                  style={{ marginLeft: 8, width: 72, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                <input
+                  type="number"
+                  min={2}
+                  max={12}
+                  className="wb-hub-input"
+                  style={{ width: 72, marginLeft: 8, display: 'inline-block' }}
+                  value={pieceCount}
+                  onChange={e => setPieceCount(parseInt(e.target.value, 10) || 2)}
+                />
               </label>
             )}
 
-            <label style={{ display: 'block', marginBottom: 12, fontSize: 14, color: colors.textMuted }}>
+            <label className="wb-hub-hint" style={{ display: 'block', marginBottom: 12 }}>
               Optional seed (same seed = same groups)
-              <input value={seed} onChange={e => setSeed(e.target.value)} placeholder="e.g. tuesday-v1"
-                style={{ display: 'block', width: '100%', maxWidth: 280, marginTop: 6, padding: 10, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+              <input
+                className="wb-hub-input"
+                value={seed}
+                onChange={e => setSeed(e.target.value)}
+                placeholder="e.g. tuesday-v1"
+                style={{ display: 'block', maxWidth: 280, marginTop: 6 }}
+              />
             </label>
-            <button type="button" onClick={generate} style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>
-              Generate groups
-            </button>
-            {genError && <p style={{ color: colors.danger, marginTop: 12 }}>{genError}</p>}
+            <HubButton variant="primary" onClick={generate}>Generate groups</HubButton>
+            {genError && <p className="wb-hub-alert" style={{ marginTop: 12 }}>{genError}</p>}
 
             {(c.savedArrangements || []).length > 0 && (
               <div style={{ marginTop: 16 }}>
-                <h4 style={{ margin: '0 0 10px', fontSize: 15 }}>Saved groupings</h4>
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <h4 className="wb-hub-subheading">Saved groupings</h4>
+                <ul className="wb-hub-saved-list">
                   {c.savedArrangements.map(arr => (
-                    <li key={arr.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, flex: 1, minWidth: 120 }}>{arr.name}</span>
-                      <span style={{ fontSize: 13, color: colors.textMuted }}>{arr.groups?.length || 0} groups</span>
-                      <button type="button" onClick={() => loadArrangement(arr)} style={actionBtn}>Load</button>
-                      <button type="button" onClick={() => deleteArrangement(arr.id)} style={{ ...actionBtn, color: colors.danger }}>Delete</button>
+                    <li key={arr.id}>
+                      <span className="wb-hub-saved-list__name">{arr.name}</span>
+                      <span className="wb-hub-saved-list__meta">{arr.groups?.length || 0} groups</span>
+                      <HubButton onClick={() => loadArrangement(arr)}>Load</HubButton>
+                      <HubButton variant="danger" onClick={() => deleteArrangement(arr.id)}>Delete</HubButton>
                     </li>
                   ))}
                 </ul>
@@ -516,7 +508,7 @@ export default function GroupsPanel({ userId }) {
             )}
 
             {editableGroups?.length > 0 && expandedClassId === c.id && (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${colors.border}` }}>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--wb-border)' }}>
                 <GroupEditor
                   groups={editableGroups}
                   onChange={setEditableGroups}
@@ -562,10 +554,11 @@ export default function GroupsPanel({ userId }) {
       })}
 
       {!data.classes.length && (
-        <div style={{ padding: 40, textAlign: 'center', background: colors.surface, borderRadius: 14, border: `2px dashed ${colors.border}` }}>
-          <p style={{ margin: 0, color: colors.textMuted }}>Add a class to manage rosters, groups, and seating charts.</p>
-        </div>
+        <HubEmpty
+          title="No classes yet"
+          description="Add a class to manage rosters, groups, and seating charts."
+        />
       )}
-    </div>
+    </HubPanel>
   )
 }

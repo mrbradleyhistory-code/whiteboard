@@ -3,34 +3,36 @@ import { fetchDecks, createDeck, updateDeck, deleteDeck, newCardId, normalizeCar
 import { parseFlashcardImport } from '../flashcardImport'
 import FlashcardPresenter from './FlashcardPresenter'
 import StudySession from './StudySession'
-import { colors, sizes, touchBtn } from '../uiTheme'
-
-const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
+import {
+  HubAlert,
+  HubBackButton,
+  HubButton,
+  HubCard,
+  HubCardList,
+  HubCreateRow,
+  HubEmpty,
+  HubFileButton,
+  HubLoading,
+  HubPanel,
+  HubPanelBlock,
+} from './hubUi'
 
 function DeckActions({ deck, onPresent, onStudy }) {
   const count = (deck.cards || []).length
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-      <button type="button" onClick={() => onPresent({ deck, mode: 'cycle' })}
-        disabled={!count}
-        style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>
+    <div className="wb-hub-deck-actions">
+      <HubButton variant="primary" onClick={() => onPresent({ deck, mode: 'cycle' })} disabled={!count}>
         Present — cycle
-      </button>
-      <button type="button" onClick={() => onPresent({ deck, mode: 'quiz' })}
-        disabled={count < 4}
-        style={{ ...actionBtn, background: colors.accentDark, color: '#fff', border: 'none' }}>
+      </HubButton>
+      <HubButton variant="primary" onClick={() => onPresent({ deck, mode: 'quiz' })} disabled={count < 4}>
         Present — quiz
-      </button>
-      <button type="button" onClick={() => onStudy({ deck, mode: 'flip' })}
-        disabled={!count}
-        style={actionBtn}>
+      </HubButton>
+      <HubButton onClick={() => onStudy({ deck, mode: 'flip' })} disabled={!count}>
         Practice — flip
-      </button>
-      <button type="button" onClick={() => onStudy({ deck, mode: 'mc' })}
-        disabled={count < 4}
-        style={actionBtn}>
+      </HubButton>
+      <HubButton onClick={() => onStudy({ deck, mode: 'mc' })} disabled={count < 4}>
         Practice — quiz
-      </button>
+      </HubButton>
     </div>
   )
 }
@@ -149,8 +151,8 @@ export default function FlashcardsPanel({ userId }) {
 
   if (study) {
     return (
-      <div>
-        <button type="button" onClick={() => setStudy(null)} style={{ ...actionBtn, marginBottom: 16 }}>← Back</button>
+      <div className="wb-hub">
+        <HubBackButton onClick={() => setStudy(null)} label="All decks" />
         <StudySession deck={study.deck} mode={study.mode} onBack={() => setStudy(null)} />
       </div>
     )
@@ -158,62 +160,76 @@ export default function FlashcardsPanel({ userId }) {
 
   if (editingDeck) {
     return (
-      <div>
-        <button type="button" onClick={() => { setEditingDeck(null); load() }} style={{ ...actionBtn, marginBottom: 16 }}>← All decks</button>
+      <div className="wb-hub">
+        <HubBackButton onClick={() => { setEditingDeck(null); load() }} label="All decks" />
         <input
+          className="wb-hub-input wb-hub-deck-title"
           value={editingDeck.name}
           onChange={e => setEditingDeck({ ...editingDeck, name: e.target.value })}
           onBlur={() => saveEditingDeck({ name: editingDeck.name.trim() })}
-          style={{ width: '100%', fontSize: 22, fontWeight: 700, padding: '12px 14px', borderRadius: 10, border: `1px solid ${colors.border}`, marginBottom: 16 }}
+          aria-label="Deck name"
         />
         <div style={{ marginBottom: 20 }}>
           <DeckActions deck={editingDeck} onPresent={setPresent} onStudy={setStudy} />
         </div>
-        <button type="button" onClick={addCard} style={{ ...actionBtn, marginBottom: 24 }}>+ Add card</button>
+        <HubButton onClick={addCard} style={{ marginBottom: 24 }}>+ Add card</HubButton>
 
-        <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 16, marginBottom: 24 }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Import from Quizlet / Knowt / CSV</h3>
+        <HubPanelBlock title="Import from Quizlet / Knowt / CSV">
           <textarea
+            className="wb-hub-textarea"
             value={importText}
             onChange={e => setImportText(e.target.value)}
             placeholder="Paste tab-separated or CSV lines…"
             rows={5}
-            style={{ width: '100%', padding: 12, borderRadius: 8, border: `1px solid ${colors.border}`, marginBottom: 8 }}
           />
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={runImportPreview} style={actionBtn}>Preview import</button>
-            <label style={actionBtn}>
+          <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
+            <HubButton onClick={runImportPreview}>Preview import</HubButton>
+            <HubFileButton accept=".txt,.csv,text/plain,text/csv" onChange={handleImportFile}>
               Upload file
-              <input type="file" accept=".txt,.csv,text/plain,text/csv" onChange={handleImportFile} style={{ display: 'none' }} />
-            </label>
+            </HubFileButton>
           </div>
           {importPreview && (
             <div style={{ marginTop: 12 }}>
               {importPreview.errors.map((msg, i) => (
-                <p key={i} style={{ color: colors.danger, fontSize: 14 }}>{msg}</p>
+                <p key={i} className="wb-hub-alert" style={{ marginTop: 8 }}>{msg}</p>
               ))}
               {importPreview.cards.length > 0 && (
                 <>
-                  <p style={{ fontSize: 14, color: colors.textMuted }}>
-                    {importPreview.cards.length} cards — preview: {importPreview.cards.slice(0, 3).map(c => c.front).join(', ')}…
+                  <p className="wb-hub-hint" style={{ marginTop: 12 }}>
+                    {importPreview.cards.length} cards — preview:{' '}
+                    {importPreview.cards.slice(0, 3).map(c => c.front).join(', ')}…
                   </p>
-                  <button type="button" onClick={applyImport} style={{ ...actionBtn, marginTop: 8, background: colors.accent, color: '#fff', border: 'none' }}>
+                  <HubButton variant="primary" onClick={applyImport} style={{ marginTop: 8 }}>
                     Add to deck
-                  </button>
+                  </HubButton>
                 </>
               )}
             </div>
           )}
-        </div>
+        </HubPanelBlock>
 
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <ul className="wb-hub-flash-cards">
           {(editingDeck.cards || []).map(c => (
-            <li key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'start' }}>
-              <input value={c.front} onChange={e => updateCard(c.id, 'front', e.target.value)} onBlur={saveCardsOnBlur}
-                placeholder="Front" style={{ padding: 12, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-              <input value={c.back} onChange={e => updateCard(c.id, 'back', e.target.value)} onBlur={saveCardsOnBlur}
-                placeholder="Back" style={{ padding: 12, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-              <button type="button" onClick={() => removeCard(c.id)} style={{ border: 'none', background: 'transparent', color: colors.danger, fontWeight: 700, minHeight: sizes.touchMin }}>×</button>
+            <li key={c.id} className="wb-hub-flash-card-row">
+              <input
+                className="wb-hub-input"
+                value={c.front}
+                onChange={e => updateCard(c.id, 'front', e.target.value)}
+                onBlur={saveCardsOnBlur}
+                placeholder="Front"
+                aria-label="Card front"
+              />
+              <input
+                className="wb-hub-input"
+                value={c.back}
+                onChange={e => updateCard(c.id, 'back', e.target.value)}
+                onBlur={saveCardsOnBlur}
+                placeholder="Back"
+                aria-label="Card back"
+              />
+              <HubButton variant="ghost" onClick={() => removeCard(c.id)} aria-label="Remove card">
+                ×
+              </HubButton>
             </li>
           ))}
         </ul>
@@ -222,59 +238,51 @@ export default function FlashcardsPanel({ userId }) {
   }
 
   return (
-    <div>
-      <h2 style={{ fontSize: 26, fontWeight: 700, margin: '0 0 8px', color: colors.text }}>Flashcards</h2>
-      <p style={{ color: colors.textMuted, fontSize: 16, margin: '0 0 8px' }}>
-        Create decks or import from Quizlet (copy paste), Knowt, or CSV.
-      </p>
-      <p style={{ color: colors.textMuted, fontSize: 14, margin: '0 0 24px' }}>
+    <HubPanel
+      title="Flashcards"
+      lead="Create decks or import from Quizlet (copy paste), Knowt, or CSV."
+    >
+      <p className="wb-hub-flash-lead">
         Present = fullscreen for class (remote: Page Down / Up). Practice = smaller self-review.
       </p>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+      <HubCreateRow>
         <input
+          className="wb-hub-input"
           value={newDeckName}
           onChange={e => setNewDeckName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleCreateDeck()}
           placeholder="New deck name…"
-          style={{ flex: 1, fontSize: 17, padding: '14px 16px', borderRadius: 10, border: `1px solid ${colors.border}`, minHeight: sizes.touchMin }}
+          aria-label="New deck name"
         />
-        <button type="button" onClick={handleCreateDeck} style={touchBtn({ background: colors.accent, color: '#fff', border: 'none' })}>
-          + New deck
-        </button>
-      </div>
+        <HubButton variant="primary" onClick={handleCreateDeck}>+ New deck</HubButton>
+      </HubCreateRow>
 
-      {error && (
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: colors.dangerBg, borderRadius: 10, color: colors.danger }}>
-          {error}
-        </div>
-      )}
+      <HubAlert message={error} />
 
       {loading ? (
-        <p style={{ color: colors.textMuted }}>Loading decks…</p>
+        <HubLoading label="Loading decks…" />
       ) : decks.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', background: colors.surface, borderRadius: 14, border: `2px dashed ${colors.border}` }}>
-          <p style={{ margin: 0, color: colors.textMuted }}>No decks yet.</p>
-        </div>
+        <HubEmpty title="No decks yet" description="Create a deck with the field above." />
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <HubCardList>
           {decks.map(d => (
-            <li key={d.id} style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: '16px 18px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <HubCard key={d.id}>
+              <div className="wb-hub-deck-header">
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 18 }}>{d.name}</div>
-                  <div style={{ fontSize: 14, color: colors.textMuted }}>{(d.cards || []).length} cards</div>
+                  <div className="wb-hub-card__title">{d.name}</div>
+                  <div className="wb-hub-card__meta">{(d.cards || []).length} cards</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => setEditingDeck(d)} style={actionBtn}>Edit</button>
-                  <button type="button" onClick={() => handleDeleteDeck(d.id)} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg }}>Delete</button>
+                <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
+                  <HubButton onClick={() => setEditingDeck(d)}>Edit</HubButton>
+                  <HubButton variant="danger" onClick={() => handleDeleteDeck(d.id)}>Delete</HubButton>
                 </div>
               </div>
               <DeckActions deck={d} onPresent={setPresent} onStudy={setStudy} />
-            </li>
+            </HubCard>
           ))}
-        </ul>
+        </HubCardList>
       )}
-    </div>
+    </HubPanel>
   )
 }

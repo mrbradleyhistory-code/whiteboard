@@ -38,6 +38,12 @@ const ZOOM_MAX = 3
 const DOUBLE_TAP_MS = 350
 const DOUBLE_TAP_PX = 32
 const TOUCH_DRAG_THRESHOLD = 10
+/** Ink is always painted above board objects; Move mode uses pointer-events:none on ink so items stay grabbable. */
+const Z_BOARD_IMAGES = 1
+const Z_BOARD_OVERLAYS = 2
+const Z_BOARD_DRAG_ITEM = 9
+const Z_BOARD_INK = 10
+const Z_BOARD_INK_PREVIEW = 11
 let idCounter = 0
 const uid = () => `id_${++idCounter}_${Date.now()}`
 
@@ -1736,17 +1742,21 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                 if (e.target !== e.currentTarget) return
                 if (tool === 'select' || tool === 'text' || tool === 'sticky' || tool === 'shape') clearOverlaySelection()
               }}>
-          {/* Images under ink while drawing; above ink in Move mode for easier grabs */}
+          {/* Images and overlays below ink; ink layer stays on top visually */}
           <div style={{
             position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none',
-            zIndex: tool === 'select' ? (dragging?.type === 'image' ? 5 : 3) : 0,
+            zIndex: Z_BOARD_IMAGES,
           }}>
             {images.map(img => {
               const isDraggingImage = dragging?.type === 'image' && dragging?.id === img.id
               return (
               <div key={img.id} id={'img_'+img.id}
                 className={`wb-image-wrap${isDraggingImage ? ' wb-image-wrap--dragging' : ''}`}
-                style={{ position:'absolute', left:img.x, top:img.y, pointerEvents: tool==='select'?'auto':'none' }}
+                style={{
+                  position:'absolute', left:img.x, top:img.y,
+                  pointerEvents: tool==='select'?'auto':'none',
+                  zIndex: isDraggingImage ? Z_BOARD_DRAG_ITEM : undefined,
+                }}
                 onPointerDown={tool === 'select' ? e => onDragStart(e,'image',img.id) : undefined}>
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none', pointerEvents:'none' }} draggable={false} alt="" />
                 {showImageControls(img.id) && (
@@ -1761,18 +1771,8 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
             )})}
           </div>
 
-          <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
-            style={{ position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, cursor:cursorStyle, touchAction:'none', background:'transparent', zIndex:1, pointerEvents: tool === 'select' ? 'none' : 'auto' }}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
-            onPointerUp={onCanvasPointerUp}
-            onPointerCancel={onCanvasPointerCancel}
-            onClick={handleCanvasClick} />
-          <canvas ref={strokeCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
-            style={{ position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, touchAction:'none', pointerEvents:'none', zIndex:2 }} />
-
-          {/* Stickies, shapes & text above ink */}
-          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:3 }}>
+          {/* Stickies, shapes & text (below ink) */}
+          <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex: Z_BOARD_OVERLAYS }}>
             {shapePreview && shapePreview.w + shapePreview.h > 0 && (
               <div style={{
                 position:'absolute', left:shapePreview.x, top:shapePreview.y,
@@ -1802,6 +1802,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
                     position:'absolute', left:sh.x, top:sh.y, width:sh.width, height:sh.height,
                     pointerEvents:'auto', cursor: tool==='select' ? 'move' : tool==='shape' ? 'copy' : 'default',
                     display:'flex', flexDirection:'column',
+                    zIndex: dragging?.type === 'shape' && dragging?.id === sh.id ? Z_BOARD_DRAG_ITEM : undefined,
                   }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
@@ -1865,7 +1866,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               const sf = s.fontSize || 13
               const fmtStyle = { fontWeight: s.bold?700:400, fontStyle: s.italic?'italic':'normal', textDecoration: s.underline?'underline':'none' }
               return (
-                <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8, padding:'10px 10px 32px 10px', boxShadow:'0 3px 12px rgba(0,0,0,0.15)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column' }}
+                <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8, padding:'10px 10px 32px 10px', boxShadow:'0 3px 12px rgba(0,0,0,0.15)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column', zIndex: dragging?.type === 'sticky' && dragging?.id === s.id ? Z_BOARD_DRAG_ITEM : undefined }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onClick={tool === 'sticky' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'sticky', id: s.id }) } : undefined}>
@@ -1924,7 +1925,7 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               }
               return (
                 <div key={t.id} id={`textbox_${t.id}`}
-                  style={{ position:'absolute', left:t.x, top:t.y, width:tw, minHeight:th, pointerEvents:'auto', cursor: tool==='select'?'move':'text' }}
+                  style={{ position:'absolute', left:t.x, top:t.y, width:tw, minHeight:th, pointerEvents:'auto', cursor: tool==='select'?'move':'text', zIndex: dragging?.type === 'text' && dragging?.id === t.id ? Z_BOARD_DRAG_ITEM : undefined }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
                   onClick={tool === 'text' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'text', id: t.id }) } : undefined}>
@@ -1973,6 +1974,24 @@ export default function Whiteboard({ session, boardSummary, onExitBoard }) {
               )
             })}
           </div>
+
+          <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
+            style={{
+              position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT,
+              cursor:cursorStyle, touchAction:'none', background:'transparent',
+              zIndex: Z_BOARD_INK,
+              pointerEvents: tool === 'select' ? 'none' : 'auto',
+            }}
+            onPointerDown={onCanvasPointerDown}
+            onPointerMove={onCanvasPointerMove}
+            onPointerUp={onCanvasPointerUp}
+            onPointerCancel={onCanvasPointerCancel}
+            onClick={handleCanvasClick} />
+          <canvas ref={strokeCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
+            style={{
+              position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT,
+              touchAction:'none', pointerEvents:'none', zIndex: Z_BOARD_INK_PREVIEW,
+            }} />
             </div>
           </div>
         </div>

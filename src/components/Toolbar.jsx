@@ -68,7 +68,6 @@ function panelMode(tool, editingTextId, editingStickyId, editingShapeId) {
   if (tool === 'text') return 'text'
   if (tool === 'sticky') return 'sticky'
   if (tool === 'shape') return 'shape'
-  if (tool === 'select') return 'select'
   return null
 }
 
@@ -425,7 +424,6 @@ const FLYOUT_TITLES = {
   text: 'Text',
   sticky: 'Note',
   shape: 'Shape',
-  select: 'Move',
 }
 
 export default function Toolbar({
@@ -443,6 +441,7 @@ export default function Toolbar({
   const [openMenu, setOpenMenu] = useState(null)
   const [flyoutOpen, setFlyoutOpen] = useState(true)
   const mode = panelMode(tool, editingTextId, editingStickyId, editingShapeId)
+  const hasFlyout = mode != null
   const isTextMode = mode === 'text'
   const isDrawMode = mode === 'draw'
 
@@ -461,10 +460,11 @@ export default function Toolbar({
 
   const pickTool = (t) => {
     const active = tool === t && !editingTextId && !editingStickyId && !editingShapeId
-    if (active) setFlyoutOpen(v => !v)
-    else {
+    if (active) {
+      if (t !== 'select') setFlyoutOpen(v => !v)
+    } else {
       setTool(t)
-      setFlyoutOpen(true)
+      setFlyoutOpen(t !== 'select')
     }
   }
 
@@ -730,13 +730,6 @@ export default function Toolbar({
         </ContextSection>
       )}
 
-      {mode === 'select' && (
-        <ContextSection compact>
-          <p style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.45, margin: 0 }}>
-            Drag items to move. Use corner handles to resize.
-          </p>
-        </ContextSection>
-      )}
     </>
   )
 
@@ -757,28 +750,30 @@ export default function Toolbar({
       }}>
         {TOOLS.map(({ id, label, icon }) => toolBtn(id, label, icon))}
         <div style={{ flex: 1, minHeight: 8 }} />
-        <Tip label={flyoutOpen ? 'Hide tool options' : 'Show tool options'} side="right">
-          <button
-            type="button"
-            onClick={() => setFlyoutOpen(v => !v)}
-            aria-expanded={flyoutOpen}
-            style={{
-              width: 40,
-              height: 32,
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              background: flyoutOpen ? colors.accentLight : '#f6f8fa',
-              color: colors.textMuted,
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            {flyoutOpen ? '‹' : '›'}
-          </button>
-        </Tip>
+        {hasFlyout && (
+          <Tip label={flyoutOpen ? 'Hide tool options' : 'Show tool options'} side="right">
+            <button
+              type="button"
+              onClick={() => setFlyoutOpen(v => !v)}
+              aria-expanded={flyoutOpen}
+              style={{
+                width: 40,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                background: flyoutOpen ? colors.accentLight : '#f6f8fa',
+                color: colors.textMuted,
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              {flyoutOpen ? '‹' : '›'}
+            </button>
+          </Tip>
+        )}
       </div>
 
-      {flyoutOpen && mode && (
+      {hasFlyout && flyoutOpen && (
           <aside
             className="wb-tool-flyout"
             style={{

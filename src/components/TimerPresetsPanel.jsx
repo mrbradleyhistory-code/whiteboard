@@ -6,9 +6,17 @@ import {
   formatDuration,
   parseDurationInput,
 } from '../timerPresets'
-import { colors, sizes, touchBtn } from '../uiTheme'
-
-const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
+import {
+  HubAlert,
+  HubButton,
+  HubCard,
+  HubCardList,
+  HubCreateRow,
+  HubEmpty,
+  HubLoading,
+  HubPanel,
+  HubPanelBlock,
+} from './hubUi'
 
 export default function TimerPresetsPanel({ userId }) {
   const [presets, setPresets] = useState([])
@@ -73,38 +81,41 @@ export default function TimerPresetsPanel({ userId }) {
   }
 
   return (
-    <div>
-      <h2 style={{ fontSize: 26, fontWeight: 700, margin: '0 0 8px', color: colors.text }}>Timer presets</h2>
-      <p style={{ color: colors.textMuted, fontSize: 16, margin: '0 0 24px' }}>
-        Saved to your account. Use them on any whiteboard via the timer panel (T key).
-      </p>
-
-      {error && (
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: colors.dangerBg, borderRadius: 10, color: colors.danger, fontSize: 15 }}>
-          {error}
-        </div>
-      )}
+    <HubPanel
+      title="Timer presets"
+      lead="Saved to your account. Use them on any whiteboard from the timer panel (press T on a board)."
+    >
+      <HubAlert message={error} />
 
       {loading ? (
-        <p style={{ color: colors.textMuted }}>Loading presets…</p>
+        <HubLoading label="Loading presets…" />
+      ) : presets.length === 0 ? (
+        <HubEmpty
+          title="No presets yet"
+          description="Add a timer below — for example, a 5-minute exit ticket or a 2-minute think-pair-share."
+        />
       ) : (
-        <ul style={{ listStyle: 'none', margin: '0 0 28px', padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <HubCardList>
           {presets.map(p => (
-            <li key={p.id} style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: '16px 18px' }}>
+            <HubCard key={p.id}>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
+                  className="wb-hub-input"
                   value={p.label}
                   onChange={e => setPresets(prev => prev.map(x => x.id === p.id ? { ...x, label: e.target.value } : x))}
                   onBlur={e => updatePreset(p.id, 'label', e.target.value.trim())}
-                  style={{ flex: 1, minWidth: 140, fontSize: 17, padding: '10px 12px', borderRadius: 8, border: `1px solid ${colors.border}` }}
+                  aria-label="Preset name"
+                  style={{ flex: 1, minWidth: 140 }}
                 />
-                <span style={{ fontWeight: 600, color: colors.textMuted }}>{formatDuration(p.durationSec)}</span>
-                <button type="button" onClick={() => removePreset(p.id)} disabled={saving} style={{ ...actionBtn, color: colors.danger, background: colors.dangerBg, borderColor: '#fecaca' }}>
+                <span style={{ fontWeight: 600, color: 'var(--wb-text-muted)', fontSize: '0.95rem' }}>
+                  {formatDuration(p.durationSec)}
+                </span>
+                <HubButton variant="danger" onClick={() => removePreset(p.id)} disabled={saving}>
                   Delete
-                </button>
+                </HubButton>
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-                <label style={{ fontSize: 14, color: colors.textMuted }}>Duration (min:sec)</label>
+              <div className="wb-hub-timer-duration">
+                <label>Duration (min : sec)</label>
                 <input
                   type="number"
                   min={0}
@@ -112,10 +123,9 @@ export default function TimerPresetsPanel({ userId }) {
                   value={Math.floor(p.durationSec / 60)}
                   onChange={e => {
                     const m = parseInt(e.target.value, 10) || 0
-                    const sec = parseDurationInput(m, p.durationSec % 60)
-                    updatePreset(p.id, 'durationSec', sec)
+                    updatePreset(p.id, 'durationSec', parseDurationInput(m, p.durationSec % 60))
                   }}
-                  style={{ width: 64, padding: '8px', borderRadius: 8, border: `1px solid ${colors.border}` }}
+                  aria-label="Minutes"
                 />
                 <span>:</span>
                 <input
@@ -125,35 +135,50 @@ export default function TimerPresetsPanel({ userId }) {
                   value={p.durationSec % 60}
                   onChange={e => {
                     const s = Math.min(59, parseInt(e.target.value, 10) || 0)
-                    const sec = parseDurationInput(Math.floor(p.durationSec / 60), s)
-                    updatePreset(p.id, 'durationSec', sec)
+                    updatePreset(p.id, 'durationSec', parseDurationInput(Math.floor(p.durationSec / 60), s))
                   }}
-                  style={{ width: 64, padding: '8px', borderRadius: 8, border: `1px solid ${colors.border}` }}
+                  aria-label="Seconds"
                 />
               </div>
-            </li>
+            </HubCard>
           ))}
-        </ul>
+        </HubCardList>
       )}
 
-      <div style={{ background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`, padding: 20 }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: 18 }}>Add preset</h3>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+      <HubPanelBlock title="Add preset">
+        <HubCreateRow>
           <input
+            className="wb-hub-input"
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             placeholder="e.g. Exit ticket"
-            style={{ flex: 1, minWidth: 160, fontSize: 16, padding: '12px 14px', borderRadius: 8, border: `1px solid ${colors.border}`, minHeight: sizes.touchMin }}
+            aria-label="Preset name"
           />
-          <input type="number" min={0} value={newMin} onChange={e => setNewMin(e.target.value)} aria-label="Minutes" style={{ width: 72, padding: '12px', borderRadius: 8, border: `1px solid ${colors.border}` }} />
-          <span style={{ alignSelf: 'center' }}>:</span>
-          <input type="number" min={0} max={59} value={newSec} onChange={e => setNewSec(e.target.value)} aria-label="Seconds" style={{ width: 72, padding: '12px', borderRadius: 8, border: `1px solid ${colors.border}` }} />
-        </div>
-        <button type="button" onClick={addPreset} disabled={saving}
-          style={touchBtn({ background: colors.accent, color: '#fff', border: 'none' })}>
-          {saving ? 'Saving…' : '+ Add preset'}
-        </button>
-      </div>
-    </div>
+          <input
+            type="number"
+            min={0}
+            className="wb-hub-input"
+            style={{ flex: '0 0 72px', minWidth: 72 }}
+            value={newMin}
+            onChange={e => setNewMin(e.target.value)}
+            aria-label="Minutes"
+          />
+          <span style={{ alignSelf: 'center', fontWeight: 600 }}>:</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            className="wb-hub-input"
+            style={{ flex: '0 0 72px', minWidth: 72 }}
+            value={newSec}
+            onChange={e => setNewSec(e.target.value)}
+            aria-label="Seconds"
+          />
+          <HubButton variant="primary" onClick={addPreset} disabled={saving}>
+            {saving ? 'Saving…' : '+ Add'}
+          </HubButton>
+        </HubCreateRow>
+      </HubPanelBlock>
+    </HubPanel>
   )
 }

@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { boardUpdatePayload, createPage, isMissingPagesColumnError, normalizeBoardPages } from '../boardPages'
 import { supabase } from '../supabaseClient'
-import { colors, sizes, touchBtn } from '../uiTheme'
+import {
+  HubAlert,
+  HubButton,
+  HubCard,
+  HubCardList,
+  HubCreateRow,
+  HubEmpty,
+  HubLoading,
+  HubPanel,
+} from './hubUi'
 
 function formatWhen(iso) {
   if (!iso) return ''
@@ -13,8 +22,6 @@ function formatWhen(iso) {
     minute: '2-digit',
   })
 }
-
-const actionBtn = touchBtn({ padding: '12px 18px', fontSize: 15 })
 
 export default function BoardsPanel({ session, onOpenBoard }) {
   const [boards, setBoards] = useState([])
@@ -146,52 +153,44 @@ export default function BoardsPanel({ session, onOpenBoard }) {
   }
 
   return (
-    <div>
-      <h2 style={{ fontSize: 26, fontWeight: 700, margin: '0 0 8px', color: colors.text }}>Your boards</h2>
-      <p style={{ color: colors.textMuted, fontSize: 16, margin: '0 0 28px' }}>Tap a board to open it on the display.</p>
-
-      <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+    <HubPanel
+      title="Your boards"
+      lead="Create and open whiteboards for class. Tap a board to open it on the display."
+    >
+      <HubCreateRow>
         <input
+          className="wb-hub-input"
           value={newName}
           onChange={e => setNewName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !creating && createBoard()}
           placeholder="Name for new board…"
-          style={{ flex: 1, fontSize: 17, padding: '14px 16px', borderRadius: 10, border: `1px solid ${colors.border}`, background: colors.surface, minHeight: sizes.touchMin }}
+          aria-label="New board name"
         />
-        <button type="button" onClick={createBoard} disabled={creating}
-          style={touchBtn({ border: 'none', background: colors.accent, color: '#fff', opacity: creating ? 0.7 : 1, whiteSpace: 'nowrap' })}>
+        <HubButton variant="primary" onClick={createBoard} disabled={creating}>
           {creating ? 'Creating…' : '+ New board'}
-        </button>
-      </div>
+        </HubButton>
+      </HubCreateRow>
 
-      {error && (
-        <div style={{ marginBottom: 20, padding: '14px 18px', background: colors.dangerBg, border: '1px solid #fecaca', borderRadius: 10, color: colors.danger, fontSize: 15 }}>
-          {error}
-        </div>
-      )}
+      <HubAlert message={error} />
 
       {loading ? (
-        <p style={{ color: colors.textMuted, fontSize: 16 }}>Loading boards…</p>
+        <HubLoading label="Loading boards…" />
       ) : boards.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', background: colors.surface, borderRadius: 14, border: `2px dashed ${colors.border}` }}>
-          <p style={{ fontSize: 18, color: colors.text, margin: '0 0 8px', fontWeight: 600 }}>No boards yet</p>
-          <p style={{ fontSize: 16, color: colors.textMuted, margin: 0 }}>Create your first board with the button above.</p>
-        </div>
+        <HubEmpty
+          title="No boards yet"
+          description="Create your first board with the field above."
+        />
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <HubCardList>
           {boards.map(b => {
             const busy = busyId === b.id
             const renaming = renamingId === b.id
             return (
-              <li key={b.id}
-                style={{
-                  background: colors.surface, borderRadius: 12, border: `1px solid ${colors.border}`,
-                  padding: '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  opacity: busy ? 0.65 : 1,
-                }}>
+              <HubCard key={b.id} className={busy ? 'wb-hub-card--busy' : ''}>
                 {renaming ? (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input
+                      className="wb-hub-input"
                       autoFocus
                       value={renameValue}
                       onChange={e => setRenameValue(e.target.value)}
@@ -199,42 +198,41 @@ export default function BoardsPanel({ session, onOpenBoard }) {
                         if (e.key === 'Enter') saveRename(b.id)
                         if (e.key === 'Escape') cancelRename()
                       }}
-                      style={{ flex: 1, minWidth: 160, fontSize: 17, padding: '12px 14px', borderRadius: 10, border: `2px solid ${colors.accent}`, minHeight: sizes.touchMin }}
+                      aria-label="Board name"
                     />
-                    <button type="button" onClick={() => saveRename(b.id)} disabled={busy} style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}>Save</button>
-                    <button type="button" onClick={cancelRename} style={actionBtn}>Cancel</button>
+                    <HubButton variant="primary" onClick={() => saveRename(b.id)} disabled={busy}>Save</HubButton>
+                    <HubButton onClick={cancelRename}>Cancel</HubButton>
                   </div>
                 ) : (
                   <>
-                    <button type="button" onClick={() => onOpenBoard(b)} disabled={busy}
-                      style={{
-                        width: '100%', textAlign: 'left', padding: '4px 0', border: 'none', background: 'transparent',
-                        cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between', gap: 16, minHeight: sizes.touchMin,
-                      }}>
+                    <button
+                      type="button"
+                      className="wb-hub-card__open"
+                      onClick={() => onOpenBoard(b)}
+                      disabled={busy}
+                    >
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</div>
-                        <div style={{ fontSize: 14, color: colors.textMuted, marginTop: 6 }}>Updated {formatWhen(b.updated_at)}</div>
+                        <div className="wb-hub-card__title">{b.name}</div>
+                        <div className="wb-hub-card__meta">Updated {formatWhen(b.updated_at)}</div>
                       </div>
-                      <span style={{ fontSize: 17, color: colors.accent, fontWeight: 700, flexShrink: 0 }}>Open →</span>
+                      <span className="wb-hub-card__open-label">Open →</span>
                     </button>
-                    <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-                      <button type="button" onClick={e => startRename(e, b)} disabled={busy} style={actionBtn}>Rename</button>
-                      <button type="button" onClick={e => duplicateBoard(e, b)} disabled={busy} style={actionBtn}>
+                    <div className="wb-hub-card__actions">
+                      <HubButton onClick={e => startRename(e, b)} disabled={busy}>Rename</HubButton>
+                      <HubButton onClick={e => duplicateBoard(e, b)} disabled={busy}>
                         {busy ? 'Working…' : 'Duplicate'}
-                      </button>
-                      <button type="button" onClick={e => deleteBoard(e, b)} disabled={busy}
-                        style={{ ...actionBtn, color: colors.danger, borderColor: '#fecaca', background: colors.dangerBg }}>
+                      </HubButton>
+                      <HubButton variant="danger" onClick={e => deleteBoard(e, b)} disabled={busy}>
                         Delete
-                      </button>
+                      </HubButton>
                     </div>
                   </>
                 )}
-              </li>
+              </HubCard>
             )
           })}
-        </ul>
+        </HubCardList>
       )}
-    </div>
+    </HubPanel>
   )
 }

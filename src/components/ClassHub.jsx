@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { colors, touchBtn } from '../uiTheme'
 import BoardsPanel from './BoardsPanel'
 import FlashcardsPanel from './FlashcardsPanel'
 import GroupsPanel from './GroupsPanel'
 import TimerPresetsPanel from './TimerPresetsPanel'
 
 const TABS = [
-  { id: 'boards', label: 'Boards' },
-  { id: 'flashcards', label: 'Flashcards' },
-  { id: 'tools', label: 'Class tools' },
-  { id: 'timers', label: 'Timer presets' },
+  { id: 'boards', label: 'Boards', icon: '📋' },
+  { id: 'flashcards', label: 'Flashcards', icon: '🃏' },
+  { id: 'tools', label: 'Class tools', icon: '🛠' },
+  { id: 'timers', label: 'Timer presets', icon: '⏱' },
 ]
 
 export default function ClassHub({ session, onOpenBoard }) {
@@ -20,50 +19,34 @@ export default function ClassHub({ session, onOpenBoard }) {
   const signOut = async () => { await supabase.auth.signOut() }
 
   return (
-    <div className="wb-class-hub" style={{ height: '100vh', background: '#eef1f4', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 28px', background: colors.surface, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: colors.text }}>Class Launchpad</h1>
-        <button type="button" onClick={signOut} style={touchBtn({ fontSize: 15 })}>Sign out</button>
+    <div className="wb-class-hub">
+      <header className="wb-class-hub__header">
+        <div>
+          <h1 className="wb-class-hub__brand-title">Class Launchpad</h1>
+          <p className="wb-class-hub__brand-tagline">Boards, flashcards, class tools & timers</p>
+        </div>
+        <button type="button" className="wb-class-hub__signout" onClick={signOut}>
+          Sign out
+        </button>
       </header>
 
-      <nav style={{
-        display: 'flex',
-        gap: 8,
-        padding: '12px 28px',
-        background: colors.surface,
-        borderBottom: `1px solid ${colors.border}`,
-        flexWrap: 'wrap',
-        flexShrink: 0,
-      }}>
+      <nav className="wb-class-hub__nav" aria-label="Launchpad sections">
         {TABS.map(t => (
           <button
             key={t.id}
             type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`wb-class-hub__tab${tab === t.id ? ' wb-class-hub__tab--active' : ''}`}
             onClick={() => setTab(t.id)}
-            style={touchBtn({
-              background: tab === t.id ? colors.accent : '#f6f8fa',
-              color: tab === t.id ? '#fff' : colors.text,
-              border: `1px solid ${tab === t.id ? colors.accentDark : colors.border}`,
-              padding: '10px 18px',
-            })}
           >
+            <span className="wb-class-hub__tab-icon" aria-hidden>{t.icon}</span>
             {t.label}
           </button>
         ))}
       </nav>
 
-      <main className="wb-class-hub__main" style={{
-        flex: 1,
-        minHeight: 0,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        WebkitOverflowScrolling: 'touch',
-        maxWidth: 960,
-        width: '100%',
-        margin: '0 auto',
-        padding: '36px 28px',
-        boxSizing: 'border-box',
-      }}>
+      <main className="wb-class-hub__main" role="tabpanel">
         {tab === 'boards' && <BoardsPanel session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'flashcards' && <FlashcardsPanel userId={userId} />}
         {tab === 'tools' && <GroupsPanel userId={userId} />}

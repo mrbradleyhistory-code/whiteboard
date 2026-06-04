@@ -17,9 +17,7 @@ import {
   toggleSeatAt,
   unassignedStudents,
 } from '../seatingChart'
-import { colors, touchBtn } from '../uiTheme'
-
-const actionBtn = touchBtn({ padding: '10px 16px', fontSize: 14 })
+import { HubButton } from './hubUi'
 
 export default function SeatingChartEditor({
   students,
@@ -177,21 +175,17 @@ export default function SeatingChartEditor({
 
   return (
     <div className="wb-seating">
-      <p style={{ fontSize: 14, color: colors.textMuted, margin: '0 0 12px' }}>
+      <p className="wb-hub-hint">
         Choose a rectangle grid or draw a custom room shape. Place students by hand, then auto-fill the rest.
         Save layouts to project on a whiteboard.
       </p>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-          <input
-            type="radio"
-            checked={!isCustom}
-            onChange={() => setLayout('grid')}
-          />
+      <div className="wb-hub-radio-row">
+        <label>
+          <input type="radio" checked={!isCustom} onChange={() => setLayout('grid')} />
           Rectangle grid
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+        <label>
           <input
             type="radio"
             checked={isCustom}
@@ -201,48 +195,44 @@ export default function SeatingChartEditor({
         </label>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+      <div className="wb-hub-toolbar" style={{ marginBottom: 14 }}>
+        <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
           Canvas rows
           <input
             type="number"
             min={1}
             max={24}
+            className="wb-hub-input"
+            style={{ width: 56, minHeight: 44, padding: '8px 10px' }}
             value={layoutRows}
             onChange={e => setLayoutRows(parseInt(e.target.value, 10) || 1)}
-            style={{ width: 56, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }}
           />
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+        <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
           Canvas columns
           <input
             type="number"
             min={1}
             max={24}
+            className="wb-hub-input"
+            style={{ width: 56, minHeight: 44, padding: '8px 10px' }}
             value={layoutCols}
             onChange={e => setLayoutCols(parseInt(e.target.value, 10) || 1)}
-            style={{ width: 56, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }}
           />
         </label>
-        <button type="button" onClick={applyCanvasSize} style={actionBtn}>
+        <HubButton onClick={applyCanvasSize}>
           {isCustom ? 'Apply canvas size' : 'Apply grid'}
-        </button>
-        <button
-          type="button"
+        </HubButton>
+        <HubButton
+          className={designMode ? 'wb-hub-btn--warn' : ''}
           onClick={() => setDesignMode(m => !m)}
-          style={{
-            ...actionBtn,
-            background: designMode ? colors.warnBg : colors.surface,
-            color: designMode ? colors.warn : colors.text,
-            border: `1px solid ${designMode ? colors.warn : colors.border}`,
-          }}
         >
           {designMode ? 'Done designing' : isCustom ? 'Design room' : 'Edit desks'}
-        </button>
+        </HubButton>
       </div>
 
       {designMode && (
-        <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 12px' }}>
+        <p className="wb-hub-hint">
           {isCustom
             ? 'Tap empty space to add a desk, or tap a desk to remove it. Arrange desks to match your room.'
             : 'Tap a desk to remove it from the grid (aisles, etc.), or tap + desk to add it back.'}
@@ -250,7 +240,7 @@ export default function SeatingChartEditor({
       )}
 
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: colors.textMuted, marginBottom: 8 }}>
+        <div className="wb-hub-subheading" style={{ fontSize: '0.875rem', marginBottom: 8 }}>
           Front of room
         </div>
         <div className="wb-seating__grid-wrap">
@@ -263,14 +253,14 @@ export default function SeatingChartEditor({
             )}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 8, textAlign: 'center' }}>
+        <p className="wb-hub-hint" style={{ marginTop: 8, textAlign: 'center' }}>
           {seatCount} desks · {manualCount} placed · {unassigned.length} unassigned
-        </div>
+        </p>
       </div>
 
       {unassigned.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Unassigned</h4>
+          <h4 className="wb-hub-subheading">Unassigned</h4>
           <div className="wb-seating__pool">
             {unassigned.map(s => (
               <span
@@ -286,102 +276,79 @@ export default function SeatingChartEditor({
             ))}
           </div>
           {pickStudentId && (
-            <p style={{ fontSize: 13, color: colors.accent, margin: '8px 0 0' }}>
+            <p className="wb-hub-hint" style={{ color: 'var(--wb-accent)', margin: '8px 0 0' }}>
               Tap a desk to place the selected student.
             </p>
           )}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-        <button
-          type="button"
+      <div className="wb-hub-toolbar" style={{ marginBottom: 8 }}>
+        <HubButton
+          variant="primary"
           onClick={() => runFill(true)}
           disabled={!unassigned.length || !seatCount}
-          style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}
         >
           Fill remaining seats
-        </button>
-        <button type="button" onClick={() => runFill(false)} style={actionBtn}>
-          Auto-fill all
-        </button>
-        <button type="button" onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }} style={actionBtn}>
+        </HubButton>
+        <HubButton onClick={() => runFill(false)}>Auto-fill all</HubButton>
+        <HubButton onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }}>
           Clear assignments
-        </button>
-        <label style={{ fontSize: 14, color: colors.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+        </HubButton>
+        <label className="wb-hub-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
           Seed
           <input
+            className="wb-hub-input"
             value={seed}
             onChange={e => setSeed(e.target.value)}
             placeholder="optional"
-            style={{ width: 120, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }}
+            style={{ width: 120, minHeight: 44, padding: '8px 10px' }}
           />
         </label>
       </div>
-      <p style={{ fontSize: 13, color: colors.textMuted, margin: '0 0 12px' }}>
+      <p className="wb-hub-hint">
         Place students manually first, then use Fill remaining to seat everyone else using your never-together and keep-together rules.
       </p>
-      {fillError && <p style={{ color: colors.danger, margin: '0 0 12px' }}>{fillError}</p>}
+      {fillError && <p className="wb-hub-alert">{fillError}</p>}
 
       {onSave && (
-        <div style={{
-          display: 'flex',
-          gap: 10,
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          padding: 16,
-          marginBottom: 16,
-          background: colors.accentLight,
-          borderRadius: 10,
-          border: `1px solid ${colors.accent}`,
-        }}>
+        <div className="wb-hub-save-banner">
           <input
+            className="wb-hub-input"
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
             placeholder={savePlaceholder}
-            style={{
-              flex: 1,
-              minWidth: 200,
-              padding: '12px 14px',
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              fontSize: 16,
-            }}
+            aria-label="Saved chart name"
           />
-          <button
-            type="button"
+          <HubButton
+            variant="primary"
             onClick={() => {
               if (!saveName.trim()) return
               onSave(saveName.trim())
               setSaveName('')
             }}
-            style={{ ...actionBtn, background: colors.accent, color: '#fff', border: 'none' }}
           >
             Save seating chart
-          </button>
+          </HubButton>
         </div>
       )}
 
       {savedCharts.length > 0 && (
         <div style={{ paddingTop: 4 }}>
-          <h4 style={{ margin: '0 0 10px', fontSize: 15 }}>Saved seating charts</h4>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h4 className="wb-hub-subheading">Saved seating charts</h4>
+          <ul className="wb-hub-saved-list">
             {savedCharts.map(entry => (
-              <li key={entry.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontWeight: 600, flex: 1, minWidth: 120 }}>{entry.name}</span>
-                <span style={{ fontSize: 13, color: colors.textMuted }}>
+              <li key={entry.id}>
+                <span className="wb-hub-saved-list__name">{entry.name}</span>
+                <span className="wb-hub-saved-list__meta">
                   {assignedCount(entry.chart)} seated · {listSeats(entry.chart).length} desks
                   {entry.chart.layout === 'custom' ? ' · custom' : ''}
                 </span>
                 {onLoad && (
-                  <button type="button" onClick={() => onLoad(cloneChart(entry.chart))} style={actionBtn}>
-                    Load
-                  </button>
+                  <HubButton onClick={() => onLoad(cloneChart(entry.chart))}>Load</HubButton>
                 )}
                 {onDelete && (
-                  <button type="button" onClick={() => onDelete(entry.id)} style={{ ...actionBtn, color: colors.danger }}>
-                    Delete
-                  </button>
+                  <HubButton variant="danger" onClick={() => onDelete(entry.id)}>Delete</HubButton>
                 )}
               </li>
             ))}
