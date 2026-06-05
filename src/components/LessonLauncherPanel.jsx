@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadClassData } from '../localClassData'
 import { supabase } from '../supabaseClient'
+import { LESSON_THEMES } from '../lessonThemes'
 import {
   createEmptyLesson,
   deleteLesson,
@@ -318,6 +319,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
               0,
             )
             const linkedBoard = boards.find(b => b.id === lesson.boardId)
+            const themeLabel = LESSON_THEMES.find(t => t.id === lesson.theme)?.label
             return (
               <HubCard key={lesson.id}>
                 <div className="wb-hub-deck-header">
@@ -325,6 +327,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
                     <div className="wb-hub-card__title">{lesson.title}</div>
                     <div className="wb-hub-card__meta">
                       {stepCount} step{stepCount !== 1 ? 's' : ''}
+                      {themeLabel && lesson.theme !== 'classic' ? ` · ${themeLabel}` : ''}
                       {linkedBoard ? ` · Board: ${linkedBoard.name}` : ''}
                     </div>
                     {lesson.learningTarget && (

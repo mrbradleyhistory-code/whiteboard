@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadClassData } from '../localClassData'
+import { lessonThemeClass } from '../lessonThemes'
 import { HubButton } from './hubUi'
 
 export default function LessonRunSetup({ userId, lesson, defaultClassId, onStart, onCancel }) {
@@ -20,7 +21,7 @@ export default function LessonRunSetup({ userId, lesson, defaultClassId, onStart
   return (
     <div className="wb-modal-backdrop" role="presentation" onClick={onCancel}>
       <div
-        className="wb-modal"
+        className={`wb-modal wb-lesson-run-setup ${lessonThemeClass(lesson.theme)}`}
         role="dialog"
         aria-labelledby="lesson-run-setup-title"
         onClick={e => e.stopPropagation()}

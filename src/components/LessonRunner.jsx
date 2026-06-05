@@ -4,6 +4,7 @@ import {
   lessonAgendaSteps,
   lessonDeadlineItems,
 } from '../lessonLauncher'
+import { lessonThemeClass } from '../lessonThemes'
 import LessonRunnerBoard from './LessonRunnerBoard'
 import RunnerClassTools from './RunnerClassTools'
 
@@ -138,7 +139,13 @@ export default function LessonRunner({
   const scPreview = lesson.successCriteria?.trim()
 
   return (
-    <div className={`wb-lesson-runner${boardPanel === 'fullscreen' ? ' wb-lesson-runner--board-fs' : ''}`}>
+    <div
+      className={[
+        'wb-lesson-runner',
+        lessonThemeClass(lesson.theme),
+        boardPanel === 'fullscreen' ? 'wb-lesson-runner--board-fs' : '',
+      ].filter(Boolean).join(' ')}
+    >
       <header className="wb-lesson-runner__header">
         <div className="wb-lesson-runner__header-main">
           <h1 className="wb-lesson-runner__title">{lesson.title}</h1>

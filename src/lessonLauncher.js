@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { normalizeLessonTheme } from './lessonThemes'
 
 export const LESSON_SECTIONS = [
   { id: 'warmup', label: 'Warmup' },
@@ -117,6 +118,7 @@ export function normalizeLesson(raw) {
     successCriteria: String(raw.successCriteria || '').trim(),
     boardId: raw.boardId || null,
     classId: raw.classId || null,
+    theme: normalizeLessonTheme(raw.theme),
     sections,
     createdAt: raw.createdAt || now,
     updatedAt: raw.updatedAt || now,

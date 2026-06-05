@@ -7,6 +7,7 @@ import {
   normalizeTargetTemplate,
 } from '../lessonLauncher'
 import { HubButton, HubPanelBlock } from './hubUi'
+import LessonThemePicker from './LessonThemePicker'
 
 function OutcomeField({
   label,
@@ -385,6 +386,10 @@ export default function LessonEditor({
           field="successCriteria"
           onSaveAsTemplate={() => saveOutcomeTemplate('successCriteria', lesson.successCriteria)}
           onOpenBanks={onOpenBanks}
+        />
+        <LessonThemePicker
+          value={lesson.theme || 'classic'}
+          onChange={theme => patchLesson({ theme })}
         />
         <label className="wb-lesson-field">
           <span>Whiteboard for this lesson</span>

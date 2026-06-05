@@ -854,6 +854,11 @@ html, body, #root {
 }
 
 .wb-lesson-runner {
+  --wb-runner-btn-bg: #f6f8fa;
+  --wb-runner-deadline-bg: #fffbeb;
+  --wb-runner-frame-bg: #eef1f4;
+  --wb-runner-shadow: var(--wb-hub-shadow);
+  --wb-lesson-display-font: inherit;
   position: fixed;
   inset: 0;
   z-index: 500;
@@ -861,6 +866,77 @@ html, body, #root {
   flex-direction: column;
   background: var(--wb-bg);
   color: var(--wb-text);
+}
+
+/* Lesson runner themes */
+.wb-lesson-runner.wb-lesson-theme--dark {
+  --wb-bg: #111318;
+  --wb-surface: #1a1f28;
+  --wb-border: #2e3648;
+  --wb-text: #e8ecf2;
+  --wb-text-muted: #9aa3b2;
+  --wb-accent: #5d9fd4;
+  --wb-accent-dark: #6eb3e8;
+  --wb-accent-light: #1a2838;
+  --wb-runner-btn-bg: #252b38;
+  --wb-runner-deadline-bg: #2a2618;
+  --wb-runner-frame-bg: #0d0f12;
+  --wb-runner-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.wb-lesson-runner.wb-lesson-theme--prehistoric {
+  --wb-bg: #3d3428;
+  --wb-surface: #f2e6cf;
+  --wb-border: #9a8268;
+  --wb-text: #2a2218;
+  --wb-text-muted: #5c4a38;
+  --wb-accent: #c45c26;
+  --wb-accent-dark: #9a4418;
+  --wb-accent-light: #e8d5b5;
+  --wb-runner-btn-bg: #e8d9bc;
+  --wb-runner-deadline-bg: #f8edd8;
+  --wb-runner-frame-bg: #4a4034;
+  --wb-runner-shadow: 0 2px 14px rgba(42, 34, 24, 0.28);
+  --wb-lesson-display-font: Georgia, 'Palatino Linotype', 'Book Antiqua', serif;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 15% 0%, rgba(196, 92, 38, 0.18), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(72, 98, 58, 0.14), transparent);
+}
+
+.wb-lesson-runner.wb-lesson-theme--prehistoric .wb-lesson-runner__title {
+  font-family: var(--wb-lesson-display-font);
+  letter-spacing: 0.02em;
+}
+
+.wb-lesson-runner.wb-lesson-theme--prehistoric .wb-lesson-runner__directions {
+  border-width: 2px;
+  border-color: var(--wb-accent);
+}
+
+/* Run-setup modal inherits theme preview */
+.wb-lesson-run-setup.wb-lesson-theme--dark {
+  --wb-accent: #5d9fd4;
+  --wb-accent-dark: #4a84b5;
+  --wb-accent-light: #1e2d42;
+  --wb-text: #1a1f26;
+  --wb-text-muted: #5c6570;
+  background: #1a1f28;
+  color: #e8ecf2;
+  border: 1px solid #2e3648;
+}
+
+.wb-lesson-run-setup.wb-lesson-theme--dark .wb-hub-hint {
+  color: #9aa3b2;
+}
+
+.wb-lesson-run-setup.wb-lesson-theme--prehistoric {
+  background: #f2e6cf;
+  border: 2px solid #9a8268;
+  color: #2a2218;
+}
+
+.wb-lesson-run-setup.wb-lesson-theme--prehistoric .wb-hub-hint {
+  color: #5c4a38;
 }
 
 .wb-lesson-runner__header {
@@ -1046,7 +1122,7 @@ html, body, #root {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--wb-border);
-  background: #f6f8fa;
+  background: var(--wb-runner-btn-bg);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1074,7 +1150,7 @@ html, body, #root {
   padding: 12px;
   border-radius: 10px;
   border: 1px solid var(--wb-border);
-  background: #fffbeb;
+  background: var(--wb-runner-deadline-bg);
 }
 
 .wb-lesson-runner__deadline-title {
@@ -1156,7 +1232,7 @@ html, body, #root {
   background: var(--wb-surface);
   border-radius: 12px;
   border: 1px solid var(--wb-border);
-  box-shadow: var(--wb-hub-shadow);
+  box-shadow: var(--wb-runner-shadow);
 }
 
 .wb-lesson-runner__directions-text {
@@ -1222,7 +1298,8 @@ html, body, #root {
   padding: 10px 18px;
   border-radius: 10px;
   border: 1px solid var(--wb-border);
-  background: #f6f8fa;
+  background: var(--wb-runner-btn-bg);
+  color: var(--wb-text);
   font-size: 0.95rem;
   font-weight: 600;
 }
@@ -1230,6 +1307,10 @@ html, body, #root {
 .wb-lesson-runner__btn--primary {
   background: var(--wb-accent);
   border-color: var(--wb-accent-dark);
+  color: #fff;
+}
+
+.wb-lesson-runner.wb-lesson-theme--dark .wb-lesson-runner__btn--primary {
   color: #fff;
 }
 
@@ -1289,7 +1370,8 @@ html, body, #root {
   padding: 6px 14px;
   border-radius: 8px;
   border: 1px solid var(--wb-border);
-  background: #f6f8fa;
+  background: var(--wb-runner-btn-bg);
+  color: var(--wb-text);
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -1569,6 +1651,78 @@ html, body, #root {
 .wb-class-hub__main .wb-lesson-runner {
   position: fixed;
   z-index: 500;
+}
+
+.wb-lesson-theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .wb-lesson-theme-picker {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wb-lesson-theme-picker__option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--wb-hub-radius);
+  border: 2px solid var(--wb-border);
+  background: var(--wb-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.wb-lesson-theme-picker__option:hover {
+  border-color: var(--wb-accent);
+}
+
+.wb-lesson-theme-picker__option--selected {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 1px var(--wb-accent);
+}
+
+.wb-lesson-theme-picker__preview {
+  display: block;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.wb-lesson-theme-picker__preview--classic {
+  background: linear-gradient(135deg, #e8f2f8 40%, #ffffff 40%, #ffffff 60%, #457b9d 60%);
+}
+
+.wb-lesson-theme-picker__preview--dark {
+  background: linear-gradient(135deg, #1a1f28 50%, #111318 50%, #111318 70%, #5d9fd4 70%);
+}
+
+.wb-lesson-theme-picker__preview--prehistoric {
+  background: linear-gradient(135deg, #3d3428 30%, #f2e6cf 30%, #f2e6cf 65%, #c45c26 65%);
+}
+
+.wb-lesson-theme-picker__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-lesson-theme-picker__label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-lesson-theme-picker__desc {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--wb-text-muted);
 }
 
 .wb-lesson-editor__savebar {
