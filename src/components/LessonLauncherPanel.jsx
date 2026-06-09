@@ -57,21 +57,26 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
-    const [{ blocks: b, targetTemplates: tt, lessons: l, error: dataErr }, boardsRes] = await Promise.all([
-      fetchLessonLauncherData(userId),
-      supabase
-        .from('boards')
-        .select('id, name')
-        .order('updated_at', { ascending: false }),
-    ])
-    setBlocks(b)
-    setBlockTags(bt || [])
-    setTargetTemplates(tt)
-    setLessons(l)
-    if (dataErr) setError(dataErr)
-    if (boardsRes.error) setError(prev => prev || boardsRes.error.message)
-    else setBoards(boardsRes.data || [])
-    setLoading(false)
+    try {
+      const [{ blocks: b, blockTags: bt, targetTemplates: tt, lessons: l, error: dataErr }, boardsRes] = await Promise.all([
+        fetchLessonLauncherData(userId),
+        supabase
+          .from('boards')
+          .select('id, name')
+          .order('updated_at', { ascending: false }),
+      ])
+      setBlocks(b)
+      setBlockTags(bt || [])
+      setTargetTemplates(tt)
+      setLessons(l)
+      if (dataErr) setError(dataErr)
+      if (boardsRes.error) setError(prev => prev || boardsRes.error.message)
+      else setBoards(boardsRes.data || [])
+    } catch (err) {
+      setError(err?.message || 'Failed to load lessons.')
+    } finally {
+      setLoading(false)
+    }
   }, [userId])
 
   useEffect(() => { load() }, [load])
