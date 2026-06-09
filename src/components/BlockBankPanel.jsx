@@ -5,7 +5,7 @@ import {
   filterAndSortBlocks,
 } from '../lessonBlockBank'
 import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
-import { HubButton, HubEmpty } from './hubUi'
+import { HubButton, HubEmpty, HubOverflowMenu } from './hubUi'
 import BlockTagInput from './BlockTagInput'
 import BlockTagManager from './BlockTagManager'
 
@@ -14,7 +14,9 @@ export default function BlockBankPanel({
   blockTags,
   onSaveBlocks,
   onAddToLesson,
+  onClose,
   saving,
+  drawer = false,
 }) {
   const [view, setView] = useState('list')
   const [query, setQuery] = useState('')
@@ -79,14 +81,15 @@ export default function BlockBankPanel({
   }
 
   const duplicatePart = async (block) => {
-    const copy = duplicateBlock(block)
-    await persist([copy, ...blocks])
+    await persist([duplicateBlock(block), ...blocks])
   }
 
   const removeBlock = async (id) => {
     if (!confirm('Delete this part from your bank?')) return
     await persist(blocks.filter(b => b.id !== id))
   }
+
+  const panelClass = `wb-lesson-bank${drawer ? ' wb-lesson-bank--drawer' : ''}`
 
   if (view === 'tags') {
     return (
@@ -103,23 +106,25 @@ export default function BlockBankPanel({
   if (view === 'edit' && editing) {
     const isNew = !blocks.some(b => b.id === editing.id)
     return (
-      <aside className="wb-lesson-bank" aria-label="Activity bank">
+      <aside className={panelClass} aria-label="Parts bank">
         <div className="wb-lesson-bank__head">
           <h2 className="wb-lesson-bank__title">{isNew ? 'New part' : 'Edit part'}</h2>
+          {onClose && (
+            <button type="button" className="wb-lesson-bank__close" onClick={onClose} aria-label="Close bank">×</button>
+          )}
         </div>
         {error && <p className="wb-lesson-bank__error" role="alert">{error}</p>}
         <div className="wb-lesson-bank__edit">
-          <label className="wb-lesson-field">
+          <label className="wb-lesson-field wb-lesson-field--compact">
             <span>Name</span>
             <input
               className="wb-hub-input"
               value={editing.name}
               onChange={e => setEditing({ ...editing, name: e.target.value })}
-              placeholder="e.g. Gallery walk"
             />
           </label>
-          <label className="wb-lesson-field">
-            <span>Default section</span>
+          <label className="wb-lesson-field wb-lesson-field--compact">
+            <span>Section</span>
             <select
               className="wb-hub-input"
               value={editing.section}
@@ -135,7 +140,7 @@ export default function BlockBankPanel({
             vocabulary={vocabulary}
             onChange={tags => setEditing({ ...editing, tags })}
           />
-          <label className="wb-lesson-field">
+          <label className="wb-lesson-field wb-lesson-field--compact">
             <span>Directions</span>
             <textarea
               className="wb-hub-textarea"
@@ -145,18 +150,17 @@ export default function BlockBankPanel({
             />
           </label>
           {editing.section === 'deadline' ? (
-            <label className="wb-lesson-field">
-              <span>Default due label</span>
+            <label className="wb-lesson-field wb-lesson-field--compact">
+              <span>Due label</span>
               <input
                 className="wb-hub-input"
                 value={editing.dueLabel || ''}
                 onChange={e => setEditing({ ...editing, dueLabel: e.target.value })}
-                placeholder="e.g. Friday, 6/5"
               />
             </label>
           ) : (
-            <label className="wb-lesson-field">
-              <span>Default timer (minutes)</span>
+            <label className="wb-lesson-field wb-lesson-field--compact">
+              <span>Timer (min)</span>
               <input
                 type="number"
                 min={0}
@@ -172,9 +176,7 @@ export default function BlockBankPanel({
             </label>
           )}
           <div className="wb-lesson-bank__edit-actions">
-            <HubButton variant="primary" onClick={saveEditing} disabled={saving}>
-              {saving ? 'Saving…' : 'Save part'}
-            </HubButton>
+            <HubButton variant="primary" onClick={saveEditing} disabled={saving}>Save</HubButton>
             <HubButton onClick={() => { setEditing(null); setView('list'); setError('') }}>Cancel</HubButton>
           </div>
         </div>
@@ -183,76 +185,84 @@ export default function BlockBankPanel({
   }
 
   return (
-    <aside className="wb-lesson-bank" aria-label="Activity bank">
+    <aside className={panelClass} aria-label="Parts bank">
       <div className="wb-lesson-bank__head">
         <h2 className="wb-lesson-bank__title">Parts bank</h2>
-        <p className="wb-lesson-bank__lead">Drag parts into your lesson, duplicate, or edit them here.</p>
+        <div className="wb-lesson-bank__head-actions">
+          <HubButton variant="ghost" className="wb-hub-btn--sm" onClick={() => setView('tags')}>Tags</HubButton>
+          <HubButton variant="primary" className="wb-hub-btn--sm" onClick={startNew}>+ New</HubButton>
+          {onClose && (
+            <button type="button" className="wb-lesson-bank__close" onClick={onClose} aria-label="Close bank">×</button>
+          )}
+        </div>
       </div>
 
       {error && <p className="wb-lesson-bank__error" role="alert">{error}</p>}
 
-      <div className="wb-lesson-bank__toolbar">
-        <input
-          className="wb-hub-input wb-lesson-bank__search"
-          type="search"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search parts…"
-          aria-label="Search parts bank"
-        />
-        <select
-          className="wb-hub-input wb-lesson-bank__sort"
-          value={sort}
-          onChange={e => setSort(e.target.value)}
-          aria-label="Sort parts"
-        >
-          {BLOCK_SORT_OPTIONS.map(o => (
-            <option key={o.id} value={o.id}>{o.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="wb-lesson-bank__filters">
-        <select
-          className="wb-hub-input wb-lesson-bank__section-filter"
-          value={sectionFilter}
-          onChange={e => setSectionFilter(e.target.value)}
-          aria-label="Filter by section"
-        >
-          <option value="">All sections</option>
-          {LESSON_SECTIONS.map(s => (
-            <option key={s.id} value={s.id}>{s.label}</option>
-          ))}
-        </select>
-        <HubButton variant="ghost" className="wb-hub-btn--sm" onClick={() => setView('tags')}>Tags</HubButton>
-        <HubButton variant="primary" className="wb-hub-btn--sm" onClick={startNew}>+ New</HubButton>
-      </div>
-
-      {vocabulary.length > 0 && (
-        <div className="wb-lesson-bank__tag-filters" role="group" aria-label="Filter by tag">
-          {vocabulary.map(tag => (
-            <button
-              key={tag}
-              type="button"
-              className={`wb-hub-chip${activeTags.includes(tag) ? ' wb-hub-chip--active' : ''}`}
-              onClick={() => toggleTagFilter(tag)}
+      <details className="wb-lesson-bank__filters-panel">
+        <summary>Search &amp; filters</summary>
+        <div className="wb-lesson-bank__filters-body">
+          <input
+            className="wb-hub-input wb-lesson-bank__search"
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search parts"
+          />
+          <div className="wb-lesson-bank__filters-row">
+            <select
+              className="wb-hub-input"
+              value={sectionFilter}
+              onChange={e => setSectionFilter(e.target.value)}
+              aria-label="Section filter"
             >
-              {tag}
-            </button>
-          ))}
+              <option value="">All sections</option>
+              {LESSON_SECTIONS.map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+            <select
+              className="wb-hub-input"
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              aria-label="Sort"
+            >
+              {BLOCK_SORT_OPTIONS.map(o => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          {vocabulary.length > 0 && (
+            <div className="wb-lesson-bank__tag-filters" role="group" aria-label="Tags">
+              {vocabulary.map(tag => (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`wb-hub-chip${activeTags.includes(tag) ? ' wb-hub-chip--active' : ''}`}
+                  onClick={() => toggleTagFilter(tag)}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </details>
 
       <div className="wb-lesson-bank__list">
         {filtered.length === 0 ? (
-          <HubEmpty
-            title="No matching parts"
-            description={blocks.length === 0 ? 'Create your first reusable lesson part.' : 'Try clearing filters or search.'}
-          />
+          <HubEmpty title="No parts" description="Adjust filters or create a new part." />
         ) : (
           <ul className="wb-lesson-bank__cards">
             {filtered.map(block => {
               const sectionLabel = LESSON_SECTIONS.find(s => s.id === block.section)?.label || block.section
+              const menuItems = [
+                ...(onAddToLesson ? [{ label: 'Add to lesson', onClick: () => onAddToLesson(block) }] : []),
+                { label: 'Duplicate', onClick: () => duplicatePart(block) },
+                { label: 'Edit', onClick: () => startEdit(block) },
+                { label: 'Delete', onClick: () => removeBlock(block.id), danger: true },
+              ]
               return (
                 <li key={block.id}>
                   <div
@@ -263,41 +273,12 @@ export default function BlockBankPanel({
                       e.dataTransfer.effectAllowed = 'copy'
                     }}
                   >
-                    <div className="wb-lesson-bank__card-main">
-                      <span className="wb-lesson-bank__card-grip" aria-hidden>⠿</span>
-                      <div className="wb-lesson-bank__card-body">
-                        <span className="wb-lesson-bank__card-name">{block.name}</span>
-                        <span className="wb-lesson-bank__card-meta">
-                          {sectionLabel}
-                          {block.durationSec > 0 && block.section !== 'deadline' && ` · ${Math.floor(block.durationSec / 60)} min`}
-                          {block.dueLabel && ` · ${block.dueLabel}`}
-                        </span>
-                        {block.tags?.length > 0 && (
-                          <span className="wb-lesson-bank__card-tags">
-                            {block.tags.map(t => (
-                              <span key={t} className="wb-lesson-bank__card-tag">{t}</span>
-                            ))}
-                          </span>
-                        )}
-                      </div>
+                    <span className="wb-lesson-bank__card-grip" aria-hidden>⠿</span>
+                    <div className="wb-lesson-bank__card-body">
+                      <span className="wb-lesson-bank__card-name">{block.name}</span>
+                      <span className="wb-lesson-bank__card-meta">{sectionLabel}</span>
                     </div>
-                    <div className="wb-lesson-bank__card-actions">
-                      {onAddToLesson && (
-                        <button
-                          type="button"
-                          className="wb-hub-btn wb-hub-btn--sm wb-hub-btn--primary"
-                          title={`Add to ${sectionLabel}`}
-                          onClick={() => onAddToLesson(block)}
-                        >
-                          + Add
-                        </button>
-                      )}
-                      <button type="button" className="wb-hub-btn wb-hub-btn--sm" onClick={() => duplicatePart(block)} disabled={saving}>
-                        Duplicate
-                      </button>
-                      <button type="button" className="wb-hub-btn wb-hub-btn--sm" onClick={() => startEdit(block)}>Edit</button>
-                      <button type="button" className="wb-hub-btn wb-hub-btn--sm wb-hub-btn--danger" onClick={() => removeBlock(block.id)}>Delete</button>
-                    </div>
+                    <HubOverflowMenu items={menuItems} label={`Actions for ${block.name}`} />
                   </div>
                 </li>
               )

@@ -6,7 +6,7 @@ import {
   newItemId,
   normalizeItem,
 } from '../lessonLauncher'
-import { HubButton } from './hubUi'
+import { HubOverflowMenu } from './hubUi'
 
 function parseItemDrag(data) {
   try {
@@ -16,12 +16,147 @@ function parseItemDrag(data) {
   }
 }
 
-function SectionZone({
+function stepMeta(item, isDeadline) {
+  if (isDeadline && item.dueLabel) return item.dueLabel
+  if (!isDeadline && item.durationSec > 0) return `${Math.floor(item.durationSec / 60)} min`
+  return ''
+}
+
+function StepCard({
+  item,
+  sectionId,
+  isDeadline,
+  blocks,
+  expanded,
+  onToggleExpand,
+  onUpdate,
+  onRemove,
+  onSaveToBank,
+  saving,
+  dragState,
+  setDragState,
+  onDragOver,
+  onDrop,
+  showDropBefore,
+}) {
+  const linked = item.blockId && blocks.some(b => b.id === item.blockId)
+  const meta = stepMeta(item, isDeadline)
+
+  const menuItems = [
+    { label: expanded ? 'Collapse' : 'Edit step', onClick: onToggleExpand },
+    ...(onSaveToBank && (item.title?.trim() || item.directions?.trim())
+      ? [{ label: linked ? 'Update bank' : 'Save to bank', onClick: () => onSaveToBank(item, sectionId) }]
+      : []),
+    { label: 'Remove', onClick: () => onRemove(item.id), danger: true },
+  ]
+
+  return (
+    <li className="wb-lesson-step-wrap">
+      {showDropBefore && <div className="wb-lesson-sequence__drop-line" aria-hidden />}
+      <div
+        className={`wb-lesson-step${expanded ? ' wb-lesson-step--open' : ''}${dragState?.itemId === item.id ? ' wb-lesson-step--dragging' : ''}`}
+        draggable
+        onDragStart={e => {
+          e.dataTransfer.setData(
+            DND_ITEM_MIME,
+            JSON.stringify({ sectionId, itemId: item.id }),
+          )
+          e.dataTransfer.effectAllowed = 'move'
+          setDragState({ sectionId, itemId: item.id })
+        }}
+        onDragEnd={() => setDragState(null)}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
+        <div className="wb-lesson-step__head">
+          <span className="wb-lesson-step__grip" aria-hidden>⠿</span>
+          <button
+            type="button"
+            className="wb-lesson-step__summary"
+            onClick={onToggleExpand}
+            aria-expanded={expanded}
+          >
+            <span className="wb-lesson-step__title">{item.title?.trim() || 'Untitled step'}</span>
+            {meta && <span className="wb-lesson-step__meta">{meta}</span>}
+            {linked && <span className="wb-lesson-step__bank-badge" title="Linked to bank">◆</span>}
+          </button>
+          <HubOverflowMenu items={menuItems} label={`Actions for ${item.title || 'step'}`} />
+        </div>
+
+        {expanded && (
+          <div className="wb-lesson-step__body">
+            <label className="wb-lesson-field wb-lesson-field--compact">
+              <span>Title</span>
+              <input
+                className="wb-hub-input"
+                value={item.title}
+                onChange={e => onUpdate(item.id, { title: e.target.value })}
+              />
+            </label>
+            {isDeadline ? (
+              <>
+                <label className="wb-lesson-field wb-lesson-field--compact">
+                  <span>Due date</span>
+                  <input
+                    className="wb-hub-input"
+                    value={item.dueLabel}
+                    onChange={e => onUpdate(item.id, { dueLabel: e.target.value })}
+                    placeholder="e.g. Friday, 6/5"
+                  />
+                </label>
+                <label className="wb-lesson-field wb-lesson-field--compact">
+                  <span>Details</span>
+                  <textarea
+                    className="wb-hub-textarea"
+                    value={item.directions}
+                    onChange={e => onUpdate(item.id, { directions: e.target.value })}
+                    rows={3}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="wb-lesson-field wb-lesson-field--compact">
+                  <span>Directions</span>
+                  <textarea
+                    className="wb-hub-textarea"
+                    value={item.directions}
+                    onChange={e => onUpdate(item.id, { directions: e.target.value })}
+                    rows={3}
+                  />
+                </label>
+                <label className="wb-lesson-field wb-lesson-field--compact wb-lesson-item__duration">
+                  <span>Timer (min)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={120}
+                    className="wb-hub-input"
+                    style={{ width: 72 }}
+                    value={Math.floor(item.durationSec / 60)}
+                    onChange={e => {
+                      const m = parseInt(e.target.value, 10) || 0
+                      onUpdate(item.id, { durationSec: m * 60 })
+                    }}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function SectionColumn({
   sectionId,
   label,
   items,
   blocks,
   isDeadline,
+  expandedId,
+  setExpandedId,
   dragState,
   setDragState,
   onDropAt,
@@ -30,23 +165,17 @@ function SectionZone({
   saving,
 }) {
   const updateItems = (next) => onUpdateItems(sectionId, next)
+  const isDragTarget = dragState?.sectionId === sectionId && dragState?.index != null
 
   const addBlank = () => {
-    updateItems([
-      ...items,
-      normalizeItem(
-        isDeadline
-          ? { id: newItemId(), title: 'Assignment', dueLabel: '', directions: '', durationSec: 0 }
-          : { id: newItemId(), title: 'New step', directions: '', durationSec: 0 },
-      ),
-    ])
+    const item = normalizeItem(
+      isDeadline
+        ? { id: newItemId(), title: 'Assignment', dueLabel: '', directions: '', durationSec: 0 }
+        : { id: newItemId(), title: 'New step', directions: '', durationSec: 0 },
+    )
+    updateItems([...items, item])
+    setExpandedId(item.id)
   }
-
-  const updateItem = (id, patch) => {
-    updateItems(items.map(it => (it.id === id ? { ...it, ...patch } : it)))
-  }
-
-  const removeItem = (id) => updateItems(items.filter(it => it.id !== id))
 
   const handleDragOver = (e, index = null) => {
     if (!dragHasType(e, DND_BLOCK_MIME) && !dragHasType(e, DND_ITEM_MIME)) return
@@ -55,146 +184,73 @@ function SectionZone({
     setDragState({ sectionId, index })
   }
 
-  const showDropLine = (index) =>
-    dragState?.sectionId === sectionId && dragState?.index === index
-
   return (
     <section
-      className={`wb-lesson-sequence__section${items.length === 0 ? ' wb-lesson-sequence__section--empty' : ''}${dragState?.sectionId === sectionId && dragState?.index != null ? ' wb-lesson-sequence__section--drag' : ''}`}
+      className={`wb-lesson-sequence__column${items.length === 0 ? ' wb-lesson-sequence__column--empty' : ''}${isDragTarget ? ' wb-lesson-sequence__column--drag' : ''}`}
       onDragOver={e => handleDragOver(e, items.length)}
       onDrop={e => onDropAt(e, sectionId, items.length)}
     >
-      <header className="wb-lesson-sequence__section-head">
-        <h3 className="wb-lesson-sequence__section-title">{label}</h3>
-        <span className="wb-lesson-sequence__section-count">{items.length} step{items.length !== 1 ? 's' : ''}</span>
+      <header className="wb-lesson-sequence__column-head">
+        <h3 className="wb-lesson-sequence__column-title">{label}</h3>
+        <span className="wb-lesson-sequence__column-count">{items.length}</span>
       </header>
 
-      {items.length === 0 ? (
-        <div
-          className={`wb-lesson-sequence__dropzone${showDropLine(0) ? ' wb-lesson-sequence__dropzone--active' : ''}`}
-          onDragOver={e => handleDragOver(e, 0)}
-          onDrop={e => onDropAt(e, sectionId, 0)}
-        >
-          Drag a part here or add a custom step
-        </div>
-      ) : (
-        <ul className="wb-lesson-sequence__items">
-          {items.map((it, index) => (
-            <li key={it.id}>
-              {showDropLine(index) && <div className="wb-lesson-sequence__drop-line" aria-hidden />}
-              <div
-                className={`wb-lesson-sequence__item${dragState?.itemId === it.id ? ' wb-lesson-sequence__item--dragging' : ''}`}
-                draggable
-                onDragStart={e => {
-                  e.dataTransfer.setData(
-                    DND_ITEM_MIME,
-                    JSON.stringify({ sectionId, itemId: it.id }),
-                  )
-                  e.dataTransfer.effectAllowed = 'move'
-                  setDragState({ sectionId, itemId: it.id })
+      <div className="wb-lesson-sequence__column-body">
+        {items.length === 0 ? (
+          <div
+            className={`wb-lesson-sequence__dropzone${dragState?.sectionId === sectionId && dragState?.index === 0 ? ' wb-lesson-sequence__dropzone--active' : ''}`}
+            onDragOver={e => handleDragOver(e, 0)}
+            onDrop={e => onDropAt(e, sectionId, 0)}
+          >
+            Drop here
+          </div>
+        ) : (
+          <ul className="wb-lesson-sequence__column-items">
+            {items.map((it, index) => (
+              <StepCard
+                key={it.id}
+                item={it}
+                sectionId={sectionId}
+                isDeadline={isDeadline}
+                blocks={blocks}
+                expanded={expandedId === it.id}
+                onToggleExpand={() => setExpandedId(expandedId === it.id ? null : it.id)}
+                onUpdate={(id, patch) => updateItems(items.map(x => (x.id === id ? { ...x, ...patch } : x)))}
+                onRemove={id => {
+                  updateItems(items.filter(x => x.id !== id))
+                  if (expandedId === id) setExpandedId(null)
                 }}
-                onDragEnd={() => setDragState(null)}
+                onSaveToBank={onSaveToBank}
+                saving={saving}
+                dragState={dragState}
+                setDragState={setDragState}
                 onDragOver={e => handleDragOver(e, index)}
                 onDrop={e => {
                   e.stopPropagation()
                   onDropAt(e, sectionId, index)
                 }}
-              >
-                <span className="wb-lesson-sequence__item-grip" aria-hidden>⠿</span>
-                <div className="wb-lesson-sequence__item-fields">
-                  <input
-                    className="wb-hub-input"
-                    value={it.title}
-                    onChange={e => updateItem(it.id, { title: e.target.value })}
-                    placeholder={isDeadline ? 'Deadline title' : 'Step title'}
-                    aria-label={isDeadline ? 'Deadline title' : 'Step title'}
-                  />
-                  {isDeadline ? (
-                    <>
-                      <input
-                        className="wb-hub-input"
-                        value={it.dueLabel}
-                        onChange={e => updateItem(it.id, { dueLabel: e.target.value })}
-                        placeholder="Due date"
-                        aria-label="Due date"
-                      />
-                      <textarea
-                        className="wb-hub-textarea"
-                        value={it.directions}
-                        onChange={e => updateItem(it.id, { directions: e.target.value })}
-                        placeholder="Details…"
-                        rows={2}
-                        aria-label="Deadline details"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <textarea
-                        className="wb-hub-textarea"
-                        value={it.directions}
-                        onChange={e => updateItem(it.id, { directions: e.target.value })}
-                        placeholder="Directions…"
-                        rows={2}
-                        aria-label="Directions"
-                      />
-                      <label className="wb-lesson-item__duration">
-                        Timer (min)
-                        <input
-                          type="number"
-                          min={0}
-                          max={120}
-                          className="wb-hub-input"
-                          style={{ width: 72, minHeight: 44 }}
-                          value={Math.floor(it.durationSec / 60)}
-                          onChange={e => {
-                            const m = parseInt(e.target.value, 10) || 0
-                            updateItem(it.id, { durationSec: m * 60 })
-                          }}
-                        />
-                      </label>
-                    </>
-                  )}
-                  {onSaveToBank && (it.title?.trim() || it.directions?.trim()) && (
-                    <div className="wb-lesson-sequence__item-actions">
-                      <HubButton
-                        className="wb-hub-btn--sm"
-                        disabled={saving}
-                        onClick={() => onSaveToBank(it, sectionId)}
-                      >
-                        {it.blockId && blocks.some(b => b.id === it.blockId) ? 'Update bank' : 'Save to bank'}
-                      </HubButton>
-                      {it.blockId && blocks.some(b => b.id === it.blockId) && (
-                        <span className="wb-lesson-sequence__item-bank-link">Linked to bank</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="wb-lesson-sequence__item-remove"
-                  onClick={() => removeItem(it.id)}
-                  aria-label="Remove step"
-                >
-                  ×
-                </button>
-              </div>
-            </li>
-          ))}
-          {showDropLine(items.length) && <div className="wb-lesson-sequence__drop-line" aria-hidden />}
-        </ul>
-      )}
-
-      <div className="wb-lesson-sequence__section-actions">
-        <HubButton className="wb-hub-btn--sm" onClick={addBlank}>
-          + Custom {isDeadline ? 'deadline' : 'step'}
-        </HubButton>
+                showDropBefore={dragState?.sectionId === sectionId && dragState?.index === index}
+              />
+            ))}
+            {dragState?.sectionId === sectionId && dragState?.index === items.length && (
+              <li><div className="wb-lesson-sequence__drop-line" aria-hidden /></li>
+            )}
+          </ul>
+        )}
       </div>
+
+      <footer className="wb-lesson-sequence__column-foot">
+        <button type="button" className="wb-lesson-sequence__add-btn" onClick={addBlank}>
+          + {isDeadline ? 'Deadline' : 'Step'}
+        </button>
+      </footer>
     </section>
   )
 }
 
 export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSaveToBank, saving }) {
   const [dragState, setDragState] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
 
   const patchSection = (sectionId, items) => {
     onChange({
@@ -224,7 +280,9 @@ export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSave
       if (!block) return
       const targetItems = [...(lesson.sections[targetSectionId]?.items || [])]
       const at = resolveDropIndex(targetItems, index)
-      patchSection(targetSectionId, insertAt(targetItems, at, itemFromBlock(block)))
+      const item = itemFromBlock(block)
+      patchSection(targetSectionId, insertAt(targetItems, at, item))
+      setExpandedId(null)
       return
     }
 
@@ -259,28 +317,32 @@ export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSave
   }
 
   return (
-    <div className="wb-lesson-sequence">
+    <div className="wb-lesson-sequence wb-lesson-sequence--horizontal">
       <header className="wb-lesson-sequence__head">
-        <h2 className="wb-lesson-sequence__title">Lesson sequence</h2>
-        <p className="wb-lesson-sequence__lead">Drag parts from the bank. Reorder or move steps between sections.</p>
+        <h2 className="wb-lesson-sequence__title">Lesson rundown</h2>
+        <p className="wb-lesson-sequence__lead">Scroll sideways · drag parts from the bank · tap a step to edit</p>
       </header>
 
-      {LESSON_SECTIONS.map(s => (
-        <SectionZone
-          key={s.id}
-          sectionId={s.id}
-          label={s.label}
-          items={lesson.sections[s.id]?.items || []}
-          blocks={blocks}
-          isDeadline={s.id === 'deadline'}
-          dragState={dragState}
-          setDragState={setDragState}
-          onDropAt={handleDropAt}
-          onUpdateItems={patchSection}
-          onSaveToBank={onSaveToBank}
-          saving={saving}
-        />
-      ))}
+      <div className="wb-lesson-sequence__board">
+        {LESSON_SECTIONS.map(s => (
+          <SectionColumn
+            key={s.id}
+            sectionId={s.id}
+            label={s.label}
+            items={lesson.sections[s.id]?.items || []}
+            blocks={blocks}
+            isDeadline={s.id === 'deadline'}
+            expandedId={expandedId}
+            setExpandedId={setExpandedId}
+            dragState={dragState}
+            setDragState={setDragState}
+            onDropAt={handleDropAt}
+            onUpdateItems={patchSection}
+            onSaveToBank={onSaveToBank}
+            saving={saving}
+          />
+        ))}
+      </div>
     </div>
   )
 }
