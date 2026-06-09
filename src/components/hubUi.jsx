@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 export function HubPanel({ title, lead, embedded = false, children }) {
@@ -99,18 +99,25 @@ export function HubOverflowMenu({ items, label = 'More actions', placement = 'be
       position: 'fixed',
       top: Math.max(8, top),
       left,
+      width: 'max-content',
       minWidth: 160,
+      maxWidth: 'min(280px, calc(100vw - 16px))',
       zIndex: 5000,
     })
   }, [placement])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setMenuStyle(null)
       return
     }
 
     positionMenu()
+  }, [open, positionMenu, items])
+
+  useEffect(() => {
+    if (!open) return
+
     const frame = requestAnimationFrame(positionMenu)
 
     const onOutside = (e) => {
@@ -137,7 +144,14 @@ export function HubOverflowMenu({ items, label = 'More actions', placement = 'be
     <div
       ref={menuRef}
       className="wb-hub-overflow__menu wb-hub-overflow__menu--portal"
-      style={menuStyle || { position: 'fixed', visibility: 'hidden', top: 0, left: 0 }}
+      style={menuStyle || {
+        position: 'fixed',
+        visibility: 'hidden',
+        top: 0,
+        left: 0,
+        width: 'max-content',
+        minWidth: 160,
+      }}
       role="menu"
     >
       {items.map(item => (

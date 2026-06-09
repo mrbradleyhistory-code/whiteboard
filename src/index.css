@@ -307,6 +307,13 @@ html, body, #root {
 .wb-hub-overflow__menu--portal {
   position: fixed;
   z-index: 5000;
+  width: max-content;
+  min-width: 160px;
+  max-width: min(280px, calc(100vw - 16px));
+}
+
+.wb-hub-overflow__menu--portal .wb-hub-overflow__item {
+  white-space: nowrap;
 }
 
 .wb-hub-overflow--open {
