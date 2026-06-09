@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import { normalizeTag } from '../lessonBlockBank'
+import { getTagChipStyle } from '../lessonTagColors'
 
-export default function BlockTagInput({ tags, vocabulary = [], onChange, label = 'Tags' }) {
+export default function BlockTagInput({
+  tags,
+  vocabulary = [],
+  tagColors = {},
+  onChange,
+  label = 'Tags',
+}) {
   const [draft, setDraft] = useState('')
 
   const addTag = (raw) => {
@@ -20,14 +27,21 @@ export default function BlockTagInput({ tags, vocabulary = [], onChange, label =
     <div className="wb-block-tags">
       <span className="wb-block-tags__label">{label}</span>
       <div className="wb-block-tags__chips">
-        {tags.map(tag => (
-          <span key={tag} className="wb-block-tags__chip">
-            {tag}
-            <button type="button" className="wb-block-tags__chip-remove" onClick={() => removeTag(tag)} aria-label={`Remove tag ${tag}`}>
-              ×
-            </button>
-          </span>
-        ))}
+        {tags.map(tag => {
+          const style = getTagChipStyle(tag, tagColors)
+          return (
+            <span
+              key={tag}
+              className={`wb-block-tags__chip${style ? ' wb-block-tags__chip--colored' : ''}`}
+              style={style || undefined}
+            >
+              {tag}
+              <button type="button" className="wb-block-tags__chip-remove" onClick={() => removeTag(tag)} aria-label={`Remove tag ${tag}`}>
+                ×
+              </button>
+            </span>
+          )
+        })}
       </div>
       <div className="wb-block-tags__add">
         <input
@@ -54,11 +68,20 @@ export default function BlockTagInput({ tags, vocabulary = [], onChange, label =
       </div>
       {suggestions.length > 0 && draft && (
         <div className="wb-block-tags__suggest">
-          {suggestions.slice(0, 6).map(t => (
-            <button key={t} type="button" className="wb-hub-chip" onClick={() => addTag(t)}>
-              {t}
-            </button>
-          ))}
+          {suggestions.slice(0, 6).map(t => {
+            const style = getTagChipStyle(t, tagColors)
+            return (
+              <button
+                key={t}
+                type="button"
+                className={`wb-hub-chip${style ? ' wb-hub-chip--colored' : ''}`}
+                style={style || undefined}
+                onClick={() => addTag(t)}
+              >
+                {t}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

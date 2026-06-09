@@ -947,6 +947,30 @@ html, body, #root {
   color: #fff;
 }
 
+.wb-library-io {
+  margin: 28px 0 0;
+  padding: 14px 16px;
+  border-radius: var(--wb-hub-radius);
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface-muted);
+}
+
+.wb-library-io__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-library-io__hint {
+  margin: 10px 0 0;
+}
+
+.wb-library-io__success {
+  margin: 10px 0 0;
+  color: var(--wb-accent-dark);
+  font-weight: 600;
+}
+
 .wb-lesson-template-row {
   display: flex;
   gap: 8px;
@@ -2723,6 +2747,201 @@ html, body, #root {
   color: var(--wb-accent);
 }
 
+.wb-lesson-step--tagged {
+  border-left: 4px solid var(--wb-step-accent);
+  background: var(--wb-step-accent-light, var(--wb-surface-muted));
+}
+
+.wb-lesson-step__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.wb-lesson-step__tag {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: var(--wb-accent-light);
+  color: var(--wb-accent-dark);
+  border: 1px solid transparent;
+}
+
+.wb-lesson-step__tag--colored {
+  border-style: solid;
+}
+
+.wb-lesson-bank__card--tagged {
+  border-left: 4px solid var(--wb-step-accent);
+}
+
+.wb-bank-item__tags,
+.wb-bank-item__tag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wb-bank-item__tag {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--wb-accent-light);
+  color: var(--wb-accent-dark);
+  border: 1px solid transparent;
+}
+
+.wb-bank-item__tag--colored {
+  border-style: solid;
+}
+
+.wb-bank-folders {
+  margin-bottom: 16px;
+}
+
+.wb-bank-folders__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.wb-bank-folders__chip {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-bank-folders__chip--active {
+  background: var(--wb-accent-light);
+  border-color: var(--wb-accent);
+  color: var(--wb-accent-dark);
+}
+
+.wb-bank-folders__manage {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--wb-radius-sm);
+  border: 1px dashed var(--wb-border-strong);
+  background: var(--wb-surface);
+}
+
+.wb-bank-folders__add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wb-bank-folders__add .wb-hub-input {
+  flex: 1;
+}
+
+.wb-bank-folders__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-bank-folders__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.wb-bank-folders__item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wb-bank-folders__error {
+  margin: 8px 0 0;
+  color: var(--wb-danger);
+  font-size: 0.85rem;
+}
+
+.wb-bank-folder-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-bank-folder-group {
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-hub-radius);
+  background: var(--wb-surface);
+  overflow: hidden;
+}
+
+.wb-bank-folder-group summary {
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+  background: var(--wb-surface-muted);
+}
+
+.wb-bank-folder-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-bank-folder-group .wb-hub-card-list {
+  padding: 0 12px 12px;
+}
+
+.wb-tag-manager__colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.wb-tag-color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.wb-tag-color-swatch--none {
+  background: var(--wb-surface);
+  border-color: var(--wb-border-strong);
+  position: relative;
+}
+
+.wb-tag-color-swatch--none::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-top: 2px solid var(--wb-text-subtle);
+  transform: rotate(-45deg);
+}
+
+.wb-tag-color-swatch--active {
+  box-shadow: 0 0 0 2px var(--wb-surface), 0 0 0 4px var(--wb-accent);
+}
+
 .wb-lesson-step__body {
   padding: 0 10px 10px;
   border-top: 1px solid var(--wb-border);
@@ -2761,6 +2980,13 @@ html, body, #root {
   color: var(--wb-accent-dark);
   font-size: 0.8rem;
   font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.wb-block-tags__chip--colored,
+.wb-hub-chip--colored {
+  border-width: 1px;
+  border-style: solid;
 }
 
 .wb-block-tags__chip-remove {

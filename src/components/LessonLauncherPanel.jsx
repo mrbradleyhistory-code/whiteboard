@@ -8,9 +8,12 @@ import {
   duplicateLesson,
   fetchLessonLauncherData,
   saveLessonBlocks,
+  saveLibraryFolders,
+  saveLessons,
   saveTargetTemplates,
   upsertLesson,
 } from '../lessonLauncher'
+import { emptyLibraryFolders } from '../lessonLibraryFolders'
 import TemplateBanksPanel from './TemplateBanksPanel'
 import LessonEditor from './LessonEditor'
 import LessonRunSetup from './LessonRunSetup'
@@ -33,6 +36,8 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   const [view, setView] = useState('lessons')
   const [blocks, setBlocks] = useState([])
   const [blockTags, setBlockTags] = useState([])
+  const [blockTagColors, setBlockTagColors] = useState({})
+  const [libraryFolders, setLibraryFolders] = useState(emptyLibraryFolders())
   const [targetTemplates, setTargetTemplates] = useState([])
   const [lessons, setLessons] = useState([])
   const [boards, setBoards] = useState([])
@@ -58,7 +63,15 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     setLoading(true)
     setError('')
     try {
-      const [{ blocks: b, blockTags: bt, targetTemplates: tt, lessons: l, error: dataErr }, boardsRes] = await Promise.all([
+      const [{
+        blocks: b,
+        blockTags: bt,
+        blockTagColors: btc,
+        libraryFolders: lf,
+        targetTemplates: tt,
+        lessons: l,
+        error: dataErr,
+      }, boardsRes] = await Promise.all([
         fetchLessonLauncherData(userId),
         supabase
           .from('boards')
@@ -67,6 +80,8 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
       ])
       setBlocks(b)
       setBlockTags(bt || [])
+      setBlockTagColors(btc || {})
+      setLibraryFolders(lf || emptyLibraryFolders())
       setTargetTemplates(tt)
       setLessons(l)
       if (dataErr) setError(dataErr)
@@ -89,14 +104,29 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     markDirty()
   }, [editingLesson])
 
-  const handleSaveBlocks = async (next, tags) => {
+  const handleSaveBlocks = async (next, tags, tagColors) => {
     setSaving(true)
-    const { blocks: saved, blockTags: savedTags, error: err } = await saveLessonBlocks(userId, next, tags)
+    const {
+      blocks: saved,
+      blockTags: savedTags,
+      blockTagColors: savedColors,
+      error: err,
+    } = await saveLessonBlocks(userId, next, tags, tagColors ?? blockTagColors)
     setSaving(false)
     if (err) return { error: err, blockTags: null }
     setBlocks(saved)
     if (savedTags) setBlockTags(savedTags)
+    if (savedColors) setBlockTagColors(savedColors)
     return { error: null, blockTags: savedTags }
+  }
+
+  const handleSaveFolders = async (nextFolders) => {
+    setSaving(true)
+    const { libraryFolders: saved, error: err } = await saveLibraryFolders(userId, nextFolders)
+    setSaving(false)
+    if (err) return { error: err }
+    setLibraryFolders(saved)
+    return { error: null }
   }
 
   const handleSaveTargetTemplates = async (next) => {
@@ -106,6 +136,45 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     if (err) return { error: err }
     setTargetTemplates(saved)
     return { error: null }
+  }
+
+  const handleImportLibrary = async (merged) => {
+    setSaving(true)
+    setError('')
+    try {
+      const { blocks: savedBlocks, blockTags: savedTags, blockTagColors: savedColors, error: blocksErr } = await saveLessonBlocks(
+        userId,
+        merged.blocks,
+        merged.blockTags,
+        merged.blockTagColors,
+      )
+      if (blocksErr) return { error: blocksErr }
+
+      const { libraryFolders: savedFolders, error: foldersErr } = await saveLibraryFolders(
+        userId,
+        merged.libraryFolders,
+      )
+      if (foldersErr) return { error: foldersErr }
+
+      const { targetTemplates: savedTemplates, error: templatesErr } = await saveTargetTemplates(
+        userId,
+        merged.targetTemplates,
+      )
+      if (templatesErr) return { error: templatesErr }
+
+      const { lessons: savedLessons, error: lessonsErr } = await saveLessons(userId, merged.lessons)
+      if (lessonsErr) return { error: lessonsErr }
+
+      setBlocks(savedBlocks)
+      setBlockTags(savedTags)
+      setBlockTagColors(savedColors || {})
+      setLibraryFolders(savedFolders || emptyLibraryFolders())
+      setTargetTemplates(savedTemplates)
+      setLessons(savedLessons)
+      return { error: null }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleSaveLesson = async () => {
@@ -253,9 +322,14 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
       <TemplateBanksPanel
         blocks={blocks}
         blockTags={blockTags}
+        blockTagColors={blockTagColors}
+        libraryFolders={libraryFolders}
         targetTemplates={targetTemplates}
+        lessons={lessons}
         onSaveBlocks={handleSaveBlocks}
         onSaveTargetTemplates={handleSaveTargetTemplates}
+        onSaveFolders={handleSaveFolders}
+        onImportLibrary={handleImportLibrary}
         saving={saving}
         onBack={() => (editingLesson ? setView('edit') : setView('lessons'))}
       />
@@ -281,7 +355,10 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
           lesson={editingLesson}
           blocks={blocks}
           blockTags={blockTags}
+          blockTagColors={blockTagColors}
+          libraryFolders={libraryFolders}
           onSaveBlocks={handleSaveBlocks}
+          onSaveFolders={handleSaveFolders}
           targetTemplates={targetTemplates}
           onSaveTargetTemplates={handleSaveTargetTemplates}
           boards={boards}

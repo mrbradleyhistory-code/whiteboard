@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient'
 import { normalizeLessonTheme } from './lessonThemes'
 import { collectTagsFromBlocks, mergeTagVocabulary, normalizeTagList } from './lessonBlockBank'
+import { emptyLibraryFolders, normalizeLibraryFolders } from './lessonLibraryFolders'
+import { normalizeTagColors } from './lessonTagColors'
 
 export const LESSON_SECTIONS = [
   { id: 'warmup', label: 'Warmup' },
@@ -77,6 +79,7 @@ export function normalizeTargetTemplate(raw) {
     name: String(raw.name || '').trim() || 'Untitled template',
     learningTarget: String(raw.learningTarget || '').trim(),
     successCriteria: String(raw.successCriteria || '').trim(),
+    folderId: raw.folderId || null,
   }
 }
 
@@ -90,6 +93,7 @@ export function normalizeBlock(raw) {
     dueLabel: section === 'deadline' ? String(raw.dueLabel || '').trim() : '',
     durationSec: Math.max(0, parseInt(raw.durationSec, 10) || 0),
     tags: normalizeTagList(raw.tags),
+    folderId: raw.folderId || null,
   }
 }
 
@@ -101,6 +105,7 @@ export function normalizeItem(raw) {
     directions: String(raw.directions || '').trim(),
     dueLabel: String(raw.dueLabel || '').trim(),
     durationSec: Math.max(0, parseInt(raw.durationSec, 10) || 0),
+    tags: normalizeTagList(raw.tags),
   }
 }
 
@@ -187,6 +192,7 @@ export function itemFromBlock(block) {
     directions: b.directions,
     dueLabel: b.dueLabel,
     durationSec: b.durationSec,
+    tags: [...(b.tags || [])],
   })
 }
 
@@ -216,7 +222,7 @@ export function formatDuration(sec) {
 async function readLauncherRow(userId) {
   const { data, error } = await supabase
     .from('user_settings')
-    .select('lesson_blocks, lesson_block_tags, lesson_target_templates, lessons')
+    .select('lesson_blocks, lesson_block_tags, lesson_block_tag_colors, lesson_library_folders, lesson_target_templates, lessons')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
@@ -232,6 +238,8 @@ async function patchLauncherSettings(userId, patch) {
     user_id: userId,
     lesson_blocks: existing?.lesson_blocks ?? [],
     lesson_block_tags: existing?.lesson_block_tags ?? [],
+    lesson_block_tag_colors: existing?.lesson_block_tag_colors ?? {},
+    lesson_library_folders: existing?.lesson_library_folders ?? emptyLibraryFolders(),
     lesson_target_templates: existing?.lesson_target_templates ?? [],
     lessons: existing?.lessons ?? [],
     ...patch,
@@ -252,11 +260,11 @@ async function seedLauncherDefaults(userId) {
   return { blocks, targetTemplates, lessons: [] }
 }
 
-/** @returns {Promise<{ blocks: object[], blockTags: string[], targetTemplates: object[], lessons: object[], error: string | null }>} */
+/** @returns {Promise<{ blocks: object[], blockTags: string[], blockTagColors: object, libraryFolders: object, targetTemplates: object[], lessons: object[], error: string | null }>} */
 export async function fetchLessonLauncherData(userId) {
   const { data, error } = await supabase
     .from('user_settings')
-    .select('lesson_blocks, lesson_block_tags, lesson_target_templates, lessons')
+    .select('lesson_blocks, lesson_block_tags, lesson_block_tag_colors, lesson_library_folders, lesson_target_templates, lessons')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -264,23 +272,35 @@ export async function fetchLessonLauncherData(userId) {
     if (
       error.message?.includes('lesson_blocks')
       || error.message?.includes('lesson_block_tags')
+      || error.message?.includes('lesson_block_tag_colors')
+      || error.message?.includes('lesson_library_folders')
       || error.message?.includes('lesson_target_templates')
       || error.message?.includes('column')
     ) {
       return {
         blocks: [],
         blockTags: [],
+        blockTagColors: {},
+        libraryFolders: emptyLibraryFolders(),
         targetTemplates: [],
         lessons: [],
         error: 'Run supabase migrations for Lesson Launcher in your Supabase project.',
       }
     }
-    return { blocks: [], blockTags: [], targetTemplates: [], lessons: [], error: error.message }
+    return {
+      blocks: [],
+      blockTags: [],
+      blockTagColors: {},
+      libraryFolders: emptyLibraryFolders(),
+      targetTemplates: [],
+      lessons: [],
+      error: error.message,
+    }
   }
 
   if (!data) {
     const seeded = await seedLauncherDefaults(userId)
-    return { ...seeded, error: null }
+    return { ...seeded, blockTagColors: {}, libraryFolders: emptyLibraryFolders(), error: null }
   }
 
   let blocks = Array.isArray(data.lesson_blocks) ? data.lesson_blocks.map(normalizeBlock) : []
@@ -300,10 +320,12 @@ export async function fetchLessonLauncherData(userId) {
   const lessons = Array.isArray(data.lessons) ? data.lessons.map(normalizeLesson) : []
   let blockTags = normalizeTagList(data.lesson_block_tags)
   blockTags = mergeTagVocabulary(blockTags, collectTagsFromBlocks(blocks))
-  return { blocks, blockTags, targetTemplates, lessons, error: null }
+  const blockTagColors = normalizeTagColors(data.lesson_block_tag_colors)
+  const libraryFolders = normalizeLibraryFolders(data.lesson_library_folders)
+  return { blocks, blockTags, blockTagColors, libraryFolders, targetTemplates, lessons, error: null }
 }
 
-export async function saveLessonBlocks(userId, blocks, blockTags) {
+export async function saveLessonBlocks(userId, blocks, blockTags, blockTagColors) {
   try {
     const normalized = blocks.map(normalizeBlock)
     const patch = { lesson_blocks: normalized }
@@ -316,10 +338,38 @@ export async function saveLessonBlocks(userId, blocks, blockTags) {
         collectTagsFromBlocks(normalized),
       )
     }
+    if (blockTagColors !== undefined) {
+      patch.lesson_block_tag_colors = normalizeTagColors(blockTagColors)
+    }
     await patchLauncherSettings(userId, patch)
-    return { blocks: normalized, blockTags: patch.lesson_block_tags, error: null }
+    return {
+      blocks: normalized,
+      blockTags: patch.lesson_block_tags,
+      blockTagColors: patch.lesson_block_tag_colors ?? normalizeTagColors(blockTagColors),
+      error: null,
+    }
   } catch (e) {
-    return { blocks: [], blockTags: [], error: e.message }
+    return { blocks: [], blockTags: [], blockTagColors: {}, error: e.message }
+  }
+}
+
+export async function saveBlockTagColors(userId, blockTagColors) {
+  try {
+    const normalized = normalizeTagColors(blockTagColors)
+    await patchLauncherSettings(userId, { lesson_block_tag_colors: normalized })
+    return { blockTagColors: normalized, error: null }
+  } catch (e) {
+    return { blockTagColors: {}, error: e.message }
+  }
+}
+
+export async function saveLibraryFolders(userId, libraryFolders) {
+  try {
+    const normalized = normalizeLibraryFolders(libraryFolders)
+    await patchLauncherSettings(userId, { lesson_library_folders: normalized })
+    return { libraryFolders: normalized, error: null }
+  } catch (e) {
+    return { libraryFolders: emptyLibraryFolders(), error: e.message }
   }
 }
 

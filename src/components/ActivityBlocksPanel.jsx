@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { getTagChipStyle } from '../lessonTagColors'
+import { foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
 import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
+import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
 import BlockTagInput from './BlockTagInput'
 import BlockTagManager from './BlockTagManager'
 import {
@@ -13,14 +16,92 @@ import {
   HubPanelBlock,
 } from './hubUi'
 
-export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBlocks, saving }) {
+function ActivityCard({ block, tagColors, onDuplicate, onEdit, onDelete, saving }) {
+  return (
+    <HubCard>
+      <div className="wb-hub-deck-header">
+        <div>
+          <div className="wb-hub-card__title">{block.name}</div>
+          <div className="wb-hub-card__meta">
+            {LESSON_SECTIONS.find(s => s.id === block.section)?.label || block.section}
+            {block.durationSec > 0 && ` · ${Math.floor(block.durationSec / 60)} min timer`}
+          </div>
+          {block.tags?.length > 0 && (
+            <div className="wb-bank-item__tags">
+              {block.tags.map(tag => {
+                const style = getTagChipStyle(tag, tagColors)
+                return (
+                  <span
+                    key={tag}
+                    className={`wb-bank-item__tag${style ? ' wb-bank-item__tag--colored' : ''}`}
+                    style={style || undefined}
+                  >
+                    {tag}
+                  </span>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
+          <HubButton onClick={() => onDuplicate(block)} disabled={saving}>Duplicate</HubButton>
+          <HubButton onClick={() => onEdit(block)}>Edit</HubButton>
+          <HubButton variant="danger" onClick={() => onDelete(block.id)}>Delete</HubButton>
+        </div>
+      </div>
+      {block.directions && (
+        <p className="wb-hub-hint" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
+          {block.directions.length > 120 ? `${block.directions.slice(0, 120)}…` : block.directions}
+        </p>
+      )}
+    </HubCard>
+  )
+}
+
+export default function ActivityBlocksPanel({
+  blocks,
+  blockTags = [],
+  blockTagColors = {},
+  libraryFolders,
+  onSaveBlocks,
+  onSaveFolders,
+  saving,
+}) {
   const [view, setView] = useState('list')
+  const [activeFolderId, setActiveFolderId] = useState('all')
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
 
+  const folders = foldersForKind(libraryFolders, LIBRARY_FOLDER_KINDS.ACTIVITIES)
+  const vocabulary = useMemo(
+    () => [...new Set([...blockTags, ...blocks.flatMap(b => b.tags || [])])].sort(),
+    [blockTags, blocks],
+  )
+
+  const itemCounts = useMemo(() => {
+    const counts = { none: 0 }
+    for (const block of blocks) {
+      const key = block.folderId && folders.some(f => f.id === block.folderId) ? block.folderId : 'none'
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }, [blocks, folders])
+
+  const filtered = useMemo(
+    () => filterByFolder(blocks, activeFolderId),
+    [blocks, activeFolderId],
+  )
+
   const startNew = (section = 'warmup') => {
     setView('edit')
-    setEditing(normalizeBlock({ id: newBlockId(), name: '', section, directions: '', durationSec: 300 }))
+    setEditing(normalizeBlock({
+      id: newBlockId(),
+      name: '',
+      section,
+      directions: '',
+      durationSec: 300,
+      folderId: activeFolderId !== 'all' && activeFolderId !== 'none' ? activeFolderId : null,
+    }))
   }
 
   const startEdit = (block) => {
@@ -60,10 +141,35 @@ export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBloc
     await persist(blocks.filter(b => b.id !== id))
   }
 
+  const clearFolderFromBlocks = async (folderId) => {
+    await persist(blocks.map(b => (b.folderId === folderId ? { ...b, folderId: null } : b)))
+  }
+
+  const renderList = (list) => (
+    list.length === 0 ? (
+      <HubEmpty title="No activities here" description="Create one or choose another folder." />
+    ) : (
+      <HubCardList>
+        {list.map(b => (
+          <ActivityCard
+            key={b.id}
+            block={b}
+            tagColors={blockTagColors}
+            onDuplicate={duplicatePart}
+            onEdit={startEdit}
+            onDelete={removeBlock}
+            saving={saving}
+          />
+        ))}
+      </HubCardList>
+    )
+  )
+
   if (view === 'tags') {
     return (
       <BlockTagManager
         blockTags={blockTags}
+        blockTagColors={blockTagColors}
         blocks={blocks}
         onSaveBlocks={onSaveBlocks}
         onClose={() => setView('list')}
@@ -87,6 +193,18 @@ export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBloc
             />
           </label>
           <label className="wb-lesson-field">
+            <span>Folder</span>
+            <select
+              className="wb-hub-input"
+              value={editing.folderId || ''}
+              onChange={e => setEditing({ ...editing, folderId: e.target.value || null })}
+            >
+              {folderSelectOptions(folders).map(opt => (
+                <option key={opt.id || 'none'} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="wb-lesson-field">
             <span>Section</span>
             <select
               className="wb-hub-input"
@@ -100,7 +218,8 @@ export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBloc
           </label>
           <BlockTagInput
             tags={editing.tags || []}
-            vocabulary={[...new Set([...blockTags, ...blocks.flatMap(b => b.tags || [])])]}
+            vocabulary={vocabulary}
+            tagColors={blockTagColors}
             onChange={tags => setEditing({ ...editing, tags })}
           />
           <label className="wb-lesson-field">
@@ -150,12 +269,24 @@ export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBloc
     )
   }
 
+  const { groups, uncategorized } = groupItemsByFolder(blocks, folders)
+
   return (
     <HubPanel
       title="Activity bank"
-      lead="Build modular activities with directions and timers. Add them to any lesson section."
+      lead="Build modular activities with directions, color tags, and folders."
     >
       <HubAlert message={error} />
+      <BankFolderBar
+        kind={LIBRARY_FOLDER_KINDS.ACTIVITIES}
+        libraryFolders={libraryFolders}
+        activeFolderId={activeFolderId}
+        onSelectFolder={setActiveFolderId}
+        onSaveFolders={onSaveFolders}
+        onDeleteFolder={clearFolderFromBlocks}
+        itemCounts={itemCounts}
+        saving={saving}
+      />
       <HubCreateRow>
         <HubButton variant="primary" onClick={() => startNew('warmup')}>+ New activity</HubButton>
         <HubButton variant="ghost" onClick={() => setView('tags')}>Manage tags</HubButton>
@@ -163,33 +294,23 @@ export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBloc
 
       {blocks.length === 0 ? (
         <HubEmpty title="No activities yet" description="Create your first warmup or activity template." />
-      ) : (
-        <HubCardList>
-          {blocks.map(b => (
-            <HubCard key={b.id}>
-              <div className="wb-hub-deck-header">
-                <div>
-                  <div className="wb-hub-card__title">{b.name}</div>
-                  <div className="wb-hub-card__meta">
-                    {LESSON_SECTIONS.find(s => s.id === b.section)?.label || b.section}
-                    {b.durationSec > 0 && ` · ${Math.floor(b.durationSec / 60)} min timer`}
-                    {b.tags?.length > 0 && ` · ${b.tags.join(', ')}`}
-                  </div>
-                </div>
-                <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
-                  <HubButton onClick={() => duplicatePart(b)} disabled={saving}>Duplicate</HubButton>
-                  <HubButton onClick={() => startEdit(b)}>Edit</HubButton>
-                  <HubButton variant="danger" onClick={() => removeBlock(b.id)}>Delete</HubButton>
-                </div>
-              </div>
-              {b.directions && (
-                <p className="wb-hub-hint" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
-                  {b.directions.length > 120 ? `${b.directions.slice(0, 120)}…` : b.directions}
-                </p>
-              )}
-            </HubCard>
+      ) : activeFolderId === 'all' ? (
+        <div className="wb-bank-folder-groups">
+          {groups.filter(g => g.items.length > 0).map(({ folder, items }) => (
+            <details key={folder.id} className="wb-bank-folder-group" open>
+              <summary>{folder.name} ({items.length})</summary>
+              {renderList(items)}
+            </details>
           ))}
-        </HubCardList>
+          {uncategorized.length > 0 && (
+            <details className="wb-bank-folder-group" open={groups.every(g => g.items.length === 0)}>
+              <summary>Uncategorized ({uncategorized.length})</summary>
+              {renderList(uncategorized)}
+            </details>
+          )}
+        </div>
+      ) : (
+        renderList(filtered)
       )}
     </HubPanel>
   )

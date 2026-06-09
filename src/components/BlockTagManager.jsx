@@ -8,10 +8,12 @@ import {
   renameTagInVocabulary,
   renameTagOnBlocks,
 } from '../lessonBlockBank'
+import { setTagColor, TAG_COLOR_PALETTE } from '../lessonTagColors'
 import { HubButton } from './hubUi'
 
 export default function BlockTagManager({
   blockTags,
+  blockTagColors = {},
   blocks,
   onSaveBlocks,
   onClose,
@@ -27,9 +29,9 @@ export default function BlockTagManager({
     [blockTags, blocks],
   )
 
-  const persist = async (nextBlocks, nextTags) => {
+  const persist = async (nextBlocks, nextTags, nextColors = blockTagColors) => {
     setError('')
-    const { error: err } = await onSaveBlocks(nextBlocks, nextTags)
+    const { error: err } = await onSaveBlocks(nextBlocks, nextTags, nextColors)
     if (err) setError(err)
     else setRenaming(null)
   }
@@ -64,7 +66,12 @@ export default function BlockTagManager({
     }
     const nextBlocks = renameTagOnBlocks(blocks, renaming, to)
     const nextTags = renameTagInVocabulary(vocabulary, renaming, to)
-    await persist(nextBlocks, nextTags)
+    const nextColors = { ...blockTagColors }
+    if (nextColors[renaming]) {
+      nextColors[to] = nextColors[renaming]
+      delete nextColors[renaming]
+    }
+    await persist(nextBlocks, nextTags, nextColors)
   }
 
   const removeTag = async (tag) => {
@@ -75,14 +82,20 @@ export default function BlockTagManager({
     if (!confirm(msg)) return
     const nextBlocks = removeTagFromBlocks(blocks, tag)
     const nextTags = removeTagFromVocabulary(vocabulary, tag)
-    await persist(nextBlocks, nextTags)
+    const nextColors = { ...blockTagColors }
+    delete nextColors[tag]
+    await persist(nextBlocks, nextTags, nextColors)
+  }
+
+  const setColor = async (tag, colorId) => {
+    await persist(blocks, vocabulary, setTagColor(blockTagColors, tag, colorId))
   }
 
   return (
     <aside className="wb-lesson-bank wb-lesson-bank--tags" aria-label="Tag management">
       <div className="wb-lesson-bank__head">
         <h2 className="wb-lesson-bank__title">Manage tags</h2>
-        <p className="wb-lesson-bank__lead">Rename, remove, or add tags for filtering parts.</p>
+        <p className="wb-lesson-bank__lead">Add colors to tags for quick scanning in the lesson builder.</p>
       </div>
 
       {error && <p className="wb-lesson-bank__error" role="alert">{error}</p>}
@@ -109,6 +122,7 @@ export default function BlockTagManager({
             {vocabulary.map(tag => {
               const { onParts } = countTagUsage(vocabulary, blocks, tag)
               const isRenaming = renaming === tag
+              const activeColor = blockTagColors[tag]
               return (
                 <li key={tag} className="wb-tag-manager__item">
                   {isRenaming ? (
@@ -134,6 +148,25 @@ export default function BlockTagManager({
                         <span className="wb-tag-manager__item-meta">
                           {onParts} part{onParts !== 1 ? 's' : ''}
                         </span>
+                      </div>
+                      <div className="wb-tag-manager__colors" role="group" aria-label={`Color for ${tag}`}>
+                        <button
+                          type="button"
+                          className={`wb-tag-color-swatch wb-tag-color-swatch--none${!activeColor ? ' wb-tag-color-swatch--active' : ''}`}
+                          title="No color"
+                          onClick={() => setColor(tag, null)}
+                        />
+                        {TAG_COLOR_PALETTE.map(color => (
+                          <button
+                            key={color.id}
+                            type="button"
+                            className={`wb-tag-color-swatch${activeColor === color.id ? ' wb-tag-color-swatch--active' : ''}`}
+                            style={{ background: color.bg }}
+                            title={color.label}
+                            aria-label={color.label}
+                            onClick={() => setColor(tag, color.id)}
+                          />
+                        ))}
                       </div>
                       <div className="wb-tag-manager__item-actions">
                         <button type="button" className="wb-hub-btn wb-hub-btn--sm" onClick={() => startRename(tag)}>Rename</button>

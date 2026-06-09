@@ -62,8 +62,11 @@ export default function LessonEditor({
   lesson,
   blocks,
   blockTags,
+  blockTagColors = {},
+  libraryFolders,
   targetTemplates,
   onSaveBlocks,
+  onSaveFolders,
   onSaveTargetTemplates,
   boards,
   classes = [],
@@ -299,7 +302,10 @@ export default function LessonEditor({
             <BlockBankPanel
               blocks={blocks}
               blockTags={blockTags}
+              blockTagColors={blockTagColors}
+              libraryFolders={libraryFolders}
               onSaveBlocks={onSaveBlocks}
+              onSaveFolders={onSaveFolders}
               onAddToLesson={addPartToLesson}
               onClose={() => setBankOpen(false)}
               saving={saving}
@@ -310,6 +316,8 @@ export default function LessonEditor({
         <LessonSequenceBuilder
           lesson={lesson}
           blocks={blocks}
+          blockTags={blockTags}
+          tagColors={blockTagColors}
           onChange={onChange}
           onSaveToBank={saveStepToBank}
           saving={saving}

@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
 import { newTargetTemplateId, normalizeTargetTemplate } from '../lessonLauncher'
+import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
 import {
   HubAlert,
   HubButton,
@@ -11,9 +13,62 @@ import {
   HubPanelBlock,
 } from './hubUi'
 
-export default function TargetTemplatesPanel({ templates, onSaveTemplates, saving }) {
+function TargetCard({ template, onEdit, onDelete }) {
+  return (
+    <HubCard>
+      <div className="wb-hub-deck-header">
+        <div>
+          <div className="wb-hub-card__title">{template.name}</div>
+        </div>
+        <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
+          <HubButton onClick={() => onEdit(template)}>Edit</HubButton>
+          <HubButton variant="danger" onClick={() => onDelete(template.id)}>Delete</HubButton>
+        </div>
+      </div>
+      {template.learningTarget && (
+        <p className="wb-hub-hint" style={{ marginTop: 10 }}>
+          <strong>LT:</strong> {template.learningTarget.length > 100
+            ? `${template.learningTarget.slice(0, 100)}…`
+            : template.learningTarget}
+        </p>
+      )}
+      {template.successCriteria && (
+        <p className="wb-hub-hint" style={{ marginTop: 6 }}>
+          <strong>SC:</strong> {template.successCriteria.length > 100
+            ? `${template.successCriteria.slice(0, 100)}…`
+            : template.successCriteria}
+        </p>
+      )}
+    </HubCard>
+  )
+}
+
+export default function TargetTemplatesPanel({
+  templates,
+  libraryFolders,
+  onSaveTemplates,
+  onSaveFolders,
+  saving,
+}) {
   const [editing, setEditing] = useState(null)
+  const [activeFolderId, setActiveFolderId] = useState('all')
   const [error, setError] = useState('')
+
+  const folders = foldersForKind(libraryFolders, LIBRARY_FOLDER_KINDS.TARGETS)
+
+  const itemCounts = useMemo(() => {
+    const counts = { none: 0 }
+    for (const template of templates) {
+      const key = template.folderId && folders.some(f => f.id === template.folderId) ? template.folderId : 'none'
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }, [templates, folders])
+
+  const filtered = useMemo(
+    () => filterByFolder(templates, activeFolderId),
+    [templates, activeFolderId],
+  )
 
   const startNew = () => {
     setEditing(normalizeTargetTemplate({
@@ -21,6 +76,7 @@ export default function TargetTemplatesPanel({ templates, onSaveTemplates, savin
       name: '',
       learningTarget: '',
       successCriteria: '',
+      folderId: activeFolderId !== 'all' && activeFolderId !== 'none' ? activeFolderId : null,
     }))
   }
 
@@ -53,6 +109,27 @@ export default function TargetTemplatesPanel({ templates, onSaveTemplates, savin
     await persist(templates.filter(t => t.id !== id))
   }
 
+  const clearFolderFromTemplates = async (folderId) => {
+    await persist(templates.map(t => (t.folderId === folderId ? { ...t, folderId: null } : t)))
+  }
+
+  const renderList = (list) => (
+    list.length === 0 ? (
+      <HubEmpty title="No templates here" description="Create one or choose another folder." />
+    ) : (
+      <HubCardList>
+        {list.map(t => (
+          <TargetCard
+            key={t.id}
+            template={t}
+            onEdit={setEditing}
+            onDelete={removeTemplate}
+          />
+        ))}
+      </HubCardList>
+    )
+  )
+
   if (editing) {
     return (
       <HubPanel
@@ -69,6 +146,18 @@ export default function TargetTemplatesPanel({ templates, onSaveTemplates, savin
               onChange={e => setEditing({ ...editing, name: e.target.value })}
               placeholder="e.g. Primary source analysis"
             />
+          </label>
+          <label className="wb-lesson-field">
+            <span>Folder</span>
+            <select
+              className="wb-hub-input"
+              value={editing.folderId || ''}
+              onChange={e => setEditing({ ...editing, folderId: e.target.value || null })}
+            >
+              {folderSelectOptions(folders).map(opt => (
+                <option key={opt.id || 'none'} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
           </label>
           <label className="wb-lesson-field">
             <span>Learning target</span>
@@ -99,48 +188,47 @@ export default function TargetTemplatesPanel({ templates, onSaveTemplates, savin
     )
   }
 
+  const { groups, uncategorized } = groupItemsByFolder(templates, folders)
+
   return (
     <HubPanel
       title="Learning target & success criteria bank"
-      lead="Build modular templates for daily outcomes. Apply the full pair or just one field when editing a lesson."
+      lead="Organize reusable outcomes into folders for quick access."
     >
       <HubAlert message={error} />
+      <BankFolderBar
+        kind={LIBRARY_FOLDER_KINDS.TARGETS}
+        libraryFolders={libraryFolders}
+        activeFolderId={activeFolderId}
+        onSelectFolder={setActiveFolderId}
+        onSaveFolders={onSaveFolders}
+        onDeleteFolder={clearFolderFromTemplates}
+        itemCounts={itemCounts}
+        saving={saving}
+      />
       <HubCreateRow>
         <HubButton variant="primary" onClick={startNew}>+ New template</HubButton>
       </HubCreateRow>
 
       {templates.length === 0 ? (
         <HubEmpty title="No templates yet" description="Create reusable learning targets and success criteria." />
-      ) : (
-        <HubCardList>
-          {templates.map(t => (
-            <HubCard key={t.id}>
-              <div className="wb-hub-deck-header">
-                <div>
-                  <div className="wb-hub-card__title">{t.name}</div>
-                </div>
-                <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
-                  <HubButton onClick={() => setEditing({ ...t })}>Edit</HubButton>
-                  <HubButton variant="danger" onClick={() => removeTemplate(t.id)}>Delete</HubButton>
-                </div>
-              </div>
-              {t.learningTarget && (
-                <p className="wb-hub-hint" style={{ marginTop: 10 }}>
-                  <strong>LT:</strong> {t.learningTarget.length > 100
-                    ? `${t.learningTarget.slice(0, 100)}…`
-                    : t.learningTarget}
-                </p>
-              )}
-              {t.successCriteria && (
-                <p className="wb-hub-hint" style={{ marginTop: 6 }}>
-                  <strong>SC:</strong> {t.successCriteria.length > 100
-                    ? `${t.successCriteria.slice(0, 100)}…`
-                    : t.successCriteria}
-                </p>
-              )}
-            </HubCard>
+      ) : activeFolderId === 'all' ? (
+        <div className="wb-bank-folder-groups">
+          {groups.filter(g => g.items.length > 0).map(({ folder, items }) => (
+            <details key={folder.id} className="wb-bank-folder-group" open>
+              <summary>{folder.name} ({items.length})</summary>
+              {renderList(items)}
+            </details>
           ))}
-        </HubCardList>
+          {uncategorized.length > 0 && (
+            <details className="wb-bank-folder-group" open={groups.every(g => g.items.length === 0)}>
+              <summary>Uncategorized ({uncategorized.length})</summary>
+              {renderList(uncategorized)}
+            </details>
+          )}
+        </div>
+      ) : (
+        renderList(filtered)
       )}
     </HubPanel>
   )

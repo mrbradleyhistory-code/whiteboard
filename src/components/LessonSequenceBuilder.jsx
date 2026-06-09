@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { DND_BLOCK_MIME, DND_ITEM_MIME, dragHasType } from '../lessonBlockBank'
+import { getTagChipStyle, resolveStepAccentColor, resolveStepAccentLight } from '../lessonTagColors'
 import {
   LESSON_SECTIONS,
   itemFromBlock,
   newItemId,
   normalizeItem,
 } from '../lessonLauncher'
+import BlockTagInput from './BlockTagInput'
 import { HubOverflowMenu } from './hubUi'
 
 function parseItemDrag(data) {
@@ -27,6 +29,8 @@ function StepCard({
   sectionId,
   isDeadline,
   blocks,
+  blockTags,
+  tagColors,
   expanded,
   onToggleExpand,
   onUpdate,
@@ -41,6 +45,15 @@ function StepCard({
 }) {
   const linked = item.blockId && blocks.some(b => b.id === item.blockId)
   const meta = stepMeta(item, isDeadline)
+  const accent = resolveStepAccentColor(item, blocks, tagColors)
+  const accentLight = resolveStepAccentLight(item, blocks, tagColors)
+  const tagVocabulary = [
+    ...new Set([
+      ...(blockTags || []),
+      ...blocks.flatMap(b => b.tags || []),
+      ...(item.tags || []),
+    ]),
+  ].sort()
 
   const menuItems = [
     { label: expanded ? 'Collapse' : 'Edit step', onClick: onToggleExpand },
@@ -54,7 +67,8 @@ function StepCard({
     <li className="wb-lesson-step-wrap">
       {showDropBefore && <div className="wb-lesson-sequence__drop-line" aria-hidden />}
       <div
-        className={`wb-lesson-step${expanded ? ' wb-lesson-step--open' : ''}${dragState?.itemId === item.id ? ' wb-lesson-step--dragging' : ''}`}
+        className={`wb-lesson-step${expanded ? ' wb-lesson-step--open' : ''}${dragState?.itemId === item.id ? ' wb-lesson-step--dragging' : ''}${accent ? ' wb-lesson-step--tagged' : ''}`}
+        style={accent ? { '--wb-step-accent': accent, '--wb-step-accent-light': accentLight } : undefined}
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
@@ -83,6 +97,22 @@ function StepCard({
           >
             <span className="wb-lesson-step__title">{item.title?.trim() || 'Untitled step'}</span>
             {meta && <span className="wb-lesson-step__meta">{meta}</span>}
+            {(item.tags || []).length > 0 && (
+              <span className="wb-lesson-step__tags">
+                {item.tags.map(tag => {
+                  const style = getTagChipStyle(tag, tagColors)
+                  return (
+                    <span
+                      key={tag}
+                      className={`wb-lesson-step__tag${style ? ' wb-lesson-step__tag--colored' : ''}`}
+                      style={style || undefined}
+                    >
+                      {tag}
+                    </span>
+                  )
+                })}
+              </span>
+            )}
             {linked && <span className="wb-lesson-step__bank-badge" title="Linked to bank">◆</span>}
           </button>
           <button
@@ -115,6 +145,13 @@ function StepCard({
                 onChange={e => onUpdate(item.id, { title: e.target.value })}
               />
             </label>
+            <BlockTagInput
+              tags={item.tags || []}
+              vocabulary={tagVocabulary}
+              tagColors={tagColors}
+              onChange={tags => onUpdate(item.id, { tags })}
+              label="Color tags"
+            />
             {isDeadline ? (
               <>
                 <label className="wb-lesson-field wb-lesson-field--compact">
@@ -176,6 +213,8 @@ function SectionColumn({
   label,
   items,
   blocks,
+  blockTags,
+  tagColors,
   isDeadline,
   expandedId,
   setExpandedId,
@@ -235,6 +274,8 @@ function SectionColumn({
                 sectionId={sectionId}
                 isDeadline={isDeadline}
                 blocks={blocks}
+                blockTags={blockTags}
+                tagColors={tagColors}
                 expanded={expandedId === it.id}
                 onToggleExpand={() => setExpandedId(expandedId === it.id ? null : it.id)}
                 onUpdate={(id, patch) => updateItems(items.map(x => (x.id === id ? { ...x, ...patch } : x)))}
@@ -270,7 +311,15 @@ function SectionColumn({
   )
 }
 
-export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSaveToBank, saving }) {
+export default function LessonSequenceBuilder({
+  lesson,
+  blocks,
+  blockTags = [],
+  tagColors = {},
+  onChange,
+  onSaveToBank,
+  saving,
+}) {
   const [dragState, setDragState] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
 
@@ -353,6 +402,8 @@ export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSave
             label={s.label}
             items={lesson.sections[s.id]?.items || []}
             blocks={blocks}
+            blockTags={blockTags}
+            tagColors={tagColors}
             isDeadline={s.id === 'deadline'}
             expandedId={expandedId}
             setExpandedId={setExpandedId}

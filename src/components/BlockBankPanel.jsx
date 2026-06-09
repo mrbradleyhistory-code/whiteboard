@@ -4,7 +4,10 @@ import {
   DND_BLOCK_MIME,
   filterAndSortBlocks,
 } from '../lessonBlockBank'
+import { foldersForKind, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
+import { getTagChipStyle, resolveStepAccentColor, resolveStepAccentLight } from '../lessonTagColors'
 import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
+import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
 import { HubButton, HubEmpty, HubOverflowMenu } from './hubUi'
 import BlockTagInput from './BlockTagInput'
 import BlockTagManager from './BlockTagManager'
@@ -12,13 +15,17 @@ import BlockTagManager from './BlockTagManager'
 export default function BlockBankPanel({
   blocks,
   blockTags,
+  blockTagColors = {},
+  libraryFolders,
   onSaveBlocks,
+  onSaveFolders,
   onAddToLesson,
   onClose,
   saving,
   drawer = false,
 }) {
   const [view, setView] = useState('list')
+  const [activeFolderId, setActiveFolderId] = useState('all')
   const [query, setQuery] = useState('')
   const [sectionFilter, setSectionFilter] = useState('')
   const [activeTags, setActiveTags] = useState([])
@@ -31,10 +38,24 @@ export default function BlockBankPanel({
     [blockTags, blocks],
   )
 
-  const filtered = useMemo(
-    () => filterAndSortBlocks(blocks, { query, tags: activeTags, section: sectionFilter, sort }),
-    [blocks, query, activeTags, sectionFilter, sort],
-  )
+  const folders = foldersForKind(libraryFolders, LIBRARY_FOLDER_KINDS.ACTIVITIES)
+
+  const itemCounts = useMemo(() => {
+    const counts = { none: 0 }
+    for (const block of blocks) {
+      const key = block.folderId && folders.some(f => f.id === block.folderId) ? block.folderId : 'none'
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }, [blocks, folders])
+
+  const filtered = useMemo(() => {
+    const byFolder = filterByFolder(
+      filterAndSortBlocks(blocks, { query, tags: activeTags, section: sectionFilter, sort }),
+      activeFolderId,
+    )
+    return byFolder
+  }, [blocks, query, activeTags, sectionFilter, sort, activeFolderId])
 
   const toggleTagFilter = (tag) => {
     setActiveTags(prev => (prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]))
@@ -49,6 +70,7 @@ export default function BlockBankPanel({
       directions: '',
       durationSec: 300,
       tags: [...activeTags],
+      folderId: activeFolderId !== 'all' && activeFolderId !== 'none' ? activeFolderId : null,
     }))
   }
 
@@ -89,12 +111,17 @@ export default function BlockBankPanel({
     await persist(blocks.filter(b => b.id !== id))
   }
 
+  const clearFolderFromBlocks = async (folderId) => {
+    await persist(blocks.map(b => (b.folderId === folderId ? { ...b, folderId: null } : b)))
+  }
+
   const panelClass = `wb-lesson-bank${drawer ? ' wb-lesson-bank--drawer' : ''}`
 
   if (view === 'tags') {
     return (
       <BlockTagManager
         blockTags={blockTags}
+        blockTagColors={blockTagColors}
         blocks={blocks}
         onSaveBlocks={onSaveBlocks}
         onClose={() => setView('list')}
@@ -135,9 +162,22 @@ export default function BlockBankPanel({
               ))}
             </select>
           </label>
+          <label className="wb-lesson-field wb-lesson-field--compact">
+            <span>Folder</span>
+            <select
+              className="wb-hub-input"
+              value={editing.folderId || ''}
+              onChange={e => setEditing({ ...editing, folderId: e.target.value || null })}
+            >
+              {folderSelectOptions(folders).map(opt => (
+                <option key={opt.id || 'none'} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
           <BlockTagInput
             tags={editing.tags || []}
             vocabulary={vocabulary}
+            tagColors={blockTagColors}
             onChange={tags => setEditing({ ...editing, tags })}
           />
           <label className="wb-lesson-field wb-lesson-field--compact">
@@ -199,6 +239,17 @@ export default function BlockBankPanel({
 
       {error && <p className="wb-lesson-bank__error" role="alert">{error}</p>}
 
+      <BankFolderBar
+        kind={LIBRARY_FOLDER_KINDS.ACTIVITIES}
+        libraryFolders={libraryFolders}
+        activeFolderId={activeFolderId}
+        onSelectFolder={setActiveFolderId}
+        onSaveFolders={onSaveFolders}
+        onDeleteFolder={clearFolderFromBlocks}
+        itemCounts={itemCounts}
+        saving={saving}
+      />
+
       <details className="wb-lesson-bank__filters-panel">
         <summary>Search &amp; filters</summary>
         <div className="wb-lesson-bank__filters-body">
@@ -235,16 +286,20 @@ export default function BlockBankPanel({
           </div>
           {vocabulary.length > 0 && (
             <div className="wb-lesson-bank__tag-filters" role="group" aria-label="Tags">
-              {vocabulary.map(tag => (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`wb-hub-chip${activeTags.includes(tag) ? ' wb-hub-chip--active' : ''}`}
-                  onClick={() => toggleTagFilter(tag)}
-                >
-                  {tag}
-                </button>
-              ))}
+              {vocabulary.map(tag => {
+                const style = getTagChipStyle(tag, blockTagColors)
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`wb-hub-chip${activeTags.includes(tag) ? ' wb-hub-chip--active' : ''}${style ? ' wb-hub-chip--colored' : ''}`}
+                    style={style || undefined}
+                    onClick={() => toggleTagFilter(tag)}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
@@ -257,6 +312,8 @@ export default function BlockBankPanel({
           <ul className="wb-lesson-bank__cards">
             {filtered.map(block => {
               const sectionLabel = LESSON_SECTIONS.find(s => s.id === block.section)?.label || block.section
+              const accent = resolveStepAccentColor({ tags: block.tags }, blocks, blockTagColors)
+              const accentLight = resolveStepAccentLight({ tags: block.tags }, blocks, blockTagColors)
               const menuItems = [
                 ...(onAddToLesson ? [{ label: 'Add to lesson', onClick: () => onAddToLesson(block) }] : []),
                 { label: 'Duplicate', onClick: () => duplicatePart(block) },
@@ -265,7 +322,10 @@ export default function BlockBankPanel({
               ]
               return (
                 <li key={block.id}>
-                  <div className="wb-lesson-bank__card">
+                  <div
+                    className={`wb-lesson-bank__card${accent ? ' wb-lesson-bank__card--tagged' : ''}`}
+                    style={accent ? { '--wb-step-accent': accent, '--wb-step-accent-light': accentLight } : undefined}
+                  >
                     <span
                       className="wb-lesson-bank__card-grip"
                       aria-hidden
