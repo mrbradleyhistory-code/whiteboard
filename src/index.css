@@ -299,9 +299,14 @@ html, body, #root {
   z-index: 40;
 }
 
-.wb-hub-overflow--above .wb-hub-overflow__menu {
+.wb-hub-overflow--above .wb-hub-overflow__menu:not(.wb-hub-overflow__menu--portal) {
   top: auto;
   bottom: calc(100% + 6px);
+}
+
+.wb-hub-overflow__menu--portal {
+  position: fixed;
+  z-index: 5000;
 }
 
 .wb-hub-overflow--open {

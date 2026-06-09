@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export function HubPanel({ title, lead, embedded = false, children }) {
   if (embedded) {
@@ -68,21 +69,99 @@ export function HubButton({ className = '', variant = '', ...props }) {
 
 export function HubOverflowMenu({ items, label = 'More actions', placement = 'below' }) {
   const [open, setOpen] = useState(false)
-  const rootRef = useRef(null)
-  const placementClass = placement === 'above' ? ' wb-hub-overflow--above' : ''
+  const [menuStyle, setMenuStyle] = useState(null)
+  const triggerRef = useRef(null)
+  const menuRef = useRef(null)
+
+  const positionMenu = useCallback(() => {
+    const trigger = triggerRef.current
+    const menu = menuRef.current
+    if (!trigger || !menu) return
+
+    const rect = trigger.getBoundingClientRect()
+    const menuHeight = menu.offsetHeight
+    const menuWidth = menu.offsetWidth || 160
+    const gap = 6
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+
+    let openAbove = placement === 'above'
+    if (openAbove && spaceAbove < menuHeight + gap && spaceBelow >= spaceAbove) {
+      openAbove = false
+    } else if (!openAbove && spaceBelow < menuHeight + gap && spaceAbove > spaceBelow) {
+      openAbove = true
+    }
+
+    const top = openAbove ? rect.top - menuHeight - gap : rect.bottom + gap
+    const left = Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8))
+
+    setMenuStyle({
+      position: 'fixed',
+      top: Math.max(8, top),
+      left,
+      minWidth: 160,
+      zIndex: 5000,
+    })
+  }, [placement])
 
   useEffect(() => {
-    if (!open) return
-    const onOutside = (e) => {
-      if (!rootRef.current?.contains(e.target)) setOpen(false)
+    if (!open) {
+      setMenuStyle(null)
+      return
     }
+
+    positionMenu()
+    const frame = requestAnimationFrame(positionMenu)
+
+    const onOutside = (e) => {
+      if (triggerRef.current?.contains(e.target)) return
+      if (menuRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
+
+    const onReposition = () => positionMenu()
+
     document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [open])
+    window.addEventListener('resize', onReposition)
+    window.addEventListener('scroll', onReposition, true)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener('mousedown', onOutside)
+      window.removeEventListener('resize', onReposition)
+      window.removeEventListener('scroll', onReposition, true)
+    }
+  }, [open, positionMenu, items])
+
+  const menu = open && createPortal(
+    <div
+      ref={menuRef}
+      className="wb-hub-overflow__menu wb-hub-overflow__menu--portal"
+      style={menuStyle || { position: 'fixed', visibility: 'hidden', top: 0, left: 0 }}
+      role="menu"
+    >
+      {items.map(item => (
+        <button
+          key={item.label}
+          type="button"
+          role="menuitem"
+          className={`wb-hub-overflow__item${item.danger ? ' wb-hub-overflow__item--danger' : ''}`}
+          onClick={() => {
+            setOpen(false)
+            item.onClick()
+          }}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  )
 
   return (
-    <div className={`wb-hub-overflow${placementClass}${open ? ' wb-hub-overflow--open' : ''}`} ref={rootRef}>
+    <div className={`wb-hub-overflow${open ? ' wb-hub-overflow--open' : ''}`}>
       <button
+        ref={triggerRef}
         type="button"
         className="wb-hub-overflow__trigger"
         aria-expanded={open}
@@ -96,24 +175,7 @@ export function HubOverflowMenu({ items, label = 'More actions', placement = 'be
       >
         ⋯
       </button>
-      {open && (
-        <div className="wb-hub-overflow__menu" role="menu">
-          {items.map(item => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={`wb-hub-overflow__item${item.danger ? ' wb-hub-overflow__item--danger' : ''}`}
-              onClick={() => {
-                setOpen(false)
-                item.onClick()
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {menu}
     </div>
   )
 }
