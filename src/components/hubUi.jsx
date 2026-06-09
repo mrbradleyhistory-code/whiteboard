@@ -66,9 +66,10 @@ export function HubButton({ className = '', variant = '', ...props }) {
   return <button type="button" className={`wb-hub-btn${v} ${className}`.trim()} {...props} />
 }
 
-export function HubOverflowMenu({ items, label = 'More actions' }) {
+export function HubOverflowMenu({ items, label = 'More actions', placement = 'below' }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef(null)
+  const placementClass = placement === 'above' ? ' wb-hub-overflow--above' : ''
 
   useEffect(() => {
     if (!open) return
@@ -80,14 +81,18 @@ export function HubOverflowMenu({ items, label = 'More actions' }) {
   }, [open])
 
   return (
-    <div className="wb-hub-overflow" ref={rootRef}>
+    <div className={`wb-hub-overflow${placementClass}${open ? ' wb-hub-overflow--open' : ''}`} ref={rootRef}>
       <button
         type="button"
         className="wb-hub-overflow__trigger"
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={label}
-        onClick={() => setOpen(o => !o)}
+        onMouseDown={e => e.stopPropagation()}
+        onClick={e => {
+          e.stopPropagation()
+          setOpen(o => !o)
+        }}
       >
         ⋯
       </button>

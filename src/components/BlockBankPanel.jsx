@@ -265,15 +265,18 @@ export default function BlockBankPanel({
               ]
               return (
                 <li key={block.id}>
-                  <div
-                    className="wb-lesson-bank__card"
-                    draggable
-                    onDragStart={e => {
-                      e.dataTransfer.setData(DND_BLOCK_MIME, block.id)
-                      e.dataTransfer.effectAllowed = 'copy'
-                    }}
-                  >
-                    <span className="wb-lesson-bank__card-grip" aria-hidden>⠿</span>
+                  <div className="wb-lesson-bank__card">
+                    <span
+                      className="wb-lesson-bank__card-grip"
+                      aria-hidden
+                      draggable
+                      onDragStart={e => {
+                        e.dataTransfer.setData(DND_BLOCK_MIME, block.id)
+                        e.dataTransfer.effectAllowed = 'copy'
+                      }}
+                    >
+                      ⠿
+                    </span>
                     <div className="wb-lesson-bank__card-body">
                       <span className="wb-lesson-bank__card-name">{block.name}</span>
                       <span className="wb-lesson-bank__card-meta">{sectionLabel}</span>

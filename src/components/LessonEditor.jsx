@@ -295,7 +295,7 @@ export default function LessonEditor({
 
       <div className={`wb-lesson-workspace${bankOpen ? ' wb-lesson-workspace--bank-open' : ''}`}>
         {bankOpen && (
-          <div className="wb-lesson-bank-drawer">
+          <div className="wb-lesson-bank-drawer" role="complementary" aria-label="Parts bank">
             <BlockBankPanel
               blocks={blocks}
               blockTags={blockTags}

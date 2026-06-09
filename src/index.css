@@ -299,6 +299,16 @@ html, body, #root {
   z-index: 40;
 }
 
+.wb-hub-overflow--above .wb-hub-overflow__menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.wb-hub-overflow--open {
+  position: relative;
+  z-index: 50;
+}
+
 .wb-hub-overflow__item {
   display: block;
   width: 100%;
@@ -2153,42 +2163,65 @@ html, body, #root {
 }
 
 .wb-lesson-workspace {
-  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   min-height: 0;
 }
 
+.wb-lesson-workspace .wb-lesson-sequence {
+  flex: 1;
+  min-width: 0;
+  transition: flex-basis 0.2s ease;
+}
+
 .wb-lesson-workspace--bank-open .wb-lesson-sequence {
-  margin-left: min(300px, 34vw);
+  border-left: 1px solid var(--wb-border);
+  background: var(--wb-surface-muted);
+  border-radius: 0 var(--wb-hub-radius) var(--wb-hub-radius) 0;
 }
 
 .wb-lesson-bank-drawer {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: min(300px, 34vw);
-  z-index: 20;
+  flex: 0 0 min(300px, 34vw);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 3px solid var(--wb-accent);
+  background: linear-gradient(90deg, var(--wb-accent-light) 0%, var(--wb-surface) 12px);
+  box-shadow: 4px 0 18px rgba(28, 25, 23, 0.1);
+  border-radius: var(--wb-hub-radius) 0 0 var(--wb-hub-radius);
 }
 
 @media (max-width: 720px) {
+  .wb-lesson-workspace {
+    display: block;
+  }
+
   .wb-lesson-workspace--bank-open .wb-lesson-sequence {
-    margin-left: 0;
+    border-left: none;
+    background: transparent;
+    border-radius: 0;
   }
 
   .wb-lesson-bank-drawer {
     position: fixed;
     inset: 0;
+    flex: none;
     width: auto;
     z-index: 400;
-    background: rgba(28, 25, 23, 0.35);
+    background: rgba(28, 25, 23, 0.4);
+    border-right: none;
+    border-radius: 0;
+    box-shadow: none;
     padding: 12px;
-    display: flex;
   }
 
   .wb-lesson-bank-drawer .wb-lesson-bank {
     max-height: 100%;
     width: 100%;
     max-width: 360px;
+    border-right: 3px solid var(--wb-accent);
+    box-shadow: var(--wb-shadow-lg);
   }
 }
 
@@ -2207,9 +2240,13 @@ html, body, #root {
 }
 
 .wb-lesson-bank--drawer {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  height: auto;
   max-height: calc(100vh - 160px);
-  box-shadow: var(--wb-shadow-lg);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .wb-lesson-bank__head {
@@ -2347,7 +2384,13 @@ html, body, #root {
   font-size: 1rem;
   line-height: 1;
   flex-shrink: 0;
-  padding-top: 2px;
+  padding: 4px 2px;
+  cursor: grab;
+  user-select: none;
+}
+
+.wb-lesson-bank__card-grip:active {
+  cursor: grabbing;
 }
 
 .wb-lesson-bank__card-body {
@@ -2572,10 +2615,11 @@ html, body, #root {
 }
 
 .wb-lesson-step {
+  position: relative;
   border-radius: var(--wb-radius-sm);
   border: 1px solid var(--wb-border);
   background: var(--wb-surface-muted);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .wb-lesson-step--dragging {
@@ -2590,15 +2634,46 @@ html, body, #root {
 .wb-lesson-step__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  cursor: grab;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
 }
 
 .wb-lesson-step__grip {
   color: var(--wb-text-subtle);
   flex-shrink: 0;
   font-size: 0.9rem;
+  cursor: grab;
+  padding: 4px 2px;
+  user-select: none;
+}
+
+.wb-lesson-step__grip:active {
+  cursor: grabbing;
+}
+
+.wb-lesson-step__remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--wb-text-muted);
+  cursor: pointer;
+}
+
+.wb-lesson-step__remove:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--wb-danger);
+}
+
+.wb-lesson-step__head .wb-hub-overflow__trigger {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 1.1rem;
 }
 
 .wb-lesson-step__summary {

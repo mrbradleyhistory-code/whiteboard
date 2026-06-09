@@ -55,21 +55,26 @@ function StepCard({
       {showDropBefore && <div className="wb-lesson-sequence__drop-line" aria-hidden />}
       <div
         className={`wb-lesson-step${expanded ? ' wb-lesson-step--open' : ''}${dragState?.itemId === item.id ? ' wb-lesson-step--dragging' : ''}`}
-        draggable
-        onDragStart={e => {
-          e.dataTransfer.setData(
-            DND_ITEM_MIME,
-            JSON.stringify({ sectionId, itemId: item.id }),
-          )
-          e.dataTransfer.effectAllowed = 'move'
-          setDragState({ sectionId, itemId: item.id })
-        }}
-        onDragEnd={() => setDragState(null)}
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
         <div className="wb-lesson-step__head">
-          <span className="wb-lesson-step__grip" aria-hidden>⠿</span>
+          <span
+            className="wb-lesson-step__grip"
+            aria-hidden
+            draggable
+            onDragStart={e => {
+              e.dataTransfer.setData(
+                DND_ITEM_MIME,
+                JSON.stringify({ sectionId, itemId: item.id }),
+              )
+              e.dataTransfer.effectAllowed = 'move'
+              setDragState({ sectionId, itemId: item.id })
+            }}
+            onDragEnd={() => setDragState(null)}
+          >
+            ⠿
+          </span>
           <button
             type="button"
             className="wb-lesson-step__summary"
@@ -80,7 +85,24 @@ function StepCard({
             {meta && <span className="wb-lesson-step__meta">{meta}</span>}
             {linked && <span className="wb-lesson-step__bank-badge" title="Linked to bank">◆</span>}
           </button>
-          <HubOverflowMenu items={menuItems} label={`Actions for ${item.title || 'step'}`} />
+          <button
+            type="button"
+            className="wb-lesson-step__remove"
+            aria-label={`Remove ${item.title?.trim() || 'step'}`}
+            title="Remove step"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={e => {
+              e.stopPropagation()
+              onRemove(item.id)
+            }}
+          >
+            ×
+          </button>
+          <HubOverflowMenu
+            items={menuItems}
+            label={`Actions for ${item.title || 'step'}`}
+            placement="above"
+          />
         </div>
 
         {expanded && (
@@ -320,7 +342,7 @@ export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSave
     <div className="wb-lesson-sequence wb-lesson-sequence--horizontal">
       <header className="wb-lesson-sequence__head">
         <h2 className="wb-lesson-sequence__title">Lesson rundown</h2>
-        <p className="wb-lesson-sequence__lead">Scroll sideways · drag parts from the bank · tap a step to edit</p>
+        <p className="wb-lesson-sequence__lead">Scroll sideways · drag from ⠿ · × to remove · tap title to edit</p>
       </header>
 
       <div className="wb-lesson-sequence__board">
