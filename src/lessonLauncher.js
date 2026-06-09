@@ -127,6 +127,7 @@ export function normalizeLesson(raw) {
     boardId: raw.boardId || null,
     classId: raw.classId || null,
     theme: normalizeLessonTheme(raw.theme),
+    folderId: raw.folderId || null,
     sections,
     createdAt: raw.createdAt || now,
     updatedAt: raw.updatedAt || now,

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { folderDropZoneProps } from '../folderDrag'
 import {
   LIBRARY_FOLDER_KINDS,
   foldersForKind,
@@ -16,12 +17,14 @@ export default function BankFolderBar({
   onSelectFolder,
   onSaveFolders,
   onDeleteFolder,
+  onMoveItemToFolder,
   itemCounts = {},
   saving,
 }) {
   const [managing, setManaging] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [error, setError] = useState('')
+  const [dropTarget, setDropTarget] = useState(null)
   const folders = foldersForKind(libraryFolders, kind)
 
   const persistFolders = async (next) => {
@@ -59,13 +62,33 @@ export default function BankFolderBar({
     if (ok && activeFolderId === folder.id) onSelectFolder('all')
   }
 
+  const dropProps = (folderId) => (
+    onMoveItemToFolder
+      ? folderDropZoneProps({
+        kind,
+        folderId,
+        onMoveItemToFolder,
+        dropTarget,
+        setDropTarget,
+      })
+      : {}
+  )
+
+  const chipClass = (id, active) => {
+    const targetKey = id ?? 'none'
+    let cls = 'wb-bank-folders__chip'
+    if (active) cls += ' wb-bank-folders__chip--active'
+    if (dropTarget === targetKey) cls += ' wb-bank-folders__chip--drag'
+    return cls
+  }
+
   return (
     <div className="wb-bank-folders">
       <div className="wb-bank-folders__row" role="tablist" aria-label="Folders">
         <button
           type="button"
           role="tab"
-          className={`wb-bank-folders__chip${activeFolderId === 'all' ? ' wb-bank-folders__chip--active' : ''}`}
+          className={chipClass('all', activeFolderId === 'all')}
           onClick={() => onSelectFolder('all')}
         >
           All
@@ -75,8 +98,9 @@ export default function BankFolderBar({
             key={folder.id}
             type="button"
             role="tab"
-            className={`wb-bank-folders__chip${activeFolderId === folder.id ? ' wb-bank-folders__chip--active' : ''}`}
+            className={chipClass(folder.id, activeFolderId === folder.id)}
             onClick={() => onSelectFolder(folder.id)}
+            {...dropProps(folder.id)}
           >
             {folder.name}
             {itemCounts[folder.id] ? ` (${itemCounts[folder.id]})` : ''}
@@ -85,8 +109,9 @@ export default function BankFolderBar({
         <button
           type="button"
           role="tab"
-          className={`wb-bank-folders__chip${activeFolderId === 'none' ? ' wb-bank-folders__chip--active' : ''}`}
+          className={chipClass(null, activeFolderId === 'none')}
           onClick={() => onSelectFolder('none')}
+          {...dropProps(null)}
         >
           Uncategorized
         </button>
@@ -94,6 +119,10 @@ export default function BankFolderBar({
           {managing ? 'Done' : 'Folders'}
         </HubButton>
       </div>
+
+      {onMoveItemToFolder && (
+        <p className="wb-bank-folders__hint">Drag items onto a folder to organize.</p>
+      )}
 
       {managing && (
         <div className="wb-bank-folders__manage">
@@ -142,4 +171,39 @@ export function folderSelectOptions(folders) {
     { id: '', label: 'Uncategorized' },
     ...folders.map(f => ({ id: f.id, label: f.name })),
   ]
+}
+
+export function FolderGroupDropZone({
+  kind,
+  folderId,
+  onMoveItemToFolder,
+  dropTarget,
+  setDropTarget,
+  className = '',
+  as: Tag = 'div',
+  children,
+  ...props
+}) {
+  if (!onMoveItemToFolder) {
+    return <Tag className={className} {...props}>{children}</Tag>
+  }
+
+  const targetKey = folderId ?? 'none'
+  const dropZone = folderDropZoneProps({
+    kind,
+    folderId,
+    onMoveItemToFolder,
+    dropTarget,
+    setDropTarget,
+  })
+
+  return (
+    <Tag
+      className={`${className}${dropTarget === targetKey ? ' wb-bank-folder-group--drag' : ''}`.trim()}
+      {...props}
+      {...dropZone}
+    >
+      {children}
+    </Tag>
+  )
 }

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadClassData } from '../localClassData'
 import { supabase } from '../supabaseClient'
 import { LESSON_THEMES } from '../lessonThemes'
+import { folderDragHandleProps } from '../folderDrag'
 import {
   createEmptyLesson,
   deleteLesson,
@@ -13,8 +14,15 @@ import {
   saveTargetTemplates,
   upsertLesson,
 } from '../lessonLauncher'
-import { emptyLibraryFolders } from '../lessonLibraryFolders'
+import {
+  assignItemFolder,
+  emptyLibraryFolders,
+  foldersForKind,
+  groupItemsByFolder,
+  LIBRARY_FOLDER_KINDS,
+} from '../lessonLibraryFolders'
 import TemplateBanksPanel from './TemplateBanksPanel'
+import BankFolderBar, { filterByFolder, FolderGroupDropZone } from './BankFolderBar'
 import LessonEditor from './LessonEditor'
 import LessonRunSetup from './LessonRunSetup'
 import LessonRunner from './LessonRunner'
@@ -49,6 +57,8 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   const [runningSession, setRunningSession] = useState(null)
   const [classes, setClasses] = useState([])
   const [saveStatus, setSaveStatus] = useState('saved')
+  const [lessonFolderId, setLessonFolderId] = useState('all')
+  const [lessonGroupDropTarget, setLessonGroupDropTarget] = useState(null)
   const savedSnapshotRef = useRef('')
 
   const lessonSnapshot = (lesson) => JSON.stringify(lesson)
@@ -128,6 +138,82 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     setLibraryFolders(saved)
     return { error: null }
   }
+
+  const lessonFolders = foldersForKind(libraryFolders, LIBRARY_FOLDER_KINDS.LESSONS)
+
+  const lessonFolderCounts = useMemo(() => {
+    const counts = { none: 0 }
+    for (const lesson of lessons) {
+      const key = lesson.folderId && lessonFolders.some(f => f.id === lesson.folderId) ? lesson.folderId : 'none'
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }, [lessons, lessonFolders])
+
+  const moveLessonToFolder = async (lessonId, folderId) => {
+    setSaving(true)
+    const next = assignItemFolder(lessons, lessonId, folderId)
+    const { lessons: saved, error: err } = await saveLessons(userId, next)
+    setSaving(false)
+    if (err) setError(err)
+    else setLessons(saved)
+  }
+
+  const clearFolderFromLessons = async (folderId) => {
+    setSaving(true)
+    const next = lessons.map(l => (l.folderId === folderId ? { ...l, folderId: null } : l))
+    const { lessons: saved, error: err } = await saveLessons(userId, next)
+    setSaving(false)
+    if (err) setError(err)
+    else setLessons(saved)
+  }
+
+  const renderLessonCard = (lesson) => {
+    const stepCount = Object.values(lesson.sections).reduce(
+      (n, sec) => n + (sec.items?.length || 0),
+      0,
+    )
+    const linkedBoard = boards.find(b => b.id === lesson.boardId)
+    const themeLabel = LESSON_THEMES.find(t => t.id === lesson.theme)?.label
+    const dragProps = folderDragHandleProps(LIBRARY_FOLDER_KINDS.LESSONS, lesson.id)
+
+    return (
+      <HubCard key={lesson.id} className="wb-bank-item--draggable">
+        <div className="wb-hub-deck-header">
+          <span className="wb-bank-item__drag" aria-hidden title="Drag to folder" {...dragProps}>⠿</span>
+          <div className="wb-bank-item__main">
+            <div className="wb-hub-card__title">{lesson.title}</div>
+            <div className="wb-hub-card__meta">
+              {stepCount} step{stepCount !== 1 ? 's' : ''}
+              {themeLabel && lesson.theme !== 'classic' ? ` · ${themeLabel}` : ''}
+              {linkedBoard ? ` · Board: ${linkedBoard.name}` : ''}
+            </div>
+          </div>
+        </div>
+        <div className="wb-hub-card__actions">
+          <HubButton variant="primary" onClick={() => handleRunLesson(lesson)}>Run</HubButton>
+          <HubButton onClick={() => handleEditLesson(lesson)}>Edit</HubButton>
+          <HubOverflowMenu
+            label={`More actions for ${lesson.title}`}
+            items={[
+              { label: 'Duplicate', onClick: () => handleDuplicateLesson(lesson) },
+              { label: 'Delete', onClick: () => handleDeleteLesson(lesson.id), danger: true },
+            ]}
+          />
+        </div>
+      </HubCard>
+    )
+  }
+
+  const renderLessonList = (list) => (
+    list.length === 0 ? (
+      <HubEmpty title="No lessons here" description="Create a lesson or choose another folder." />
+    ) : (
+      <HubCardList>
+        {list.map(renderLessonCard)}
+      </HubCardList>
+    )
+  )
 
   const handleSaveTargetTemplates = async (next) => {
     setSaving(true)
@@ -385,6 +471,20 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
 
       <HubAlert message={error} />
 
+      {!loading && (
+        <BankFolderBar
+          kind={LIBRARY_FOLDER_KINDS.LESSONS}
+          libraryFolders={libraryFolders}
+          activeFolderId={lessonFolderId}
+          onSelectFolder={setLessonFolderId}
+          onSaveFolders={handleSaveFolders}
+          onDeleteFolder={clearFolderFromLessons}
+          onMoveItemToFolder={moveLessonToFolder}
+          itemCounts={lessonFolderCounts}
+          saving={saving}
+        />
+      )}
+
       {loading ? (
         <HubLoading label="Loading lessons…" />
       ) : lessons.length === 0 ? (
@@ -392,42 +492,46 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
           title="No lessons yet"
           description="Create a lesson for today, link a board, and add steps from your activity bank."
         />
+      ) : lessonFolderId === 'all' ? (
+        (() => {
+          const { groups, uncategorized } = groupItemsByFolder(lessons, lessonFolders)
+          return (
+            <div className="wb-bank-folder-groups">
+              {groups.filter(g => g.items.length > 0).map(({ folder, items }) => (
+                <details key={folder.id} className="wb-bank-folder-group" open>
+                  <FolderGroupDropZone
+                    as="summary"
+                    kind={LIBRARY_FOLDER_KINDS.LESSONS}
+                    folderId={folder.id}
+                    onMoveItemToFolder={moveLessonToFolder}
+                    dropTarget={lessonGroupDropTarget}
+                    setDropTarget={setLessonGroupDropTarget}
+                  >
+                    {folder.name} ({items.length})
+                  </FolderGroupDropZone>
+                  {renderLessonList(items)}
+                </details>
+              ))}
+              {uncategorized.length > 0 && (
+                <details className="wb-bank-folder-group" open={groups.every(g => g.items.length === 0)}>
+                  <FolderGroupDropZone
+                    as="summary"
+                    kind={LIBRARY_FOLDER_KINDS.LESSONS}
+                    folderId={null}
+                    onMoveItemToFolder={moveLessonToFolder}
+                    dropTarget={lessonGroupDropTarget}
+                    setDropTarget={setLessonGroupDropTarget}
+                  >
+                    Uncategorized ({uncategorized.length})
+                  </FolderGroupDropZone>
+                  {renderLessonList(uncategorized)}
+                </details>
+              )}
+            </div>
+          )
+        })()
       ) : (
-        <HubCardList>
-          {lessons.map(lesson => {
-            const stepCount = Object.values(lesson.sections).reduce(
-              (n, sec) => n + (sec.items?.length || 0),
-              0,
-            )
-            const linkedBoard = boards.find(b => b.id === lesson.boardId)
-            const themeLabel = LESSON_THEMES.find(t => t.id === lesson.theme)?.label
-            return (
-              <HubCard key={lesson.id}>
-                <div className="wb-hub-deck-header">
-                  <div>
-                    <div className="wb-hub-card__title">{lesson.title}</div>
-                    <div className="wb-hub-card__meta">
-                      {stepCount} step{stepCount !== 1 ? 's' : ''}
-                      {themeLabel && lesson.theme !== 'classic' ? ` · ${themeLabel}` : ''}
-                      {linkedBoard ? ` · Board: ${linkedBoard.name}` : ''}
-                    </div>
-                  </div>
-                </div>
-                <div className="wb-hub-card__actions">
-                  <HubButton variant="primary" onClick={() => handleRunLesson(lesson)}>Run</HubButton>
-                  <HubButton onClick={() => handleEditLesson(lesson)}>Edit</HubButton>
-                  <HubOverflowMenu
-                    label={`More actions for ${lesson.title}`}
-                    items={[
-                      { label: 'Duplicate', onClick: () => handleDuplicateLesson(lesson) },
-                      { label: 'Delete', onClick: () => handleDeleteLesson(lesson.id), danger: true },
-                    ]}
-                  />
-                </div>
-              </HubCard>
-            )
-          })}
-        </HubCardList>
+        renderLessonList(filterByFolder(lessons, lessonFolderId))
       )}
     </HubPanel>
   )

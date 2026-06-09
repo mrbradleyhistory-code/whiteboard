@@ -4,8 +4,9 @@ import {
   DND_BLOCK_MIME,
   filterAndSortBlocks,
 } from '../lessonBlockBank'
-import { foldersForKind, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
+import { foldersForKind, assignItemFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
 import { getTagChipStyle, resolveStepAccentColor, resolveStepAccentLight } from '../lessonTagColors'
+import { folderDragHandleProps } from '../folderDrag'
 import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
 import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
 import { HubButton, HubEmpty, HubOverflowMenu } from './hubUi'
@@ -113,6 +114,10 @@ export default function BlockBankPanel({
 
   const clearFolderFromBlocks = async (folderId) => {
     await persist(blocks.map(b => (b.folderId === folderId ? { ...b, folderId: null } : b)))
+  }
+
+  const moveToFolder = async (blockId, folderId) => {
+    await persist(assignItemFolder(blocks, blockId, folderId))
   }
 
   const panelClass = `wb-lesson-bank${drawer ? ' wb-lesson-bank--drawer' : ''}`
@@ -246,6 +251,7 @@ export default function BlockBankPanel({
         onSelectFolder={setActiveFolderId}
         onSaveFolders={onSaveFolders}
         onDeleteFolder={clearFolderFromBlocks}
+        onMoveItemToFolder={moveToFolder}
         itemCounts={itemCounts}
         saving={saving}
       />
@@ -327,8 +333,17 @@ export default function BlockBankPanel({
                     style={accent ? { '--wb-step-accent': accent, '--wb-step-accent-light': accentLight } : undefined}
                   >
                     <span
+                      className="wb-bank-item__drag wb-bank-item__drag--compact"
+                      aria-hidden
+                      title="Drag to folder"
+                      {...folderDragHandleProps(LIBRARY_FOLDER_KINDS.ACTIVITIES, block.id)}
+                    >
+                      ⠿
+                    </span>
+                    <span
                       className="wb-lesson-bank__card-grip"
                       aria-hidden
+                      title="Drag to lesson"
                       draggable
                       onDragStart={e => {
                         e.dataTransfer.setData(DND_BLOCK_MIME, block.id)

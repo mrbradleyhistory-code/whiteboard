@@ -8,6 +8,7 @@ export const BLOCK_SORT_OPTIONS = [
 
 export const DND_BLOCK_MIME = 'application/x-wb-lesson-block'
 export const DND_ITEM_MIME = 'application/x-wb-lesson-item'
+export const DND_FOLDER_ITEM_MIME = 'application/x-wb-folder-item'
 
 /** @param {string} raw */
 export function normalizeTag(raw) {

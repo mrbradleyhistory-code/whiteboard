@@ -1,6 +1,7 @@
 export const LIBRARY_FOLDER_KINDS = {
   ACTIVITIES: 'activities',
   TARGETS: 'targets',
+  LESSONS: 'lessons',
 }
 
 export function newFolderId() {
@@ -8,7 +9,7 @@ export function newFolderId() {
 }
 
 export function emptyLibraryFolders() {
-  return { activities: [], targets: [] }
+  return { activities: [], targets: [], lessons: [] }
 }
 
 export function normalizeFolder(raw, kind) {
@@ -17,6 +18,12 @@ export function normalizeFolder(raw, kind) {
     name: String(raw.name || '').trim() || 'Untitled folder',
     kind: kind || raw.kind || LIBRARY_FOLDER_KINDS.ACTIVITIES,
   }
+}
+
+export function folderListKey(kind) {
+  if (kind === LIBRARY_FOLDER_KINDS.TARGETS) return 'targets'
+  if (kind === LIBRARY_FOLDER_KINDS.LESSONS) return 'lessons'
+  return 'activities'
 }
 
 export function normalizeLibraryFolders(raw) {
@@ -28,12 +35,17 @@ export function normalizeLibraryFolders(raw) {
     targets: Array.isArray(raw.targets)
       ? raw.targets.map(f => normalizeFolder(f, LIBRARY_FOLDER_KINDS.TARGETS))
       : [],
+    lessons: Array.isArray(raw.lessons)
+      ? raw.lessons.map(f => normalizeFolder(f, LIBRARY_FOLDER_KINDS.LESSONS))
+      : [],
   }
 }
 
 export function foldersForKind(libraryFolders, kind) {
   const folders = normalizeLibraryFolders(libraryFolders)
-  return kind === LIBRARY_FOLDER_KINDS.TARGETS ? folders.targets : folders.activities
+  if (kind === LIBRARY_FOLDER_KINDS.TARGETS) return folders.targets
+  if (kind === LIBRARY_FOLDER_KINDS.LESSONS) return folders.lessons
+  return folders.activities
 }
 
 export function folderName(libraryFolders, kind, folderId) {
@@ -43,7 +55,7 @@ export function folderName(libraryFolders, kind, folderId) {
 
 export function upsertFolder(libraryFolders, kind, folder) {
   const normalized = normalizeLibraryFolders(libraryFolders)
-  const listKey = kind === LIBRARY_FOLDER_KINDS.TARGETS ? 'targets' : 'activities'
+  const listKey = folderListKey(kind)
   const next = normalizeFolder(folder, kind)
   const idx = normalized[listKey].findIndex(f => f.id === next.id)
   const list = [...normalized[listKey]]
@@ -54,7 +66,7 @@ export function upsertFolder(libraryFolders, kind, folder) {
 
 export function removeFolder(libraryFolders, kind, folderId) {
   const normalized = normalizeLibraryFolders(libraryFolders)
-  const listKey = kind === LIBRARY_FOLDER_KINDS.TARGETS ? 'targets' : 'activities'
+  const listKey = folderListKey(kind)
   return {
     ...normalized,
     [listKey]: normalized[listKey].filter(f => f.id !== folderId),
@@ -81,17 +93,6 @@ export function remapFolderIds(importedFolders, kind) {
   return { folders, idMap }
 }
 
-export function mergeLibraryFolders(current, imported, activityFolderIdMap, targetFolderIdMap) {
-  const base = normalizeLibraryFolders(current)
-  const incoming = normalizeLibraryFolders(imported)
-  return {
-    activities: [...base.activities, ...incoming.activities.map(f => ({
-      ...f,
-      id: activityFolderIdMap.get(f.id) || newFolderId(),
-    }))],
-    targets: [...base.targets, ...incoming.targets.map(f => ({
-      ...f,
-      id: targetFolderIdMap.get(f.id) || newFolderId(),
-    }))],
-  }
+export function assignItemFolder(items, itemId, folderId) {
+  return items.map(item => (item.id === itemId ? { ...item, folderId: folderId || null } : item))
 }

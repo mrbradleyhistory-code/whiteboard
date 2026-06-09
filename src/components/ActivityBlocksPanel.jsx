@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
+import { folderDragHandleProps } from '../folderDrag'
 import { getTagChipStyle } from '../lessonTagColors'
-import { foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
+import { assignItemFolder, foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
 import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
-import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
+import BankFolderBar, { filterByFolder, FolderGroupDropZone, folderSelectOptions } from './BankFolderBar'
 import BlockTagInput from './BlockTagInput'
 import BlockTagManager from './BlockTagManager'
 import {
@@ -17,10 +18,12 @@ import {
 } from './hubUi'
 
 function ActivityCard({ block, tagColors, onDuplicate, onEdit, onDelete, saving }) {
+  const dragProps = folderDragHandleProps(LIBRARY_FOLDER_KINDS.ACTIVITIES, block.id)
   return (
-    <HubCard>
+    <HubCard className="wb-bank-item--draggable">
       <div className="wb-hub-deck-header">
-        <div>
+        <span className="wb-bank-item__drag" aria-hidden title="Drag to folder" {...dragProps}>⠿</span>
+        <div className="wb-bank-item__main">
           <div className="wb-hub-card__title">{block.name}</div>
           <div className="wb-hub-card__meta">
             {LESSON_SECTIONS.find(s => s.id === block.section)?.label || block.section}
@@ -69,6 +72,7 @@ export default function ActivityBlocksPanel({
 }) {
   const [view, setView] = useState('list')
   const [activeFolderId, setActiveFolderId] = useState('all')
+  const [groupDropTarget, setGroupDropTarget] = useState(null)
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
 
@@ -143,6 +147,10 @@ export default function ActivityBlocksPanel({
 
   const clearFolderFromBlocks = async (folderId) => {
     await persist(blocks.map(b => (b.folderId === folderId ? { ...b, folderId: null } : b)))
+  }
+
+  const moveToFolder = async (blockId, folderId) => {
+    await persist(assignItemFolder(blocks, blockId, folderId))
   }
 
   const renderList = (list) => (
@@ -284,6 +292,7 @@ export default function ActivityBlocksPanel({
         onSelectFolder={setActiveFolderId}
         onSaveFolders={onSaveFolders}
         onDeleteFolder={clearFolderFromBlocks}
+        onMoveItemToFolder={moveToFolder}
         itemCounts={itemCounts}
         saving={saving}
       />
@@ -298,13 +307,31 @@ export default function ActivityBlocksPanel({
         <div className="wb-bank-folder-groups">
           {groups.filter(g => g.items.length > 0).map(({ folder, items }) => (
             <details key={folder.id} className="wb-bank-folder-group" open>
-              <summary>{folder.name} ({items.length})</summary>
+              <FolderGroupDropZone
+                as="summary"
+                kind={LIBRARY_FOLDER_KINDS.ACTIVITIES}
+                folderId={folder.id}
+                onMoveItemToFolder={moveToFolder}
+                dropTarget={groupDropTarget}
+                setDropTarget={setGroupDropTarget}
+              >
+                {folder.name} ({items.length})
+              </FolderGroupDropZone>
               {renderList(items)}
             </details>
           ))}
           {uncategorized.length > 0 && (
             <details className="wb-bank-folder-group" open={groups.every(g => g.items.length === 0)}>
-              <summary>Uncategorized ({uncategorized.length})</summary>
+              <FolderGroupDropZone
+                as="summary"
+                kind={LIBRARY_FOLDER_KINDS.ACTIVITIES}
+                folderId={null}
+                onMoveItemToFolder={moveToFolder}
+                dropTarget={groupDropTarget}
+                setDropTarget={setGroupDropTarget}
+              >
+                Uncategorized ({uncategorized.length})
+              </FolderGroupDropZone>
               {renderList(uncategorized)}
             </details>
           )}

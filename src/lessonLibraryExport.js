@@ -140,7 +140,7 @@ function importTargetTemplates(templates, folderIdMap) {
   }))
 }
 
-function importLessons(lessons, blockIdMap) {
+function importLessons(lessons, blockIdMap, lessonFolderIdMap) {
   const now = new Date().toISOString()
   return lessons.map(lesson => {
     const normalized = normalizeLesson({
@@ -149,6 +149,9 @@ function importLessons(lessons, blockIdMap) {
       title: lesson.title?.trim() || 'Imported lesson',
       boardId: null,
       classId: null,
+      folderId: lesson.folderId && lessonFolderIdMap.has(lesson.folderId)
+        ? lessonFolderIdMap.get(lesson.folderId)
+        : null,
       createdAt: now,
       updatedAt: now,
     })
@@ -180,9 +183,10 @@ function importLessons(lessons, blockIdMap) {
 export function mergeLibraryImport(current, imported) {
   const activityFolderRemap = remapFolderIds(imported.libraryFolders, LIBRARY_FOLDER_KINDS.ACTIVITIES)
   const targetFolderRemap = remapFolderIds(imported.libraryFolders, LIBRARY_FOLDER_KINDS.TARGETS)
+  const lessonFolderRemap = remapFolderIds(imported.libraryFolders, LIBRARY_FOLDER_KINDS.LESSONS)
   const { blocks: newBlocks, idMap } = importActivities(imported.activities, activityFolderRemap.idMap)
   const newTemplates = importTargetTemplates(imported.targetTemplates, targetFolderRemap.idMap)
-  const newLessons = importLessons(imported.lessons, idMap)
+  const newLessons = importLessons(imported.lessons, idMap, lessonFolderRemap.idMap)
 
   return {
     blocks: [...newBlocks, ...current.blocks],
@@ -199,6 +203,10 @@ export function mergeLibraryImport(current, imported) {
       targets: [
         ...foldersForKind(current.libraryFolders, LIBRARY_FOLDER_KINDS.TARGETS),
         ...targetFolderRemap.folders,
+      ],
+      lessons: [
+        ...foldersForKind(current.libraryFolders, LIBRARY_FOLDER_KINDS.LESSONS),
+        ...lessonFolderRemap.folders,
       ],
     },
     targetTemplates: [...newTemplates, ...current.targetTemplates],

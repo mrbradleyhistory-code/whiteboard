@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
+import { folderDragHandleProps } from '../folderDrag'
+import { assignItemFolder, foldersForKind, groupItemsByFolder, LIBRARY_FOLDER_KINDS } from '../lessonLibraryFolders'
 import { newTargetTemplateId, normalizeTargetTemplate } from '../lessonLauncher'
-import BankFolderBar, { filterByFolder, folderSelectOptions } from './BankFolderBar'
+import BankFolderBar, { filterByFolder, FolderGroupDropZone, folderSelectOptions } from './BankFolderBar'
 import {
   HubAlert,
   HubButton,
@@ -14,10 +15,12 @@ import {
 } from './hubUi'
 
 function TargetCard({ template, onEdit, onDelete }) {
+  const dragProps = folderDragHandleProps(LIBRARY_FOLDER_KINDS.TARGETS, template.id)
   return (
-    <HubCard>
+    <HubCard className="wb-bank-item--draggable">
       <div className="wb-hub-deck-header">
-        <div>
+        <span className="wb-bank-item__drag" aria-hidden title="Drag to folder" {...dragProps}>⠿</span>
+        <div className="wb-bank-item__main">
           <div className="wb-hub-card__title">{template.name}</div>
         </div>
         <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
@@ -52,6 +55,7 @@ export default function TargetTemplatesPanel({
 }) {
   const [editing, setEditing] = useState(null)
   const [activeFolderId, setActiveFolderId] = useState('all')
+  const [groupDropTarget, setGroupDropTarget] = useState(null)
   const [error, setError] = useState('')
 
   const folders = foldersForKind(libraryFolders, LIBRARY_FOLDER_KINDS.TARGETS)
@@ -111,6 +115,10 @@ export default function TargetTemplatesPanel({
 
   const clearFolderFromTemplates = async (folderId) => {
     await persist(templates.map(t => (t.folderId === folderId ? { ...t, folderId: null } : t)))
+  }
+
+  const moveToFolder = async (templateId, folderId) => {
+    await persist(assignItemFolder(templates, templateId, folderId))
   }
 
   const renderList = (list) => (
@@ -203,6 +211,7 @@ export default function TargetTemplatesPanel({
         onSelectFolder={setActiveFolderId}
         onSaveFolders={onSaveFolders}
         onDeleteFolder={clearFolderFromTemplates}
+        onMoveItemToFolder={moveToFolder}
         itemCounts={itemCounts}
         saving={saving}
       />
@@ -216,13 +225,31 @@ export default function TargetTemplatesPanel({
         <div className="wb-bank-folder-groups">
           {groups.filter(g => g.items.length > 0).map(({ folder, items }) => (
             <details key={folder.id} className="wb-bank-folder-group" open>
-              <summary>{folder.name} ({items.length})</summary>
+              <FolderGroupDropZone
+                as="summary"
+                kind={LIBRARY_FOLDER_KINDS.TARGETS}
+                folderId={folder.id}
+                onMoveItemToFolder={moveToFolder}
+                dropTarget={groupDropTarget}
+                setDropTarget={setGroupDropTarget}
+              >
+                {folder.name} ({items.length})
+              </FolderGroupDropZone>
               {renderList(items)}
             </details>
           ))}
           {uncategorized.length > 0 && (
             <details className="wb-bank-folder-group" open={groups.every(g => g.items.length === 0)}>
-              <summary>Uncategorized ({uncategorized.length})</summary>
+              <FolderGroupDropZone
+                as="summary"
+                kind={LIBRARY_FOLDER_KINDS.TARGETS}
+                folderId={null}
+                onMoveItemToFolder={moveToFolder}
+                dropTarget={groupDropTarget}
+                setDropTarget={setGroupDropTarget}
+              >
+                Uncategorized ({uncategorized.length})
+              </FolderGroupDropZone>
               {renderList(uncategorized)}
             </details>
           )}

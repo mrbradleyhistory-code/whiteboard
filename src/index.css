@@ -2872,6 +2872,57 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+.wb-bank-folders__chip--drag {
+  background: var(--wb-accent-light);
+  border-color: var(--wb-accent);
+  color: var(--wb-accent-dark);
+  box-shadow: 0 0 0 2px var(--wb-accent-ring);
+}
+
+.wb-bank-folders__hint {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--wb-text-muted);
+}
+
+.wb-bank-folder-group--drag {
+  border-color: var(--wb-accent);
+  box-shadow: 0 0 0 1px var(--wb-accent-ring);
+}
+
+.wb-bank-folder-group--drag summary {
+  background: var(--wb-accent-light);
+  color: var(--wb-accent-dark);
+}
+
+.wb-bank-item--draggable .wb-hub-deck-header {
+  align-items: flex-start;
+}
+
+.wb-bank-item__drag {
+  color: var(--wb-text-subtle);
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 2px;
+  cursor: grab;
+  user-select: none;
+}
+
+.wb-bank-item__drag:active {
+  cursor: grabbing;
+}
+
+.wb-bank-item__drag--compact {
+  font-size: 0.9rem;
+  padding-top: 6px;
+}
+
+.wb-bank-item__main {
+  flex: 1;
+  min-width: 0;
+}
+
 .wb-bank-folders__error {
   margin: 8px 0 0;
   color: var(--wb-danger);
