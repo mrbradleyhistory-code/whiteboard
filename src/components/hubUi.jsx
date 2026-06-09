@@ -1,4 +1,9 @@
-export function HubPanel({ title, lead, children }) {
+import { useEffect, useRef, useState } from 'react'
+
+export function HubPanel({ title, lead, embedded = false, children }) {
+  if (embedded) {
+    return <div className="wb-hub wb-hub--embedded">{children}</div>
+  }
   return (
     <div className="wb-hub">
       <header className="wb-hub__intro">
@@ -59,6 +64,53 @@ export function HubCard({ children, className = '', as: Tag = 'li' }) {
 export function HubButton({ className = '', variant = '', ...props }) {
   const v = variant ? ` wb-hub-btn--${variant}` : ''
   return <button type="button" className={`wb-hub-btn${v} ${className}`.trim()} {...props} />
+}
+
+export function HubOverflowMenu({ items, label = 'More actions' }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onOutside = (e) => {
+      if (!rootRef.current?.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [open])
+
+  return (
+    <div className="wb-hub-overflow" ref={rootRef}>
+      <button
+        type="button"
+        className="wb-hub-overflow__trigger"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={label}
+        onClick={() => setOpen(o => !o)}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div className="wb-hub-overflow__menu" role="menu">
+          {items.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className={`wb-hub-overflow__item${item.danger ? ' wb-hub-overflow__item--danger' : ''}`}
+              onClick={() => {
+                setOpen(false)
+                item.onClick()
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function HubPanelBlock({ title, children, className = '' }) {

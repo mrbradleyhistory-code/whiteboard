@@ -24,6 +24,7 @@ import {
   HubCreateRow,
   HubEmpty,
   HubLoading,
+  HubOverflowMenu,
   HubPanel,
   HubToolbar,
 } from './hubUi'
@@ -254,6 +255,16 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
 
   if (view === 'edit' && editingLesson) {
     const isNew = !lessons.some(l => l.id === editingLesson.id)
+    const runFromEditor = async () => {
+      let toRun = lessons.find(l => l.id === editingLesson.id) || editingLesson
+      if (saveStatus === 'dirty') {
+        const saved = await handleSaveLesson()
+        if (!saved) return
+        toRun = saved
+      }
+      beginRun(toRun)
+    }
+
     return (
       <div>
         <HubBackButton onClick={leaveEditor} label="Lessons" />
@@ -266,40 +277,22 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
           classes={classes}
           onChange={setEditingLesson}
           onSave={handleSaveLesson}
+          onRun={runFromEditor}
           onDuplicate={handleDuplicateWhileEditing}
           onOpenBanks={() => setView('blocks')}
           saving={saving}
           saveStatus={saveStatus}
           isNew={isNew}
         />
-        <div className="wb-hub-toolbar">
-          <HubButton
-            variant="primary"
-            onClick={async () => {
-              let toRun = lessons.find(l => l.id === editingLesson.id) || editingLesson
-              if (saveStatus === 'dirty') {
-                const saved = await handleSaveLesson()
-                if (!saved) return
-                toRun = saved
-              }
-              beginRun(toRun)
-            }}
-          >
-            Run lesson
-          </HubButton>
-        </div>
       </div>
     )
   }
 
   return (
-    <HubPanel
-      title="Lesson Launcher"
-      lead="Plan your period: learning targets, activity bank, linked board, and a runner for class."
-    >
+    <HubPanel embedded>
       <HubToolbar>
         <HubButton variant="primary" onClick={handleCreateLesson}>+ New lesson</HubButton>
-        <HubButton onClick={() => setView('blocks')}>Template banks</HubButton>
+        <HubButton variant="ghost" onClick={() => setView('blocks')}>Banks</HubButton>
       </HubToolbar>
 
       <HubAlert message={error} />
@@ -330,20 +323,18 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
                       {themeLabel && lesson.theme !== 'classic' ? ` · ${themeLabel}` : ''}
                       {linkedBoard ? ` · Board: ${linkedBoard.name}` : ''}
                     </div>
-                    {lesson.learningTarget && (
-                      <p className="wb-hub-hint" style={{ marginTop: 8 }}>
-                        <strong>LT:</strong> {lesson.learningTarget.length > 80
-                          ? `${lesson.learningTarget.slice(0, 80)}…`
-                          : lesson.learningTarget}
-                      </p>
-                    )}
                   </div>
                 </div>
                 <div className="wb-hub-card__actions">
                   <HubButton variant="primary" onClick={() => handleRunLesson(lesson)}>Run</HubButton>
                   <HubButton onClick={() => handleEditLesson(lesson)}>Edit</HubButton>
-                  <HubButton onClick={() => handleDuplicateLesson(lesson)}>Duplicate</HubButton>
-                  <HubButton variant="danger" onClick={() => handleDeleteLesson(lesson.id)}>Delete</HubButton>
+                  <HubOverflowMenu
+                    label={`More actions for ${lesson.title}`}
+                    items={[
+                      { label: 'Duplicate', onClick: () => handleDuplicateLesson(lesson) },
+                      { label: 'Delete', onClick: () => handleDeleteLesson(lesson.id), danger: true },
+                    ]}
+                  />
                 </div>
               </HubCard>
             )

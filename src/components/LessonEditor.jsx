@@ -7,7 +7,7 @@ import {
   normalizeTargetTemplate,
 } from '../lessonLauncher'
 import { HubButton, HubPanelBlock } from './hubUi'
-import LessonThemePicker from './LessonThemePicker'
+import LessonThemeSwitcher from './LessonThemeSwitcher'
 
 function OutcomeField({
   label,
@@ -277,6 +277,7 @@ export default function LessonEditor({
   onChange,
   onSave,
   onDuplicate,
+  onRun,
   onOpenBanks,
   saving,
   saveStatus,
@@ -332,11 +333,16 @@ export default function LessonEditor({
           )}
         </div>
         <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
-          <HubButton variant="primary" onClick={onSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save lesson'}
+          {onRun && (
+            <HubButton variant="primary" onClick={onRun} disabled={saving}>
+              Run
+            </HubButton>
+          )}
+          <HubButton onClick={onSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
           </HubButton>
           {onDuplicate && (
-            <HubButton onClick={onDuplicate} disabled={saving}>Duplicate lesson</HubButton>
+            <HubButton variant="ghost" onClick={onDuplicate} disabled={saving}>Duplicate</HubButton>
           )}
         </div>
       </div>
@@ -387,10 +393,14 @@ export default function LessonEditor({
           onSaveAsTemplate={() => saveOutcomeTemplate('successCriteria', lesson.successCriteria)}
           onOpenBanks={onOpenBanks}
         />
-        <LessonThemePicker
-          value={lesson.theme || 'classic'}
-          onChange={theme => patchLesson({ theme })}
-        />
+        <div className="wb-lesson-field">
+          <span>Visual theme</span>
+          <LessonThemeSwitcher
+            value={lesson.theme || 'classic'}
+            onChange={theme => patchLesson({ theme })}
+            compact
+          />
+        </div>
         <label className="wb-lesson-field">
           <span>Whiteboard for this lesson</span>
           <select
@@ -422,10 +432,6 @@ export default function LessonEditor({
           </label>
         )}
       </HubPanelBlock>
-
-      <p className="wb-hub-hint" style={{ marginBottom: 20 }}>
-        Warmup → Activities → Wrap up → Deadlines. Custom steps first; bank is optional.
-      </p>
 
       {LESSON_SECTIONS.map(s => (
         <SectionEditor

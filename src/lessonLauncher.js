@@ -147,6 +147,11 @@ export function lessonAgendaSteps(lesson) {
   return steps
 }
 
+/** Agenda steps for the runner sidebar — excludes deadlines (shown in the rail). */
+export function lessonInstructionSteps(lesson) {
+  return lessonAgendaSteps(lesson).filter(s => s.sectionId !== 'deadline')
+}
+
 export function lessonDeadlineItems(lesson) {
   return lesson.sections.deadline?.items || []
 }

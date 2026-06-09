@@ -76,12 +76,8 @@ export default function RunnerClassTools({
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
       >
-        <span className="wb-lesson-runner__class-tools-toggle-label">
-          Class tools · {activeClass.name}
-        </span>
-        <span className="wb-lesson-runner__class-roster">
-          {students.length} students
-        </span>
+        <span className="wb-lesson-runner__class-tools-toggle-label">Class tools</span>
+        <span className="wb-lesson-runner__class-roster">{students.length} students</span>
         <span className="wb-lesson-runner__targets-chevron" aria-hidden>{open ? '▲' : '▼'}</span>
       </button>
 
