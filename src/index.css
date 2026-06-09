@@ -858,6 +858,10 @@ html, body, #root {
   --wb-runner-deadline-bg: #fffbeb;
   --wb-runner-frame-bg: #eef1f4;
   --wb-runner-shadow: var(--wb-hub-shadow);
+  --wb-runner-main-fg: var(--wb-text);
+  --wb-runner-main-fg-muted: var(--wb-text-muted);
+  --wb-runner-main-border: var(--wb-border);
+  --wb-directions-scale: 1;
   --wb-lesson-display-font: inherit;
   position: fixed;
   inset: 0;
@@ -876,8 +880,8 @@ html, body, #root {
   --wb-text: #e8ecf2;
   --wb-text-muted: #9aa3b2;
   --wb-accent: #5d9fd4;
-  --wb-accent-dark: #6eb3e8;
-  --wb-accent-light: #1a2838;
+  --wb-accent-dark: #8ec5f0;
+  --wb-accent-light: #243044;
   --wb-runner-btn-bg: #252b38;
   --wb-runner-deadline-bg: #2a2618;
   --wb-runner-frame-bg: #0d0f12;
@@ -897,6 +901,9 @@ html, body, #root {
   --wb-runner-deadline-bg: #f8edd8;
   --wb-runner-frame-bg: #4a4034;
   --wb-runner-shadow: 0 2px 14px rgba(42, 34, 24, 0.28);
+  --wb-runner-main-fg: #f2e6cf;
+  --wb-runner-main-fg-muted: #c9b896;
+  --wb-runner-main-border: rgba(242, 230, 207, 0.28);
   --wb-lesson-display-font: Georgia, 'Palatino Linotype', 'Book Antiqua', serif;
   background-image:
     radial-gradient(ellipse 80% 50% at 15% 0%, rgba(196, 92, 38, 0.18), transparent),
@@ -966,6 +973,57 @@ html, body, #root {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.wb-lesson-theme-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--wb-border);
+  background: var(--wb-runner-btn-bg);
+}
+
+.wb-lesson-theme-switch--compact .wb-lesson-theme-switch__btn {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.wb-lesson-theme-switch__btn {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--wb-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wb-lesson-theme-switch__btn:hover {
+  color: var(--wb-text);
+  background: var(--wb-accent-light);
+}
+
+.wb-lesson-theme-switch__btn--active {
+  background: var(--wb-accent);
+  color: #fff;
+}
+
+.wb-lesson-theme-switch__btn--active:hover {
+  background: var(--wb-accent-dark);
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .wb-lesson-theme-switch--compact .wb-lesson-theme-switch__btn {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
 }
 
 .wb-lesson-runner__targets {
@@ -1123,6 +1181,8 @@ html, body, #root {
   border-radius: 10px;
   border: 1px solid var(--wb-border);
   background: var(--wb-runner-btn-bg);
+  color: var(--wb-text);
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1131,6 +1191,10 @@ html, body, #root {
 .wb-lesson-runner__agenda-item--active {
   border-color: var(--wb-accent);
   background: var(--wb-accent-light);
+}
+
+.wb-lesson-runner__agenda-item--active .wb-lesson-runner__agenda-section {
+  color: var(--wb-accent-dark);
 }
 
 .wb-lesson-runner__agenda-section {
@@ -1144,6 +1208,18 @@ html, body, #root {
 .wb-lesson-runner__agenda-name {
   font-size: 0.95rem;
   font-weight: 600;
+  color: var(--wb-text);
+}
+
+.wb-lesson-runner__agenda-item--active .wb-lesson-runner__agenda-name {
+  font-weight: 700;
+}
+
+.wb-lesson-runner__agenda-duration {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--wb-accent-dark);
+  margin-top: 2px;
 }
 
 .wb-lesson-runner__deadline-card {
@@ -1186,6 +1262,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   background: var(--wb-bg);
+  color: var(--wb-runner-main-fg);
 }
 
 .wb-lesson-runner__stage {
@@ -1207,16 +1284,44 @@ html, body, #root {
   gap: 12px;
 }
 
-.wb-lesson-runner__step-label {
-  font-size: 1rem;
+.wb-lesson-runner__step-meta-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.wb-lesson-runner__text-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wb-lesson-runner__text-zoom-btn {
+  min-width: 40px;
+  padding: 6px 10px;
   font-weight: 700;
-  color: var(--wb-text);
+}
+
+.wb-lesson-runner__text-zoom-label {
+  min-width: 3.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-runner-main-fg-muted);
+}
+
+.wb-lesson-runner__step-label {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--wb-runner-main-fg);
 }
 
 .wb-lesson-runner__step-pos {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--wb-text-muted);
+  color: var(--wb-runner-main-fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1237,11 +1342,12 @@ html, body, #root {
 
 .wb-lesson-runner__directions-text {
   margin: 0;
-  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  font-size: calc(clamp(1.35rem, 2.8vw, 1.85rem) * var(--wb-directions-scale, 1));
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.45;
   white-space: pre-wrap;
   text-align: left;
+  color: var(--wb-text);
 }
 
 .wb-lesson-runner__directions-placeholder {
@@ -1258,7 +1364,7 @@ html, body, #root {
   justify-content: space-between;
   gap: 12px 20px;
   padding-top: 12px;
-  border-top: 1px solid var(--wb-border);
+  border-top: 1px solid var(--wb-runner-main-border);
 }
 
 .wb-lesson-runner__timer {
@@ -1290,7 +1396,7 @@ html, body, #root {
 
 .wb-lesson-runner__empty {
   font-size: 1.1rem;
-  color: var(--wb-text-muted);
+  color: var(--wb-runner-main-fg-muted);
 }
 
 .wb-lesson-runner__btn {

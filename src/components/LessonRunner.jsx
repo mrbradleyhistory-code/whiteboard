@@ -4,8 +4,9 @@ import {
   lessonAgendaSteps,
   lessonDeadlineItems,
 } from '../lessonLauncher'
-import { lessonThemeClass } from '../lessonThemes'
+import { lessonThemeClass, normalizeLessonTheme } from '../lessonThemes'
 import LessonRunnerBoard from './LessonRunnerBoard'
+import LessonThemeSwitcher from './LessonThemeSwitcher'
 import RunnerClassTools from './RunnerClassTools'
 
 function playBeep() {
@@ -21,6 +22,18 @@ function playBeep() {
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.4)
   } catch (_) { /* ignore */ }
+}
+
+const DIRECTIONS_SCALE_KEY = 'wb-lesson-directions-scale'
+const DIRECTIONS_SCALE_STEPS = [1, 1.15, 1.3, 1.5, 1.75, 2]
+
+function readDirectionsScale() {
+  try {
+    const v = parseFloat(sessionStorage.getItem(DIRECTIONS_SCALE_KEY))
+    return DIRECTIONS_SCALE_STEPS.includes(v) ? v : 1
+  } catch {
+    return 1
+  }
 }
 
 /** Timer display: mm:ss when ≥1 min, otherwise seconds only */
@@ -49,12 +62,18 @@ export default function LessonRunner({
   const [showTargets, setShowTargets] = useState(false)
   const [boardPanel, setBoardPanel] = useState(hasBoard ? 'docked' : 'collapsed')
   const [injectRequest, setInjectRequest] = useState(null)
+  const [directionsScale, setDirectionsScale] = useState(readDirectionsScale)
+  const [runTheme, setRunTheme] = useState(() => normalizeLessonTheme(lesson.theme))
   const endAtRef = useRef(null)
   const rafRef = useRef(null)
 
   useEffect(() => {
     if (hasBoard) setBoardPanel(prev => (prev === 'collapsed' ? prev : 'docked'))
   }, [board?.id, hasBoard])
+
+  useEffect(() => {
+    setRunTheme(normalizeLessonTheme(lesson.theme))
+  }, [lesson.id, lesson.theme])
 
   const current = agendaSteps[stepIndex] || null
   const item = current?.item || null
@@ -116,6 +135,22 @@ export default function LessonRunner({
     if (index >= 0 && index < agendaSteps.length) setStepIndex(index)
   }
 
+  const bumpDirectionsScale = (delta) => {
+    setDirectionsScale(prev => {
+      const idx = DIRECTIONS_SCALE_STEPS.indexOf(prev)
+      const base = idx >= 0 ? idx : 0
+      const next = DIRECTIONS_SCALE_STEPS[
+        Math.max(0, Math.min(DIRECTIONS_SCALE_STEPS.length - 1, base + delta))
+      ]
+      try { sessionStorage.setItem(DIRECTIONS_SCALE_KEY, String(next)) } catch (_) { /* ignore */ }
+      return next
+    })
+  }
+
+  const scaleIdx = DIRECTIONS_SCALE_STEPS.indexOf(directionsScale)
+  const canShrinkText = scaleIdx > 0
+  const canGrowText = scaleIdx < DIRECTIONS_SCALE_STEPS.length - 1
+
   const ensureBoardVisible = () => {
     if (!hasBoard) {
       window.alert('Link a whiteboard to this lesson in the editor.')
@@ -142,7 +177,7 @@ export default function LessonRunner({
     <div
       className={[
         'wb-lesson-runner',
-        lessonThemeClass(lesson.theme),
+        lessonThemeClass(runTheme),
         boardPanel === 'fullscreen' ? 'wb-lesson-runner--board-fs' : '',
       ].filter(Boolean).join(' ')}
     >
@@ -157,6 +192,7 @@ export default function LessonRunner({
           </p>
         </div>
         <div className="wb-lesson-runner__header-actions">
+          <LessonThemeSwitcher value={runTheme} onChange={setRunTheme} compact />
           {hasBoard && boardPanel === 'collapsed' && (
             <button
               type="button"
@@ -234,16 +270,44 @@ export default function LessonRunner({
             {!item ? (
               <p className="wb-lesson-runner__empty">Add steps in the lesson editor to build your agenda.</p>
             ) : (
-              <div className="wb-lesson-runner__stage">
+              <div
+                className="wb-lesson-runner__stage"
+                style={{ '--wb-directions-scale': directionsScale }}
+              >
                 <div className="wb-lesson-runner__step-meta">
                   <span className="wb-lesson-runner__step-label">
                     {current.sectionLabel} · {item.title}
                   </span>
-                  {agendaSteps.length > 1 && (
-                    <span className="wb-lesson-runner__step-pos">
-                      {stepIndex + 1} / {agendaSteps.length}
-                    </span>
-                  )}
+                  <div className="wb-lesson-runner__step-meta-end">
+                    <div className="wb-lesson-runner__text-zoom" aria-label="Directions text size">
+                      <button
+                        type="button"
+                        className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__text-zoom-btn"
+                        onClick={() => bumpDirectionsScale(-1)}
+                        disabled={!canShrinkText}
+                        aria-label="Smaller directions text"
+                      >
+                        A−
+                      </button>
+                      <span className="wb-lesson-runner__text-zoom-label" aria-live="polite">
+                        {Math.round(directionsScale * 100)}%
+                      </span>
+                      <button
+                        type="button"
+                        className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__text-zoom-btn"
+                        onClick={() => bumpDirectionsScale(1)}
+                        disabled={!canGrowText}
+                        aria-label="Larger directions text"
+                      >
+                        A+
+                      </button>
+                    </div>
+                    {agendaSteps.length > 1 && (
+                      <span className="wb-lesson-runner__step-pos">
+                        {stepIndex + 1} / {agendaSteps.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="wb-lesson-runner__directions-wrap">
