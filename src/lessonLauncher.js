@@ -190,6 +190,21 @@ export function itemFromBlock(block) {
   })
 }
 
+/** Convert a lesson step into a reusable bank part. */
+export function blockFromItem(item, sectionId, existingBlock = null) {
+  const it = normalizeItem(item)
+  const section = LESSON_SECTIONS.some(s => s.id === sectionId) ? sectionId : 'activity'
+  return normalizeBlock({
+    id: existingBlock?.id || newBlockId(),
+    name: it.title,
+    section,
+    directions: it.directions,
+    dueLabel: it.dueLabel,
+    durationSec: it.durationSec,
+    tags: existingBlock?.tags || [],
+  })
+}
+
 export function formatDuration(sec) {
   const s = Math.max(0, Math.floor(sec))
   const m = Math.floor(s / 60)

@@ -2418,6 +2418,19 @@ html, body, #root {
   color: var(--wb-danger);
 }
 
+.wb-lesson-sequence__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wb-lesson-sequence__item-bank-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--wb-text-muted);
+}
+
 .wb-lesson-sequence__section-actions {
   margin-top: 10px;
 }

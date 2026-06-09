@@ -20,11 +20,14 @@ function SectionZone({
   sectionId,
   label,
   items,
+  blocks,
   isDeadline,
   dragState,
   setDragState,
   onDropAt,
   onUpdateItems,
+  onSaveToBank,
+  saving,
 }) {
   const updateItems = (next) => onUpdateItems(sectionId, next)
 
@@ -151,6 +154,20 @@ function SectionZone({
                       </label>
                     </>
                   )}
+                  {onSaveToBank && (it.title?.trim() || it.directions?.trim()) && (
+                    <div className="wb-lesson-sequence__item-actions">
+                      <HubButton
+                        className="wb-hub-btn--sm"
+                        disabled={saving}
+                        onClick={() => onSaveToBank(it, sectionId)}
+                      >
+                        {it.blockId && blocks.some(b => b.id === it.blockId) ? 'Update bank' : 'Save to bank'}
+                      </HubButton>
+                      {it.blockId && blocks.some(b => b.id === it.blockId) && (
+                        <span className="wb-lesson-sequence__item-bank-link">Linked to bank</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -176,7 +193,7 @@ function SectionZone({
   )
 }
 
-export default function LessonSequenceBuilder({ lesson, blocks, onChange }) {
+export default function LessonSequenceBuilder({ lesson, blocks, onChange, onSaveToBank, saving }) {
   const [dragState, setDragState] = useState(null)
 
   const patchSection = (sectionId, items) => {
@@ -254,11 +271,14 @@ export default function LessonSequenceBuilder({ lesson, blocks, onChange }) {
           sectionId={s.id}
           label={s.label}
           items={lesson.sections[s.id]?.items || []}
+          blocks={blocks}
           isDeadline={s.id === 'deadline'}
           dragState={dragState}
           setDragState={setDragState}
           onDropAt={handleDropAt}
           onUpdateItems={patchSection}
+          onSaveToBank={onSaveToBank}
+          saving={saving}
         />
       ))}
     </div>

@@ -1,4 +1,5 @@
 import {
+  blockFromItem,
   itemFromBlock,
   newTargetTemplateId,
   normalizeTargetTemplate,
@@ -118,6 +119,46 @@ export default function LessonEditor({
         [sectionId]: { items: [...items, itemFromBlock(block)] },
       },
     })
+  }
+
+  const saveStepToBank = async (item, sectionId) => {
+    if (!item.title?.trim() && !item.directions?.trim()) {
+      window.alert('Add a title or directions before saving to the bank.')
+      return
+    }
+
+    const linked = item.blockId ? blocks.find(b => b.id === item.blockId) : null
+    let block
+    let nextBlocks
+
+    if (linked) {
+      block = blockFromItem(item, sectionId, linked)
+      nextBlocks = blocks.map(b => (b.id === block.id ? block : b))
+    } else {
+      const name = window.prompt('Name for this bank part:', item.title?.trim() || 'New part')
+      if (!name?.trim()) return
+      block = blockFromItem({ ...item, title: name.trim() }, sectionId)
+      nextBlocks = [block, ...blocks]
+    }
+
+    const { error } = await onSaveBlocks(nextBlocks)
+    if (error) {
+      window.alert(error)
+      return
+    }
+
+    if (!linked) {
+      const items = lesson.sections[sectionId]?.items || []
+      onChange({
+        ...lesson,
+        sections: {
+          ...lesson.sections,
+          [sectionId]: {
+            items: items.map(it => (it.id === item.id ? { ...it, blockId: block.id } : it)),
+          },
+        },
+      })
+    }
   }
 
   return (
@@ -249,6 +290,8 @@ export default function LessonEditor({
           lesson={lesson}
           blocks={blocks}
           onChange={onChange}
+          onSaveToBank={saveStepToBank}
+          saving={saving}
         />
       </div>
     </div>
