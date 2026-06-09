@@ -45,7 +45,10 @@ export default function ClassHub({ session, onOpenBoard }) {
   return (
     <div className="wb-class-hub">
       <header className="wb-class-hub__header">
-        <h1 className="wb-class-hub__brand-title">Class Launchpad</h1>
+        <div className="wb-class-hub__brand">
+          <span className="wb-class-hub__brand-mark" aria-hidden>L</span>
+          <h1 className="wb-class-hub__brand-title">Class Launchpad</h1>
+        </div>
         <div className="wb-class-hub__header-actions" ref={userMenuRef}>
           <button
             type="button"
@@ -74,20 +77,22 @@ export default function ClassHub({ session, onOpenBoard }) {
       </header>
 
       <nav className="wb-class-hub__nav" aria-label="Launchpad sections">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            aria-label={t.fullLabel}
-            title={t.fullLabel}
-            className={`wb-class-hub__tab${tab === t.id ? ' wb-class-hub__tab--active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div className="wb-class-hub__nav-track" role="tablist">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              aria-label={t.fullLabel}
+              title={t.fullLabel}
+              className={`wb-class-hub__tab${tab === t.id ? ' wb-class-hub__tab--active' : ''}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <main className="wb-class-hub__main" role="tabpanel">

@@ -10,6 +10,7 @@ const BANK_TABS = [
 
 export default function TemplateBanksPanel({
   blocks,
+  blockTags,
   targetTemplates,
   onSaveBlocks,
   onSaveTargetTemplates,
@@ -34,7 +35,7 @@ export default function TemplateBanksPanel({
         ))}
       </nav>
       {bankTab === 'activities' ? (
-        <ActivityBlocksPanel blocks={blocks} onSaveBlocks={onSaveBlocks} saving={saving} />
+        <ActivityBlocksPanel blocks={blocks} blockTags={blockTags} onSaveBlocks={onSaveBlocks} saving={saving} />
       ) : (
         <TargetTemplatesPanel
           templates={targetTemplates}

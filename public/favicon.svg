@@ -1,17 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Classroom Whiteboard">
-  <rect width="32" height="32" rx="7" fill="#457b9d"/>
-  <rect x="4" y="6" width="24" height="17" rx="2.5" fill="#ffffff"/>
-  <path
-    d="M8 19 Q12 13 17 15.5 T25 11"
-    fill="none"
-    stroke="#2a9d8f"
-    stroke-width="2.5"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M22 10.5 L26.5 6 L28 7.5 L23.5 12 Z"
-    fill="#1a1f26"
-  />
-  <circle cx="26.5" cy="6" r="1.25" fill="#f6c90e"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Class Launchpad">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#bg)"/>
+  <text x="16" y="22.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="17" font-weight="800" fill="#ffffff">L</text>
 </svg>

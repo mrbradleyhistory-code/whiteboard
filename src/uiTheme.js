@@ -1,18 +1,19 @@
 /** Shared UI tokens — tuned for Promethean / large touch displays */
 
 export const colors = {
-  accent: '#457b9d',
-  accentDark: '#35607a',
-  accentLight: '#e8f2f8',
+  accent: '#6366f1',
+  accentDark: '#4f46e5',
+  accentLight: '#eef2ff',
   surface: '#ffffff',
-  border: '#d8dee6',
-  text: '#1a1f26',
-  textMuted: '#5c6570',
-  danger: '#991b1b',
-  dangerBg: '#fee2e2',
-  warn: '#92400e',
-  warnBg: '#fef3c7',
-  success: '#2a9d8f',
+  surfaceMuted: '#fafaf9',
+  border: '#e7e5e4',
+  text: '#1c1917',
+  textMuted: '#78716c',
+  danger: '#dc2626',
+  dangerBg: '#fef2f2',
+  warn: '#b45309',
+  warnBg: '#fffbeb',
+  success: '#059669',
 }
 
 export const sizes = {
@@ -40,9 +41,9 @@ export function touchBtn(overrides = {}) {
     minWidth: sizes.touchMin,
     minHeight: sizes.touchMin,
     padding: '10px 16px',
-    borderRadius: 10,
+    borderRadius: 12,
     border: `1px solid ${colors.border}`,
-    background: '#f6f8fa',
+    background: colors.surfaceMuted,
     fontSize: 15,
     fontWeight: 600,
     color: colors.text,

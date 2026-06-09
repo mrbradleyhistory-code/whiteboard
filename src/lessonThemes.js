@@ -2,7 +2,7 @@ export const LESSON_THEMES = [
   {
     id: 'classic',
     label: 'Classic',
-    description: 'Same look as the app — light blue and white.',
+    description: 'Same look as the app — indigo accents and warm neutrals.',
   },
   {
     id: 'dark',

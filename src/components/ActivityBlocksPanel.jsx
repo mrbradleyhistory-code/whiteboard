@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { LESSON_SECTIONS, newBlockId, normalizeBlock } from '../lessonLauncher'
+import { LESSON_SECTIONS, duplicateBlock, newBlockId, normalizeBlock } from '../lessonLauncher'
+import BlockTagInput from './BlockTagInput'
+import BlockTagManager from './BlockTagManager'
 import {
   HubAlert,
   HubButton,
@@ -11,21 +13,29 @@ import {
   HubPanelBlock,
 } from './hubUi'
 
-export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
+export default function ActivityBlocksPanel({ blocks, blockTags = [], onSaveBlocks, saving }) {
+  const [view, setView] = useState('list')
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
 
   const startNew = (section = 'warmup') => {
+    setView('edit')
     setEditing(normalizeBlock({ id: newBlockId(), name: '', section, directions: '', durationSec: 300 }))
   }
 
-  const startEdit = (block) => setEditing({ ...block })
+  const startEdit = (block) => {
+    setView('edit')
+    setEditing({ ...block })
+  }
 
   const persist = async (list) => {
     setError('')
     const { error: err } = await onSaveBlocks(list)
     if (err) setError(err)
-    else setEditing(null)
+    else {
+      setEditing(null)
+      setView('list')
+    }
   }
 
   const saveEditing = async () => {
@@ -41,12 +51,28 @@ export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
     await persist(next)
   }
 
+  const duplicatePart = async (block) => {
+    await persist([duplicateBlock(block), ...blocks])
+  }
+
   const removeBlock = async (id) => {
     if (!confirm('Delete this activity from your bank?')) return
     await persist(blocks.filter(b => b.id !== id))
   }
 
-  if (editing) {
+  if (view === 'tags') {
+    return (
+      <BlockTagManager
+        blockTags={blockTags}
+        blocks={blocks}
+        onSaveBlocks={onSaveBlocks}
+        onClose={() => setView('list')}
+        saving={saving}
+      />
+    )
+  }
+
+  if (view === 'edit' && editing) {
     return (
       <HubPanel title="Activity bank" lead="Reusable warmups, activities, wrap-ups, and deadline reminders.">
         <HubAlert message={error} />
@@ -72,6 +98,11 @@ export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
               ))}
             </select>
           </label>
+          <BlockTagInput
+            tags={editing.tags || []}
+            vocabulary={[...new Set([...blockTags, ...blocks.flatMap(b => b.tags || [])])]}
+            onChange={tags => setEditing({ ...editing, tags })}
+          />
           <label className="wb-lesson-field">
             <span>Directions (shown in lesson runner)</span>
             <textarea
@@ -81,21 +112,33 @@ export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
               rows={5}
             />
           </label>
-          <label className="wb-lesson-field">
-            <span>Default timer (minutes)</span>
-            <input
-              type="number"
-              min={0}
-              max={120}
-              className="wb-hub-input"
-              style={{ width: 96 }}
-              value={Math.floor(editing.durationSec / 60)}
-              onChange={e => {
-                const m = parseInt(e.target.value, 10) || 0
-                setEditing({ ...editing, durationSec: m * 60 })
-              }}
-            />
-          </label>
+          {editing.section === 'deadline' ? (
+            <label className="wb-lesson-field">
+              <span>Default due label</span>
+              <input
+                className="wb-hub-input"
+                value={editing.dueLabel || ''}
+                onChange={e => setEditing({ ...editing, dueLabel: e.target.value })}
+                placeholder="e.g. Friday, 6/5"
+              />
+            </label>
+          ) : (
+            <label className="wb-lesson-field">
+              <span>Default timer (minutes)</span>
+              <input
+                type="number"
+                min={0}
+                max={120}
+                className="wb-hub-input"
+                style={{ width: 96 }}
+                value={Math.floor(editing.durationSec / 60)}
+                onChange={e => {
+                  const m = parseInt(e.target.value, 10) || 0
+                  setEditing({ ...editing, durationSec: m * 60 })
+                }}
+              />
+            </label>
+          )}
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton variant="primary" onClick={saveEditing} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
@@ -115,6 +158,7 @@ export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
       <HubAlert message={error} />
       <HubCreateRow>
         <HubButton variant="primary" onClick={() => startNew('warmup')}>+ New activity</HubButton>
+        <HubButton variant="ghost" onClick={() => setView('tags')}>Manage tags</HubButton>
       </HubCreateRow>
 
       {blocks.length === 0 ? (
@@ -129,9 +173,11 @@ export default function ActivityBlocksPanel({ blocks, onSaveBlocks, saving }) {
                   <div className="wb-hub-card__meta">
                     {LESSON_SECTIONS.find(s => s.id === b.section)?.label || b.section}
                     {b.durationSec > 0 && ` · ${Math.floor(b.durationSec / 60)} min timer`}
+                    {b.tags?.length > 0 && ` · ${b.tags.join(', ')}`}
                   </div>
                 </div>
                 <div className="wb-hub-card__actions" style={{ marginTop: 0 }}>
+                  <HubButton onClick={() => duplicatePart(b)} disabled={saving}>Duplicate</HubButton>
                   <HubButton onClick={() => startEdit(b)}>Edit</HubButton>
                   <HubButton variant="danger" onClick={() => removeBlock(b.id)}>Delete</HubButton>
                 </div>

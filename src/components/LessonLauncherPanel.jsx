@@ -32,6 +32,7 @@ import {
 export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   const [view, setView] = useState('lessons')
   const [blocks, setBlocks] = useState([])
+  const [blockTags, setBlockTags] = useState([])
   const [targetTemplates, setTargetTemplates] = useState([])
   const [lessons, setLessons] = useState([])
   const [boards, setBoards] = useState([])
@@ -64,6 +65,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
         .order('updated_at', { ascending: false }),
     ])
     setBlocks(b)
+    setBlockTags(bt || [])
     setTargetTemplates(tt)
     setLessons(l)
     if (dataErr) setError(dataErr)
@@ -82,13 +84,14 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     markDirty()
   }, [editingLesson])
 
-  const handleSaveBlocks = async (next) => {
+  const handleSaveBlocks = async (next, tags) => {
     setSaving(true)
-    const { blocks: saved, error: err } = await saveLessonBlocks(userId, next)
+    const { blocks: saved, blockTags: savedTags, error: err } = await saveLessonBlocks(userId, next, tags)
     setSaving(false)
-    if (err) return { error: err }
+    if (err) return { error: err, blockTags: null }
     setBlocks(saved)
-    return { error: null }
+    if (savedTags) setBlockTags(savedTags)
+    return { error: null, blockTags: savedTags }
   }
 
   const handleSaveTargetTemplates = async (next) => {
@@ -244,6 +247,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     return (
       <TemplateBanksPanel
         blocks={blocks}
+        blockTags={blockTags}
         targetTemplates={targetTemplates}
         onSaveBlocks={handleSaveBlocks}
         onSaveTargetTemplates={handleSaveTargetTemplates}
@@ -266,11 +270,13 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     }
 
     return (
-      <div>
+      <div className="wb-lesson-editor-shell">
         <HubBackButton onClick={leaveEditor} label="Lessons" />
         <LessonEditor
           lesson={editingLesson}
           blocks={blocks}
+          blockTags={blockTags}
+          onSaveBlocks={handleSaveBlocks}
           targetTemplates={targetTemplates}
           onSaveTargetTemplates={handleSaveTargetTemplates}
           boards={boards}

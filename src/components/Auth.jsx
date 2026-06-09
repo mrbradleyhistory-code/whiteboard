@@ -153,74 +153,94 @@ export default function Auth() {
 
   if (!envReady) {
     return (
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16, padding:24, maxWidth:480, margin:'0 auto', textAlign:'center' }}>
-        <h1 style={{ fontSize:28, fontWeight:600 }}>🖊 Classroom Whiteboard</h1>
-        <p style={{ color:'#991b1b', fontSize:15 }}>
-          Missing <code>VITE_SUPABASE_URL</code> or <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
-          Restart <code>npm run dev</code> after adding them.
-        </p>
+      <div className="wb-auth">
+        <div className="wb-auth__card">
+          <div className="wb-auth__brand">
+            <span className="wb-auth__mark" aria-hidden>L</span>
+            <h1 className="wb-auth__title">Class Launchpad</h1>
+          </div>
+          <p className="wb-auth__error">
+            Missing <code>VITE_SUPABASE_URL</code> or <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
+            Restart <code>npm run dev</code> after adding them.
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:20, padding:24 }}>
-      <h1 style={{ fontSize:28, fontWeight:600 }}>🖊 Classroom Whiteboard</h1>
-      <p style={{ color:'#666', fontSize:15 }}>Sign in to access your boards</p>
-
-      {isLocalDev ? (
-        <>
-          <p style={{ fontSize:12, color:'#888', maxWidth:360, textAlign:'center' }}>
-            Local dev uses the Google sign-in button (same as before). Production uses redirect sign-in.
-          </p>
-          {googleClientId ? (
-            <div id="google-signin-btn" style={{ minHeight: 44, opacity: signingIn ? 0.5 : 1, pointerEvents: signingIn ? 'none' : 'auto' }} />
-          ) : (
-            <p style={{ color:'#991b1b', fontSize:13 }}>Add <code>VITE_GOOGLE_CLIENT_ID</code> to <code>.env.local</code> and restart the dev server.</p>
-          )}
-          {!gisReady && googleClientId && !signingIn && (
-            <p style={{ fontSize:12, color:'#888' }}>Loading Google button…</p>
-          )}
-          <button type="button" onClick={signInWithOAuthRedirect} disabled={signingIn}
-            style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #e0e0e0', background:'#f5f5f5', fontSize:12, color:'#555', cursor: signingIn ? 'default' : 'pointer' }}>
-            Try redirect sign-in instead
-          </button>
-        </>
-      ) : (
-        <button type="button" onClick={signInWithOAuthRedirect} disabled={signingIn}
-          style={{
-            display:'flex', alignItems:'center', gap:12, padding:'16px 32px', borderRadius:12,
-            border:'1px solid #dadce0', background:'#fff', fontSize:17, fontWeight:600, color:'#3c4043',
-            cursor: signingIn ? 'default' : 'pointer', opacity: signingIn ? 0.7 : 1,
-            boxShadow:'0 2px 8px rgba(0,0,0,0.1)', minHeight: 52, touchAction:'manipulation',
-          }}>
-          <GoogleIcon />
-          {signingIn ? 'Redirecting to Google…' : 'Sign in with Google'}
-        </button>
-      )}
-
-      {signingIn && <p style={{ color:'#457b9d', fontSize:14 }}>Signing in…</p>}
-
-      {authError && (
-        <div style={{ maxWidth:420, padding:'12px 16px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, color:'#991b1b', fontSize:13, lineHeight:1.5 }}>
-          {authError}
+    <div className="wb-auth">
+      <div className="wb-auth__card">
+        <div className="wb-auth__brand">
+          <span className="wb-auth__mark" aria-hidden>L</span>
+          <div>
+            <h1 className="wb-auth__title">Class Launchpad</h1>
+            <p className="wb-auth__lead">Lessons, boards, and class tools in one place.</p>
+          </div>
         </div>
-      )}
 
-      <details style={{ maxWidth:420, fontSize:12, color:'#666', lineHeight:1.5 }}>
-        <summary style={{ cursor:'pointer', color:'#457b9d' }}>Setup checklist</summary>
-        <ol style={{ marginTop:8, paddingLeft:18 }}>
-          {isLocalDev && (
-            <>
-              <li>Google Cloud → <strong>Authorized JavaScript origins</strong>: <code>{origin}</code></li>
-              <li><code>VITE_GOOGLE_CLIENT_ID</code> must match Supabase → Google → Client ID</li>
-            </>
-          )}
-          <li>Supabase → URL Configuration: Redirect URLs include <code>{origin}/**</code></li>
-          <li>Supabase → Google provider enabled (Client ID + Secret)</li>
-          <li>Google Cloud → redirect URI: <code>{supabaseCallback}</code></li>
-        </ol>
-      </details>
+        {isLocalDev ? (
+          <div className="wb-auth__actions">
+            <p className="wb-auth__hint">
+              Local dev uses the Google sign-in button. Production uses redirect sign-in.
+            </p>
+            {googleClientId ? (
+              <div
+                id="google-signin-btn"
+                className={`wb-auth__google-slot${signingIn ? ' wb-auth__google-slot--busy' : ''}`}
+              />
+            ) : (
+              <p className="wb-auth__error">
+                Add <code>VITE_GOOGLE_CLIENT_ID</code> to <code>.env.local</code> and restart the dev server.
+              </p>
+            )}
+            {!gisReady && googleClientId && !signingIn && (
+              <p className="wb-auth__hint">Loading Google button…</p>
+            )}
+            <button
+              type="button"
+              className="wb-auth__link-btn"
+              onClick={signInWithOAuthRedirect}
+              disabled={signingIn}
+            >
+              Try redirect sign-in instead
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="wb-auth__google-btn"
+            onClick={signInWithOAuthRedirect}
+            disabled={signingIn}
+          >
+            <GoogleIcon />
+            {signingIn ? 'Redirecting to Google…' : 'Sign in with Google'}
+          </button>
+        )}
+
+        {signingIn && <p className="wb-auth__status">Signing in…</p>}
+
+        {authError && (
+          <div className="wb-auth__alert" role="alert">
+            {authError}
+          </div>
+        )}
+
+        <details className="wb-auth__details">
+          <summary>Setup checklist</summary>
+          <ol>
+            {isLocalDev && (
+              <>
+                <li>Google Cloud → <strong>Authorized JavaScript origins</strong>: <code>{origin}</code></li>
+                <li><code>VITE_GOOGLE_CLIENT_ID</code> must match Supabase → Google → Client ID</li>
+              </>
+            )}
+            <li>Supabase → URL Configuration: Redirect URLs include <code>{origin}/**</code></li>
+            <li>Supabase → Google provider enabled (Client ID + Secret)</li>
+            <li>Google Cloud → redirect URI: <code>{supabaseCallback}</code></li>
+          </ol>
+        </details>
+      </div>
     </div>
   )
 }

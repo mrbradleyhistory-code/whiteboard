@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { normalizeLessonTheme } from './lessonThemes'
+import { collectTagsFromBlocks, mergeTagVocabulary, normalizeTagList } from './lessonBlockBank'
 
 export const LESSON_SECTIONS = [
   { id: 'warmup', label: 'Warmup' },
@@ -86,7 +87,9 @@ export function normalizeBlock(raw) {
     name: String(raw.name || '').trim() || 'Untitled activity',
     section,
     directions: String(raw.directions || '').trim(),
+    dueLabel: section === 'deadline' ? String(raw.dueLabel || '').trim() : '',
     durationSec: Math.max(0, parseInt(raw.durationSec, 10) || 0),
+    tags: normalizeTagList(raw.tags),
   }
 }
 
@@ -166,12 +169,23 @@ export function createEmptyLesson(title = '') {
   })
 }
 
+export function duplicateBlock(block) {
+  const b = normalizeBlock(block)
+  const base = b.name.replace(/ \(copy\)$/i, '').trim() || b.name
+  return normalizeBlock({
+    ...b,
+    id: newBlockId(),
+    name: `${base} (copy)`,
+  })
+}
+
 export function itemFromBlock(block) {
   const b = normalizeBlock(block)
   return normalizeItem({
     blockId: b.id,
     title: b.name,
     directions: b.directions,
+    dueLabel: b.dueLabel,
     durationSec: b.durationSec,
   })
 }
@@ -187,7 +201,7 @@ export function formatDuration(sec) {
 async function readLauncherRow(userId) {
   const { data, error } = await supabase
     .from('user_settings')
-    .select('lesson_blocks, lesson_target_templates, lessons')
+    .select('lesson_blocks, lesson_block_tags, lesson_target_templates, lessons')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
@@ -202,6 +216,7 @@ async function patchLauncherSettings(userId, patch) {
   const row = {
     user_id: userId,
     lesson_blocks: existing?.lesson_blocks ?? [],
+    lesson_block_tags: existing?.lesson_block_tags ?? [],
     lesson_target_templates: existing?.lesson_target_templates ?? [],
     lessons: existing?.lessons ?? [],
     ...patch,
@@ -222,28 +237,30 @@ async function seedLauncherDefaults(userId) {
   return { blocks, targetTemplates, lessons: [] }
 }
 
-/** @returns {Promise<{ blocks: object[], targetTemplates: object[], lessons: object[], error: string | null }>} */
+/** @returns {Promise<{ blocks: object[], blockTags: string[], targetTemplates: object[], lessons: object[], error: string | null }>} */
 export async function fetchLessonLauncherData(userId) {
   const { data, error } = await supabase
     .from('user_settings')
-    .select('lesson_blocks, lesson_target_templates, lessons')
+    .select('lesson_blocks, lesson_block_tags, lesson_target_templates, lessons')
     .eq('user_id', userId)
     .maybeSingle()
 
   if (error) {
     if (
       error.message?.includes('lesson_blocks')
+      || error.message?.includes('lesson_block_tags')
       || error.message?.includes('lesson_target_templates')
       || error.message?.includes('column')
     ) {
       return {
         blocks: [],
+        blockTags: [],
         targetTemplates: [],
         lessons: [],
         error: 'Run supabase migrations for Lesson Launcher in your Supabase project.',
       }
     }
-    return { blocks: [], targetTemplates: [], lessons: [], error: error.message }
+    return { blocks: [], blockTags: [], targetTemplates: [], lessons: [], error: error.message }
   }
 
   if (!data) {
@@ -266,16 +283,38 @@ export async function fetchLessonLauncherData(userId) {
     })
   }
   const lessons = Array.isArray(data.lessons) ? data.lessons.map(normalizeLesson) : []
-  return { blocks, targetTemplates, lessons, error: null }
+  let blockTags = normalizeTagList(data.lesson_block_tags)
+  blockTags = mergeTagVocabulary(blockTags, collectTagsFromBlocks(blocks))
+  return { blocks, blockTags, targetTemplates, lessons, error: null }
 }
 
-export async function saveLessonBlocks(userId, blocks) {
+export async function saveLessonBlocks(userId, blocks, blockTags) {
   try {
     const normalized = blocks.map(normalizeBlock)
-    await patchLauncherSettings(userId, { lesson_blocks: normalized })
-    return { blocks: normalized, error: null }
+    const patch = { lesson_blocks: normalized }
+    if (blockTags !== undefined) {
+      patch.lesson_block_tags = mergeTagVocabulary(blockTags, collectTagsFromBlocks(normalized))
+    } else {
+      const existing = await readLauncherRow(userId).catch(() => null)
+      patch.lesson_block_tags = mergeTagVocabulary(
+        existing?.lesson_block_tags,
+        collectTagsFromBlocks(normalized),
+      )
+    }
+    await patchLauncherSettings(userId, patch)
+    return { blocks: normalized, blockTags: patch.lesson_block_tags, error: null }
   } catch (e) {
-    return { blocks: [], error: e.message }
+    return { blocks: [], blockTags: [], error: e.message }
+  }
+}
+
+export async function saveBlockTags(userId, blockTags) {
+  try {
+    const normalized = normalizeTagList(blockTags)
+    await patchLauncherSettings(userId, { lesson_block_tags: normalized })
+    return { blockTags: normalized, error: null }
+  } catch (e) {
+    return { blockTags: [], error: e.message }
   }
 }
 
