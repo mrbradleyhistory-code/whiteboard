@@ -69,6 +69,7 @@ export default function LessonRunner({
   const [durationOverrides, setDurationOverrides] = useState({})
   const [timerEditing, setTimerEditing] = useState(false)
   const [timerDraftMin, setTimerDraftMin] = useState('')
+  const [finalOverlayDismissed, setFinalOverlayDismissed] = useState(false)
   const endAtRef = useRef(null)
   const rafRef = useRef(null)
   const headerMenuRef = useRef(null)
@@ -98,9 +99,24 @@ export default function LessonRunner({
   const timerActive = running && hasTimer && remainingSec > 0
   const timerFinalCountdown = timerActive && remainingSec <= 30
   const timerLowWarning = timerActive && remainingSec <= 60 && remainingSec > 30
+  const showFinalOverlay = timerFinalCountdown && !finalOverlayDismissed
+
+  useEffect(() => {
+    if (remainingSec > 30) setFinalOverlayDismissed(false)
+  }, [remainingSec])
+
+  useEffect(() => {
+    if (!showFinalOverlay) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setFinalOverlayDismissed(true)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [showFinalOverlay])
 
   useEffect(() => {
     setTimerEditing(false)
+    setFinalOverlayDismissed(false)
     if (!item?.durationSec || previewDeadline || sectionId === 'deadline') {
       setRemainingSec(0)
       setRunning(false)
@@ -420,106 +436,76 @@ export default function LessonRunner({
 
                 <div className="wb-lesson-runner__stage-footer">
                   {hasTimer && (
-                    <div className="wb-lesson-runner__timer">
-                      <div className="wb-lesson-runner__timer-main">
-                        <div className="wb-lesson-runner__timer-adjust" aria-label="Shorten timer">
-                          <button
-                            type="button"
-                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
-                            onClick={() => adjustTimer(-60)}
-                            disabled={remainingSec <= 0}
-                          >
-                            −1m
-                          </button>
-                          <button
-                            type="button"
-                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
-                            onClick={() => adjustTimer(-30)}
-                            disabled={remainingSec <= 0}
-                          >
-                            −30s
-                          </button>
-                        </div>
+                    <div className="wb-lesson-runner__timer wb-lesson-runner__timer--compact">
+                      {timerEditing ? (
+                        <label className="wb-lesson-runner__timer-edit">
+                          <input
+                            ref={timerInputRef}
+                            type="number"
+                            min={0}
+                            max={120}
+                            className="wb-lesson-runner__timer-edit-input"
+                            value={timerDraftMin}
+                            onChange={e => setTimerDraftMin(e.target.value)}
+                            onBlur={commitTimerEdit}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                commitTimerEdit()
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault()
+                                cancelTimerEdit()
+                              }
+                            }}
+                            aria-label="Timer minutes"
+                          />
+                          <span className="wb-lesson-runner__timer-edit-suffix">min</span>
+                        </label>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`wb-lesson-runner__timer-display wb-lesson-runner__timer-display--compact${
+                            timerFinalCountdown
+                              ? ' wb-lesson-runner__timer-display--final'
+                              : timerLowWarning
+                                ? ' wb-lesson-runner__timer-display--urgent'
+                                : ''
+                          }${running ? '' : ' wb-lesson-runner__timer-display--editable'}`}
+                          onClick={openTimerEdit}
+                          disabled={running}
+                          title={running ? undefined : 'Click to set minutes'}
+                          aria-label={running ? `${formatRunnerClock(remainingSec)} remaining` : `Set timer, currently ${formatRunnerClock(remainingSec)}`}
+                        >
+                          {formatRunnerClock(remainingSec)}
+                        </button>
+                      )}
 
-                        {timerEditing ? (
-                          <label className="wb-lesson-runner__timer-edit">
-                            <input
-                              ref={timerInputRef}
-                              type="number"
-                              min={0}
-                              max={120}
-                              className="wb-lesson-runner__timer-edit-input"
-                              value={timerDraftMin}
-                              onChange={e => setTimerDraftMin(e.target.value)}
-                              onBlur={commitTimerEdit}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  commitTimerEdit()
-                                }
-                                if (e.key === 'Escape') {
-                                  e.preventDefault()
-                                  cancelTimerEdit()
-                                }
-                              }}
-                              aria-label="Timer minutes"
-                            />
-                            <span className="wb-lesson-runner__timer-edit-suffix">min</span>
-                          </label>
-                        ) : (
-                          <button
-                            type="button"
-                            className={`wb-lesson-runner__timer-display${
-                              timerFinalCountdown
-                                ? ' wb-lesson-runner__timer-display--final'
-                                : timerLowWarning
-                                  ? ' wb-lesson-runner__timer-display--urgent'
-                                  : ''
-                            }${running ? '' : ' wb-lesson-runner__timer-display--editable'}`}
-                            onClick={openTimerEdit}
-                            disabled={running}
-                            title={running ? undefined : 'Click to set minutes'}
-                            aria-label={running ? `${formatRunnerClock(remainingSec)} remaining` : `Set timer, currently ${formatRunnerClock(remainingSec)}`}
-                          >
-                            {formatRunnerClock(remainingSec)}
-                          </button>
-                        )}
-
-                        <div className="wb-lesson-runner__timer-adjust" aria-label="Extend timer">
-                          <button
-                            type="button"
-                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
-                            onClick={() => adjustTimer(30)}
-                          >
-                            +30s
-                          </button>
-                          <button
-                            type="button"
-                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
-                            onClick={() => adjustTimer(60)}
-                          >
-                            +1m
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="wb-lesson-runner__timer-actions">
+                      <div className="wb-lesson-runner__timer-toolbar">
                         {!running ? (
-                          <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--primary" onClick={startTimer}>
+                          <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__btn--primary" onClick={startTimer}>
                             Start
                           </button>
                         ) : (
-                          <button type="button" className="wb-lesson-runner__btn" onClick={pauseTimer}>
+                          <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--sm" onClick={pauseTimer}>
                             Pause
                           </button>
                         )}
-                        <button type="button" className="wb-lesson-runner__btn" onClick={resetTimer}>
+                        <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--sm" onClick={resetTimer}>
                           Reset
                         </button>
+                        <details className="wb-lesson-runner__timer-adjust-panel">
+                          <summary className="wb-lesson-runner__btn wb-lesson-runner__btn--sm" aria-label="Adjust time">
+                            ±
+                          </summary>
+                          <div className="wb-lesson-runner__timer-adjust-menu" role="group" aria-label="Adjust time">
+                            <button type="button" className="wb-lesson-runner__timer-nudge" onClick={() => adjustTimer(-60)} disabled={remainingSec <= 0}>−1m</button>
+                            <button type="button" className="wb-lesson-runner__timer-nudge" onClick={() => adjustTimer(-30)} disabled={remainingSec <= 0}>−30s</button>
+                            <button type="button" className="wb-lesson-runner__timer-nudge" onClick={() => adjustTimer(30)}>+30s</button>
+                            <button type="button" className="wb-lesson-runner__timer-nudge" onClick={() => adjustTimer(60)}>+1m</button>
+                          </div>
+                        </details>
                       </div>
-                      {!running && !timerEditing && (
-                        <p className="wb-lesson-runner__timer-hint">Tap time to edit · use ± while running</p>
-                      )}
                     </div>
                   )}
 
@@ -593,17 +579,28 @@ export default function LessonRunner({
         )}
       </div>
 
-      {timerFinalCountdown && item && (
+      {showFinalOverlay && item && (
         <div
           className="wb-lesson-runner__timer-overlay"
-          role="alertdialog"
-          aria-live="assertive"
-          aria-label={`${remainingSec} seconds remaining`}
+          role="presentation"
+          onClick={() => setFinalOverlayDismissed(true)}
         >
           <div
             className="wb-lesson-runner__timer-overlay-card"
             style={{ '--wb-directions-scale': directionsScale }}
+            role="alertdialog"
+            aria-live="assertive"
+            aria-label={`${remainingSec} seconds remaining`}
+            onClick={e => e.stopPropagation()}
           >
+            <button
+              type="button"
+              className="wb-lesson-runner__timer-overlay-close"
+              onClick={() => setFinalOverlayDismissed(true)}
+              aria-label="Dismiss countdown"
+            >
+              ×
+            </button>
             <div className="wb-lesson-runner__timer-overlay-countdown" aria-hidden>
               {remainingSec}
             </div>
@@ -616,6 +613,13 @@ export default function LessonRunner({
                 Wrap up this step
               </p>
             )}
+            <button
+              type="button"
+              className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-overlay-dismiss"
+              onClick={() => setFinalOverlayDismissed(true)}
+            >
+              Continue without popup
+            </button>
           </div>
         </div>
       )}

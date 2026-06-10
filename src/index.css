@@ -1670,38 +1670,76 @@ html, body, #root {
   min-width: 0;
 }
 
-.wb-lesson-runner__timer-main {
-  display: flex;
+.wb-lesson-runner__timer--compact {
+  flex-direction: row;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.wb-lesson-runner__timer-adjust {
+.wb-lesson-runner__timer-toolbar {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.wb-lesson-runner__timer-nudge {
-  min-width: 52px;
-  padding-left: 10px;
-  padding-right: 10px;
-  font-variant-numeric: tabular-nums;
+.wb-lesson-runner__timer-adjust-panel {
+  position: relative;
 }
 
-.wb-lesson-runner__timer-display {
-  font-size: 2.25rem;
+.wb-lesson-runner__timer-adjust-panel summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.wb-lesson-runner__timer-adjust-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.wb-lesson-runner__timer-adjust-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 148px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface);
+  box-shadow: var(--wb-hub-shadow);
+}
+
+.wb-lesson-runner__timer-nudge {
+  min-height: 32px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: var(--wb-surface-muted);
+  font-size: 0.78rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  color: var(--wb-text);
+  cursor: pointer;
+}
+
+.wb-lesson-runner__timer-nudge:hover:not(:disabled) {
+  background: var(--wb-accent-light);
   color: var(--wb-accent-dark);
-  min-width: 5ch;
-  transition: color 0.25s ease;
-  border: none;
-  background: none;
-  padding: 4px 8px;
-  border-radius: 10px;
-  line-height: 1.1;
+}
+
+.wb-lesson-runner__timer-nudge:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wb-lesson-runner__timer-display--compact {
+  font-size: 1.65rem;
+  min-width: 4.5ch;
+  padding: 2px 6px;
 }
 
 .wb-lesson-runner__timer-display--editable {
@@ -1722,16 +1760,30 @@ html, body, #root {
 
 .wb-lesson-runner__timer-edit-input {
   width: 4.5ch;
-  min-height: 48px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 6px 8px;
   border-radius: 10px;
   border: 2px solid var(--wb-accent);
   background: var(--wb-surface);
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--wb-accent-dark);
+}
+
+.wb-lesson-runner__timer-display {
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-accent-dark);
+  min-width: 5ch;
+  transition: color 0.25s ease;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 10px;
+  line-height: 1.1;
 }
 
 .wb-lesson-runner__timer-edit-suffix {
@@ -1744,13 +1796,6 @@ html, body, #root {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.wb-lesson-runner__timer-hint {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--wb-text-muted);
 }
 
 .wb-lesson-runner__timer-display--urgent {
@@ -1771,9 +1816,11 @@ html, body, #root {
   padding: 24px;
   background: rgba(15, 12, 10, 0.62);
   backdrop-filter: blur(6px);
+  cursor: pointer;
 }
 
 .wb-lesson-runner__timer-overlay-card {
+  position: relative;
   width: min(760px, 100%);
   max-height: min(88vh, 720px);
   overflow-y: auto;
@@ -1783,6 +1830,31 @@ html, body, #root {
   border: 3px solid var(--wb-accent);
   box-shadow: 0 24px 64px rgba(15, 12, 10, 0.35);
   text-align: center;
+  cursor: default;
+}
+
+.wb-lesson-runner__timer-overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: var(--wb-surface-muted);
+  color: var(--wb-text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wb-lesson-runner__timer-overlay-close:hover {
+  background: var(--wb-accent-light);
+  color: var(--wb-text);
+}
+
+.wb-lesson-runner__timer-overlay-dismiss {
+  margin-top: 20px;
 }
 
 .wb-lesson-runner__timer-overlay-countdown {
