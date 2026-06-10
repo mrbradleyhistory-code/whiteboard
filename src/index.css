@@ -1604,6 +1604,34 @@ html, body, #root {
   border-radius: 12px;
   border: 1px solid var(--wb-border);
   box-shadow: var(--wb-runner-shadow);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+}
+
+@keyframes wb-directions-urgent-pulse {
+  0%, 100% {
+    border-color: var(--wb-border);
+    box-shadow: var(--wb-runner-shadow);
+    background: var(--wb-surface);
+  }
+
+  50% {
+    border-color: var(--wb-accent);
+    box-shadow: 0 0 0 3px var(--wb-accent-ring), var(--wb-runner-shadow);
+    background: var(--wb-accent-light);
+  }
+}
+
+.wb-lesson-runner__directions--urgent {
+  animation: wb-directions-urgent-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-lesson-runner__directions--urgent {
+    animation: none;
+    border-color: var(--wb-accent);
+    box-shadow: 0 0 0 2px var(--wb-accent-ring);
+    background: var(--wb-accent-light);
+  }
 }
 
 .wb-lesson-runner__directions-text {
@@ -1635,9 +1663,31 @@ html, body, #root {
 
 .wb-lesson-runner__timer {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-lesson-runner__timer-main {
+  display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.wb-lesson-runner__timer-adjust {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wb-lesson-runner__timer-nudge {
+  min-width: 52px;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .wb-lesson-runner__timer-display {
@@ -1646,12 +1696,134 @@ html, body, #root {
   font-variant-numeric: tabular-nums;
   color: var(--wb-accent-dark);
   min-width: 5ch;
+  transition: color 0.25s ease;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 10px;
+  line-height: 1.1;
+}
+
+.wb-lesson-runner__timer-display--editable {
+  cursor: pointer;
+  border: 1px dashed transparent;
+}
+
+.wb-lesson-runner__timer-display--editable:hover {
+  border-color: var(--wb-border-strong);
+  background: var(--wb-surface-muted);
+}
+
+.wb-lesson-runner__timer-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-lesson-runner__timer-edit-input {
+  width: 4.5ch;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 2px solid var(--wb-accent);
+  background: var(--wb-surface);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--wb-accent-dark);
+}
+
+.wb-lesson-runner__timer-edit-suffix {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--wb-text-muted);
 }
 
 .wb-lesson-runner__timer-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.wb-lesson-runner__timer-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--wb-text-muted);
+}
+
+.wb-lesson-runner__timer-display--urgent {
+  color: #d97706;
+}
+
+.wb-lesson-runner__timer-display--final {
+  color: var(--wb-danger);
+}
+
+.wb-lesson-runner__timer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 12, 10, 0.62);
+  backdrop-filter: blur(6px);
+}
+
+.wb-lesson-runner__timer-overlay-card {
+  width: min(760px, 100%);
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+  padding: 36px 40px 40px;
+  border-radius: 20px;
+  background: var(--wb-surface);
+  border: 3px solid var(--wb-accent);
+  box-shadow: 0 24px 64px rgba(15, 12, 10, 0.35);
+  text-align: center;
+}
+
+.wb-lesson-runner__timer-overlay-countdown {
+  font-size: clamp(4.5rem, 20vw, 7.5rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-danger);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.wb-lesson-runner__timer-overlay-label {
+  margin: 4px 0 20px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wb-text-muted);
+}
+
+.wb-lesson-runner__timer-overlay-title {
+  margin: 0 0 16px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--wb-text);
+}
+
+.wb-lesson-runner__timer-overlay-text {
+  margin: 0;
+  font-size: calc(clamp(1.5rem, 3.5vw, 2.35rem) * var(--wb-directions-scale, 1));
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  text-align: left;
+  color: var(--wb-text);
+}
+
+.wb-lesson-runner__timer-overlay-text--muted {
+  text-align: center;
+  color: var(--wb-text-muted);
+  font-style: italic;
 }
 
 .wb-lesson-runner__nav {

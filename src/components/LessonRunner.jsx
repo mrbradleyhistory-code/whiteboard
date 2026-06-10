@@ -66,9 +66,13 @@ export default function LessonRunner({
   const [directionsScale, setDirectionsScale] = useState(readDirectionsScale)
   const [runTheme, setRunTheme] = useState(() => normalizeLessonTheme(lesson.theme))
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
+  const [durationOverrides, setDurationOverrides] = useState({})
+  const [timerEditing, setTimerEditing] = useState(false)
+  const [timerDraftMin, setTimerDraftMin] = useState('')
   const endAtRef = useRef(null)
   const rafRef = useRef(null)
   const headerMenuRef = useRef(null)
+  const timerInputRef = useRef(null)
 
   useEffect(() => {
     if (hasBoard) setBoardPanel(prev => (prev === 'collapsed' ? prev : 'docked'))
@@ -91,17 +95,29 @@ export default function LessonRunner({
   const item = previewDeadline || current?.item || null
   const sectionId = previewDeadline ? 'deadline' : (current?.sectionId || 'warmup')
   const hasTimer = !previewDeadline && item?.durationSec > 0 && sectionId !== 'deadline'
+  const timerActive = running && hasTimer && remainingSec > 0
+  const timerFinalCountdown = timerActive && remainingSec <= 30
+  const timerLowWarning = timerActive && remainingSec <= 60 && remainingSec > 30
 
   useEffect(() => {
-    if (!item?.durationSec) {
+    setTimerEditing(false)
+    if (!item?.durationSec || previewDeadline || sectionId === 'deadline') {
       setRemainingSec(0)
       setRunning(false)
+      endAtRef.current = null
       return
     }
-    setRemainingSec(item.durationSec)
+    const dur = durationOverrides[item.id] ?? item.durationSec
+    setRemainingSec(dur)
     setRunning(false)
     endAtRef.current = null
-  }, [item?.id, item?.durationSec])
+  }, [item?.id, item?.durationSec, previewDeadline, sectionId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!timerEditing) return
+    timerInputRef.current?.focus()
+    timerInputRef.current?.select()
+  }, [timerEditing])
 
   useEffect(() => {
     if (!running || !endAtRef.current) return
@@ -122,8 +138,38 @@ export default function LessonRunner({
     }
   }, [running])
 
+  const applyRemaining = (next) => {
+    const sec = Math.max(0, Math.min(7200, Math.floor(next)))
+    setRemainingSec(sec)
+    if (item?.id) {
+      setDurationOverrides(prev => ({ ...prev, [item.id]: sec }))
+    }
+    if (running && endAtRef.current) {
+      endAtRef.current = Date.now() + sec * 1000
+    }
+  }
+
+  const adjustTimer = (deltaSec) => {
+    applyRemaining(remainingSec + deltaSec)
+  }
+
+  const openTimerEdit = () => {
+    if (running) return
+    setTimerDraftMin(String(Math.max(0, Math.ceil(remainingSec / 60))))
+    setTimerEditing(true)
+  }
+
+  const commitTimerEdit = () => {
+    const minutes = parseInt(timerDraftMin, 10) || 0
+    applyRemaining(minutes * 60)
+    setTimerEditing(false)
+  }
+
+  const cancelTimerEdit = () => {
+    setTimerEditing(false)
+  }
   const startTimer = () => {
-    if (!item?.durationSec) return
+    if (!hasTimer || remainingSec <= 0) return
     endAtRef.current = Date.now() + remainingSec * 1000
     setRunning(true)
   }
@@ -136,7 +182,16 @@ export default function LessonRunner({
   const resetTimer = () => {
     setRunning(false)
     endAtRef.current = null
-    setRemainingSec(item?.durationSec || 0)
+    setTimerEditing(false)
+    const base = item?.durationSec || 0
+    if (item?.id) {
+      setDurationOverrides(prev => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
+    }
+    setRemainingSec(base)
   }
 
   const goStep = (delta) => {
@@ -344,7 +399,11 @@ export default function LessonRunner({
                 </div>
 
                 <div className="wb-lesson-runner__directions-wrap">
-                  <div className="wb-lesson-runner__directions" role="region" aria-label="Directions for class">
+                  <div
+                    className={`wb-lesson-runner__directions${timerLowWarning ? ' wb-lesson-runner__directions--urgent' : ''}`}
+                    role="region"
+                    aria-label="Directions for class"
+                  >
                     {previewDeadline && (
                       <p className="wb-lesson-runner__deadline-focus-title">{previewDeadline.title}</p>
                     )}
@@ -362,7 +421,88 @@ export default function LessonRunner({
                 <div className="wb-lesson-runner__stage-footer">
                   {hasTimer && (
                     <div className="wb-lesson-runner__timer">
-                      <span className="wb-lesson-runner__timer-display">{formatRunnerClock(remainingSec)}</span>
+                      <div className="wb-lesson-runner__timer-main">
+                        <div className="wb-lesson-runner__timer-adjust" aria-label="Shorten timer">
+                          <button
+                            type="button"
+                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
+                            onClick={() => adjustTimer(-60)}
+                            disabled={remainingSec <= 0}
+                          >
+                            −1m
+                          </button>
+                          <button
+                            type="button"
+                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
+                            onClick={() => adjustTimer(-30)}
+                            disabled={remainingSec <= 0}
+                          >
+                            −30s
+                          </button>
+                        </div>
+
+                        {timerEditing ? (
+                          <label className="wb-lesson-runner__timer-edit">
+                            <input
+                              ref={timerInputRef}
+                              type="number"
+                              min={0}
+                              max={120}
+                              className="wb-lesson-runner__timer-edit-input"
+                              value={timerDraftMin}
+                              onChange={e => setTimerDraftMin(e.target.value)}
+                              onBlur={commitTimerEdit}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  commitTimerEdit()
+                                }
+                                if (e.key === 'Escape') {
+                                  e.preventDefault()
+                                  cancelTimerEdit()
+                                }
+                              }}
+                              aria-label="Timer minutes"
+                            />
+                            <span className="wb-lesson-runner__timer-edit-suffix">min</span>
+                          </label>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`wb-lesson-runner__timer-display${
+                              timerFinalCountdown
+                                ? ' wb-lesson-runner__timer-display--final'
+                                : timerLowWarning
+                                  ? ' wb-lesson-runner__timer-display--urgent'
+                                  : ''
+                            }${running ? '' : ' wb-lesson-runner__timer-display--editable'}`}
+                            onClick={openTimerEdit}
+                            disabled={running}
+                            title={running ? undefined : 'Click to set minutes'}
+                            aria-label={running ? `${formatRunnerClock(remainingSec)} remaining` : `Set timer, currently ${formatRunnerClock(remainingSec)}`}
+                          >
+                            {formatRunnerClock(remainingSec)}
+                          </button>
+                        )}
+
+                        <div className="wb-lesson-runner__timer-adjust" aria-label="Extend timer">
+                          <button
+                            type="button"
+                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
+                            onClick={() => adjustTimer(30)}
+                          >
+                            +30s
+                          </button>
+                          <button
+                            type="button"
+                            className="wb-lesson-runner__btn wb-lesson-runner__btn--sm wb-lesson-runner__timer-nudge"
+                            onClick={() => adjustTimer(60)}
+                          >
+                            +1m
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="wb-lesson-runner__timer-actions">
                         {!running ? (
                           <button type="button" className="wb-lesson-runner__btn wb-lesson-runner__btn--primary" onClick={startTimer}>
@@ -377,6 +517,9 @@ export default function LessonRunner({
                           Reset
                         </button>
                       </div>
+                      {!running && !timerEditing && (
+                        <p className="wb-lesson-runner__timer-hint">Tap time to edit · use ± while running</p>
+                      )}
                     </div>
                   )}
 
@@ -449,6 +592,33 @@ export default function LessonRunner({
           />
         )}
       </div>
+
+      {timerFinalCountdown && item && (
+        <div
+          className="wb-lesson-runner__timer-overlay"
+          role="alertdialog"
+          aria-live="assertive"
+          aria-label={`${remainingSec} seconds remaining`}
+        >
+          <div
+            className="wb-lesson-runner__timer-overlay-card"
+            style={{ '--wb-directions-scale': directionsScale }}
+          >
+            <div className="wb-lesson-runner__timer-overlay-countdown" aria-hidden>
+              {remainingSec}
+            </div>
+            <p className="wb-lesson-runner__timer-overlay-label">seconds left</p>
+            <p className="wb-lesson-runner__timer-overlay-title">{item.title}</p>
+            {item.directions ? (
+              <p className="wb-lesson-runner__timer-overlay-text">{item.directions}</p>
+            ) : (
+              <p className="wb-lesson-runner__timer-overlay-text wb-lesson-runner__timer-overlay-text--muted">
+                Wrap up this step
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
