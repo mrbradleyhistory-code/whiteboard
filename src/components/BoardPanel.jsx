@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { boardUpdatePayload, createPage, isMissingPagesColumnError } from '../boardPages'
-import { supabase } from '../supabaseClient'
+import { boardUpdatePayload, createPage } from '../boardPages'
+import { createBoard, deleteBoard as deleteBoardApi, listBoards } from '../boardsApi'
 import { colors, sizes, touchBtn } from '../uiTheme'
 
 export default function BoardPanel({ session, activeBoardId, onSelect, onClose }) {
@@ -11,31 +11,24 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
   useEffect(() => { fetchBoards() }, [])
 
   const fetchBoards = async () => {
-    const { data, error } = await supabase
-      .from('boards')
-      .select('id, name, created_at, updated_at')
-      .order('updated_at', { ascending: false })
+    const { data, error } = await listBoards(session.user.id, ['name', 'created_at', 'updated_at'])
     if (!error) setBoards(data || [])
     setLoading(false)
   }
 
-  const createBoard = async () => {
+  const createBoardHandler = async () => {
     const name = newName.trim() || `Board ${boards.length + 1}`
     const pageId = crypto.randomUUID()
     const pages = [createPage(pageId, 'Page 1')]
-    let row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, true) }
-    let { data, error } = await supabase.from('boards').insert(row).select().single()
-    if (error && isMissingPagesColumnError(error.message)) {
-      row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, false) }
-      ;({ data, error } = await supabase.from('boards').insert(row).select().single())
-    }
+    const row = { name, ...boardUpdatePayload(pages, pageId, true) }
+    const { data, error } = await createBoard(session.user.id, row)
     if (!error) { setBoards(prev => [data, ...prev]); onSelect(data); setNewName('') }
   }
 
-  const deleteBoard = async (e, id) => {
+  const deleteBoardHandler = async (e, id) => {
     e.stopPropagation()
     if (!confirm('Delete this board?')) return
-    await supabase.from('boards').delete().eq('id', id)
+    await deleteBoardApi(id)
     setBoards(prev => prev.filter(b => b.id !== id))
     if (activeBoardId === id) onSelect(null)
   }
@@ -62,7 +55,7 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
             display:'flex', alignItems:'center', justifyContent:'space-between', gap:8,
           }}>
           <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{b.name}</span>
-          <button type="button" onClick={e => deleteBoard(e, b.id)}
+          <button type="button" onClick={e => deleteBoardHandler(e, b.id)}
             style={{
               background:'none', border:'none',
               color: b.id === activeBoardId ? '#fff' : '#94a3b8',
@@ -75,9 +68,9 @@ export default function BoardPanel({ session, activeBoardId, onSelect, onClose }
 
       <div style={{ display:'flex', gap:8, marginTop:8 }}>
         <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="New board name…"
-          onKeyDown={e => e.key === 'Enter' && createBoard()}
+          onKeyDown={e => e.key === 'Enter' && createBoardHandler()}
           style={{ flex:1, fontSize:16, padding:'12px 14px', borderRadius:10, border:`1px solid ${colors.border}`, minHeight: sizes.touchMin }} />
-        <button type="button" onClick={createBoard}
+        <button type="button" onClick={createBoardHandler}
           style={touchBtn({ background: colors.accent, color:'#fff', border:'none', minWidth: 56 })}>
           +
         </button>

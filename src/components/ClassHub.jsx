@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../supabaseClient'
+import { signOut } from 'firebase/auth'
+import { auth } from '../firebaseClient'
 import BoardsPanel from './BoardsPanel'
 import FlashcardsPanel from './FlashcardsPanel'
 import GroupsPanel from './GroupsPanel'
@@ -29,7 +30,7 @@ export default function ClassHub({ session, onOpenBoard }) {
   const userMenuRef = useRef(null)
   const userId = session.user.id
 
-  const signOut = async () => { await supabase.auth.signOut() }
+  const signOutUser = async () => { await signOut(auth) }
   const { name, email, avatarUrl } = userDisplayInfo(session.user)
   const initial = (name || email || '?').charAt(0).toUpperCase()
 
@@ -68,7 +69,7 @@ export default function ClassHub({ session, onOpenBoard }) {
           {userMenuOpen && (
             <div className="wb-class-hub__user-menu" role="menu">
               {email && <div className="wb-class-hub__user-menu-email">{email}</div>}
-              <button type="button" role="menuitem" className="wb-class-hub__user-menu-item" onClick={signOut}>
+              <button type="button" role="menuitem" className="wb-class-hub__user-menu-item" onClick={signOutUser}>
                 Sign out
               </button>
             </div>

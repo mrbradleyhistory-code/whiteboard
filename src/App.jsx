@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from './supabaseClient'
+import { onAuthStateChanged } from 'firebase/auth'
+import { getBoard } from './boardsApi'
+import { auth, toSession } from './firebaseClient'
 import { clearBoardHash, parseBoardHash, setBoardHash } from './boardDeepLink'
 import Auth from './components/Auth'
 import ClassHub from './components/ClassHub'
@@ -16,48 +18,25 @@ export default function App() {
 
   const openBoardFromHash = useCallback(async (boardId) => {
     if (!boardId || !session) return
-    const { data, error } = await supabase
-      .from('boards')
-      .select('id, name')
-      .eq('id', boardId)
-      .maybeSingle()
+    const { data, error } = await getBoard(boardId)
     if (error || !data) {
       setOpenBoard({ id: boardId, name: 'Whiteboard' })
     } else {
-      setOpenBoard(data)
+      setOpenBoard({ id: data.id, name: data.name })
     }
   }, [session])
 
   useEffect(() => {
-    let mounted = true
-
-    supabase.auth.getSession()
-      .then(({ data: { session }, error }) => {
-        if (!mounted) return
-        if (error) console.error('getSession:', error.message)
-        setSession(session)
-        setLoading(false)
-      })
-      .catch((err) => {
-        if (!mounted) return
-        console.error('getSession:', err)
-        setLoading(false)
-      })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return
-      setSession(session)
-      if (!session) {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      const next = toSession(user)
+      setSession(next)
+      if (!next) {
         setOpenBoard(null)
         clearBoardHash()
       }
       setLoading(false)
     })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
+    return unsub
   }, [])
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { listBoards } from '../boardsApi'
 import { loadClassData } from '../localClassData'
-import { supabase } from '../supabaseClient'
 import { LESSON_THEMES } from '../lessonThemes'
 import { folderDragHandleProps } from '../folderDrag'
 import {
@@ -83,10 +83,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
         error: dataErr,
       }, boardsRes] = await Promise.all([
         fetchLessonLauncherData(userId),
-        supabase
-          .from('boards')
-          .select('id, name')
-          .order('updated_at', { ascending: false }),
+        listBoards(userId, ['name']),
       ])
       setBlocks(b)
       setBlockTags(bt || [])
@@ -95,7 +92,7 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
       setTargetTemplates(tt)
       setLessons(l)
       if (dataErr) setError(dataErr)
-      if (boardsRes.error) setError(prev => prev || boardsRes.error.message)
+      if (boardsRes.error) setError(prev => prev || boardsRes.error)
       else setBoards(boardsRes.data || [])
     } catch (err) {
       setError(err?.message || 'Failed to load lessons.')

@@ -1,4 +1,5 @@
-import { supabase } from './supabaseClient'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db, nowIso } from './firebaseClient'
 import { normalizeLessonTheme } from './lessonThemes'
 import { collectTagsFromBlocks, mergeTagVocabulary, normalizeTagList } from './lessonBlockBank'
 import { emptyLibraryFolders, normalizeLibraryFolders } from './lessonLibraryFolders'
@@ -221,13 +222,9 @@ export function formatDuration(sec) {
 }
 
 async function readLauncherRow(userId) {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('lesson_blocks, lesson_block_tags, lesson_block_tag_colors, lesson_library_folders, lesson_target_templates, lessons')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (error) throw error
-  return data
+  const snap = await getDoc(doc(db, 'user_settings', userId))
+  if (!snap.exists()) return null
+  return snap.data()
 }
 
 async function patchLauncherSettings(userId, patch) {
@@ -236,7 +233,6 @@ async function patchLauncherSettings(userId, patch) {
     existing = await readLauncherRow(userId)
   } catch (_) { /* row may not exist */ }
   const row = {
-    user_id: userId,
     lesson_blocks: existing?.lesson_blocks ?? [],
     lesson_block_tags: existing?.lesson_block_tags ?? [],
     lesson_block_tag_colors: existing?.lesson_block_tag_colors ?? {},
@@ -244,9 +240,9 @@ async function patchLauncherSettings(userId, patch) {
     lesson_target_templates: existing?.lesson_target_templates ?? [],
     lessons: existing?.lessons ?? [],
     ...patch,
+    updated_at: nowIso(),
   }
-  const { error } = await supabase.from('user_settings').upsert(row)
-  if (error) throw error
+  await setDoc(doc(db, 'user_settings', userId), row, { merge: true })
   return row
 }
 
@@ -263,31 +259,10 @@ async function seedLauncherDefaults(userId) {
 
 /** @returns {Promise<{ blocks: object[], blockTags: string[], blockTagColors: object, libraryFolders: object, targetTemplates: object[], lessons: object[], error: string | null }>} */
 export async function fetchLessonLauncherData(userId) {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('lesson_blocks, lesson_block_tags, lesson_block_tag_colors, lesson_library_folders, lesson_target_templates, lessons')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (error) {
-    if (
-      error.message?.includes('lesson_blocks')
-      || error.message?.includes('lesson_block_tags')
-      || error.message?.includes('lesson_block_tag_colors')
-      || error.message?.includes('lesson_library_folders')
-      || error.message?.includes('lesson_target_templates')
-      || error.message?.includes('column')
-    ) {
-      return {
-        blocks: [],
-        blockTags: [],
-        blockTagColors: {},
-        libraryFolders: emptyLibraryFolders(),
-        targetTemplates: [],
-        lessons: [],
-        error: 'Run supabase migrations for Lesson Launcher in your Supabase project.',
-      }
-    }
+  let data
+  try {
+    data = await readLauncherRow(userId)
+  } catch (error) {
     return {
       blocks: [],
       blockTags: [],
@@ -295,7 +270,7 @@ export async function fetchLessonLauncherData(userId) {
       libraryFolders: emptyLibraryFolders(),
       targetTemplates: [],
       lessons: [],
-      error: error.message,
+      error: error?.message || String(error),
     }
   }
 

@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { supabase } from '../supabaseClient'
+import { signOut } from 'firebase/auth'
+import { getBoard, updateBoard } from '../boardsApi'
+import { auth } from '../firebaseClient'
 import {
   createPage,
   normalizeBoardPages,
   pageToSnapshot,
   mergeActivePage,
   boardUpdatePayload,
-  isMissingPagesColumnError,
 } from '../boardPages'
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
@@ -322,23 +323,19 @@ export default function Whiteboard({
   const persistPages = useCallback(async (pagesList, activeId) => {
     if (!activeBoard) return
     setSaving(true)
-    let payload = boardUpdatePayload(pagesList, activeId, true)
-    let { error } = await supabase.from('boards').update(payload).eq('id', activeBoard.id)
-    if (error && isMissingPagesColumnError(error.message)) {
-      payload = boardUpdatePayload(pagesList, activeId, false)
-      ;({ error } = await supabase.from('boards').update(payload).eq('id', activeBoard.id))
-    }
-    if (error) notify(`Save failed: ${error.message}`)
+    const payload = boardUpdatePayload(pagesList, activeId, true)
+    const { error } = await updateBoard(activeBoard.id, payload)
+    if (error) notify(`Save failed: ${error}`)
     setSaving(false)
   }, [activeBoard])
 
-  // --- Supabase persistence ---
+  // --- Firestore persistence ---
   const loadBoard = useCallback(async (board) => {
     if (!board?.id) return
     setLoadError(null)
-    const { data, error } = await supabase.from('boards').select('*').eq('id', board.id).single()
+    const { data, error } = await getBoard(board.id)
     if (error) {
-      setLoadError(error.message)
+      setLoadError(error)
       return
     }
     if (!data) {
@@ -1433,7 +1430,7 @@ export default function Whiteboard({
     notify('Exported!')
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut() }
+  const handleSignOut = async () => { await signOut(auth) }
 
   const cursorStyle = tool==='draw'?'crosshair':tool==='erase'?'cell':tool==='text'||tool==='sticky'||tool==='shape'?'copy':'default'
 

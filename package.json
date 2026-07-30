@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "emulators": "npx --yes firebase-tools@13 emulators:start --only auth,firestore --project demo-class-launchpad"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.43.0",
+    "firebase": "^12.16.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

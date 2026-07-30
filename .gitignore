@@ -3,3 +3,7 @@ dist
 .env.local
 .env
 .vercel
+.firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

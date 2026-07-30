@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { boardUpdatePayload, createPage, isMissingPagesColumnError, normalizeBoardPages } from '../boardPages'
-import { supabase } from '../supabaseClient'
+import { boardUpdatePayload, createPage, normalizeBoardPages } from '../boardPages'
+import { createBoard, deleteBoard as deleteBoardApi, getBoard, listBoards, updateBoard } from '../boardsApi'
 import {
   HubAlert,
   HubButton,
@@ -35,32 +35,25 @@ export default function BoardsPanel({ session, onOpenBoard }) {
 
   const fetchBoards = async () => {
     setError('')
-    const { data, error: fetchErr } = await supabase
-      .from('boards')
-      .select('id, name, created_at, updated_at')
-      .order('updated_at', { ascending: false })
-    if (fetchErr) setError(fetchErr.message)
+    const { data, error: fetchErr } = await listBoards(session.user.id, ['name', 'created_at', 'updated_at'])
+    if (fetchErr) setError(fetchErr)
     else setBoards(data || [])
     setLoading(false)
   }
 
   useEffect(() => { fetchBoards() }, [])
 
-  const createBoard = async () => {
+  const createBoardHandler = async () => {
     setCreating(true)
     setError('')
     const name = newName.trim() || `Board ${boards.length + 1}`
     const pageId = crypto.randomUUID()
     const pages = [createPage(pageId, 'Page 1')]
-    let row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, true) }
-    let { data, error: insertErr } = await supabase.from('boards').insert(row).select().single()
-    if (insertErr && isMissingPagesColumnError(insertErr.message)) {
-      row = { name, user_id: session.user.id, ...boardUpdatePayload(pages, pageId, false) }
-      ;({ data, error: insertErr } = await supabase.from('boards').insert(row).select().single())
-    }
+    const row = { name, ...boardUpdatePayload(pages, pageId, true) }
+    const { data, error: insertErr } = await createBoard(session.user.id, row)
     setCreating(false)
     if (insertErr) {
-      setError(insertErr.message)
+      setError(insertErr)
       return
     }
     setNewName('')
@@ -86,18 +79,18 @@ export default function BoardsPanel({ session, onOpenBoard }) {
     }
     setBusyId(boardId)
     setError('')
-    const { data, error: updErr } = await supabase
-      .from('boards')
-      .update({ name })
-      .eq('id', boardId)
-      .select('id, name, created_at, updated_at')
-      .single()
+    const { data, error: updErr } = await updateBoard(boardId, { name })
     setBusyId(null)
     if (updErr) {
-      setError(updErr.message)
+      setError(updErr)
       return
     }
-    setBoards(prev => prev.map(b => (b.id === boardId ? data : b)))
+    setBoards(prev => prev.map(b => (b.id === boardId ? {
+      id: data.id,
+      name: data.name,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    } : b)))
     cancelRename()
   }
 
@@ -105,50 +98,38 @@ export default function BoardsPanel({ session, onOpenBoard }) {
     e.stopPropagation()
     setBusyId(board.id)
     setError('')
-    const { data: full, error: fetchErr } = await supabase.from('boards').select('*').eq('id', board.id).single()
+    const { data: full, error: fetchErr } = await getBoard(board.id)
     if (fetchErr) {
-      setError(fetchErr.message)
+      setError(fetchErr)
       setBusyId(null)
       return
     }
     const pagesList = normalizeBoardPages(full).map((p) =>
       createPage(crypto.randomUUID(), p.name, p),
     )
-    let copyRow = {
+    const copyRow = {
       name: `${full.name} (copy)`,
-      user_id: session.user.id,
       ...boardUpdatePayload(pagesList, pagesList[0].id, true),
     }
-    let { data: copy, error: insErr } = await supabase
-      .from('boards')
-      .insert(copyRow)
-      .select('id, name, created_at, updated_at')
-      .single()
-    if (insErr && isMissingPagesColumnError(insErr.message)) {
-      copyRow = {
-        name: `${full.name} (copy)`,
-        user_id: session.user.id,
-        ...boardUpdatePayload(pagesList, pagesList[0].id, false),
-      }
-      ;({ data: copy, error: insErr } = await supabase
-        .from('boards')
-        .insert(copyRow)
-        .select('id, name, created_at, updated_at')
-        .single())
-    }
+    const { data: copy, error: insErr } = await createBoard(session.user.id, copyRow)
     setBusyId(null)
-    if (insErr) setError(insErr.message)
-    else setBoards(prev => [copy, ...prev])
+    if (insErr) setError(insErr)
+    else setBoards(prev => [{
+      id: copy.id,
+      name: copy.name,
+      created_at: copy.created_at,
+      updated_at: copy.updated_at,
+    }, ...prev])
   }
 
-  const deleteBoard = async (e, board) => {
+  const deleteBoardHandler = async (e, board) => {
     e.stopPropagation()
     if (!confirm(`Delete “${board.name}”? This cannot be undone.`)) return
     setBusyId(board.id)
     setError('')
-    const { error: delErr } = await supabase.from('boards').delete().eq('id', board.id)
+    const { error: delErr } = await deleteBoardApi(board.id)
     setBusyId(null)
-    if (delErr) setError(delErr.message)
+    if (delErr) setError(delErr)
     else setBoards(prev => prev.filter(b => b.id !== board.id))
   }
 
@@ -162,11 +143,11 @@ export default function BoardsPanel({ session, onOpenBoard }) {
           className="wb-hub-input"
           value={newName}
           onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !creating && createBoard()}
+          onKeyDown={e => e.key === 'Enter' && !creating && createBoardHandler()}
           placeholder="Name for new board…"
           aria-label="New board name"
         />
-        <HubButton variant="primary" onClick={createBoard} disabled={creating}>
+        <HubButton variant="primary" onClick={createBoardHandler} disabled={creating}>
           {creating ? 'Creating…' : '+ New board'}
         </HubButton>
       </HubCreateRow>
@@ -222,7 +203,7 @@ export default function BoardsPanel({ session, onOpenBoard }) {
                       <HubButton onClick={e => duplicateBoard(e, b)} disabled={busy}>
                         {busy ? 'Working…' : 'Duplicate'}
                       </HubButton>
-                      <HubButton variant="danger" onClick={e => deleteBoard(e, b)} disabled={busy}>
+                      <HubButton variant="danger" onClick={e => deleteBoardHandler(e, b)} disabled={busy}>
                         Delete
                       </HubButton>
                     </div>

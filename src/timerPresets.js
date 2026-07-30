@@ -1,4 +1,5 @@
-import { supabase } from './supabaseClient'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db, nowIso } from './firebaseClient'
 
 export const DEFAULT_TIMER_PRESETS = [
   { id: 'preset_warmup', label: 'Warmup', durationSec: 300 },
@@ -25,30 +26,31 @@ export function newPresetId() {
 
 /** @returns {Promise<{ presets: object[], error: string | null }>} */
 export async function fetchTimerPresets(userId) {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('timer_presets')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (error) return { presets: [], error: error.message }
-  if (!data) {
-    const seeded = await saveTimerPresets(userId, [...DEFAULT_TIMER_PRESETS])
-    return seeded
+  try {
+    const snap = await getDoc(doc(db, 'user_settings', userId))
+    if (!snap.exists()) {
+      return saveTimerPresets(userId, [...DEFAULT_TIMER_PRESETS])
+    }
+    const presets = Array.isArray(snap.data().timer_presets) ? snap.data().timer_presets : []
+    if (presets.length === 0) {
+      return saveTimerPresets(userId, [...DEFAULT_TIMER_PRESETS])
+    }
+    return { presets, error: null }
+  } catch (err) {
+    return { presets: [], error: err?.message || String(err) }
   }
-  const presets = Array.isArray(data.timer_presets) ? data.timer_presets : []
-  if (presets.length === 0) {
-    return saveTimerPresets(userId, [...DEFAULT_TIMER_PRESETS])
-  }
-  return { presets, error: null }
 }
 
 /** @returns {Promise<{ presets: object[], error: string | null }>} */
 export async function saveTimerPresets(userId, presets) {
-  const { error } = await supabase.from('user_settings').upsert({
-    user_id: userId,
-    timer_presets: presets,
-  })
-  if (error) return { presets: [], error: error.message }
-  return { presets, error: null }
+  try {
+    await setDoc(
+      doc(db, 'user_settings', userId),
+      { timer_presets: presets, updated_at: nowIso() },
+      { merge: true },
+    )
+    return { presets, error: null }
+  } catch (err) {
+    return { presets: [], error: err?.message || String(err) }
+  }
 }

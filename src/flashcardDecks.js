@@ -1,4 +1,14 @@
-import { supabase } from './supabaseClient'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+import { db, nowIso } from './firebaseClient'
 
 export function newCardId() {
   return `card_${crypto.randomUUID().slice(0, 8)}`
@@ -16,45 +26,63 @@ export function normalizeCards(cards) {
     .filter(c => c.front || c.back)
 }
 
+function sortByUpdatedDesc(rows) {
+  return [...rows].sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+}
+
 /** @returns {Promise<{ decks: object[], error: string | null }>} */
 export async function fetchDecks(userId) {
-  const { data, error } = await supabase
-    .from('flashcard_decks')
-    .select('id, name, cards, created_at, updated_at')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-  if (error) return { decks: [], error: error.message }
-  return { decks: data || [], error: null }
+  try {
+    const q = query(collection(db, 'flashcard_decks'), where('user_id', '==', userId))
+    const snap = await getDocs(q)
+    const decks = sortByUpdatedDesc(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    return { decks, error: null }
+  } catch (err) {
+    return { decks: [], error: err?.message || String(err) }
+  }
 }
 
 /** @returns {Promise<{ deck: object | null, error: string | null }>} */
 export async function createDeck(userId, name, cards = []) {
-  const { data, error } = await supabase
-    .from('flashcard_decks')
-    .insert({ user_id: userId, name, cards: normalizeCards(cards) })
-    .select()
-    .single()
-  if (error) return { deck: null, error: error.message }
-  return { deck: data, error: null }
+  try {
+    const id = crypto.randomUUID()
+    const ts = nowIso()
+    const row = {
+      user_id: userId,
+      name,
+      cards: normalizeCards(cards),
+      created_at: ts,
+      updated_at: ts,
+    }
+    await setDoc(doc(db, 'flashcard_decks', id), row)
+    return { deck: { id, ...row }, error: null }
+  } catch (err) {
+    return { deck: null, error: err?.message || String(err) }
+  }
 }
 
 /** @returns {Promise<{ deck: object | null, error: string | null }>} */
 export async function updateDeck(deckId, { name, cards }) {
-  const payload = {}
-  if (name != null) payload.name = name
-  if (cards != null) payload.cards = normalizeCards(cards)
-  const { data, error } = await supabase
-    .from('flashcard_decks')
-    .update(payload)
-    .eq('id', deckId)
-    .select()
-    .single()
-  if (error) return { deck: null, error: error.message }
-  return { deck: data, error: null }
+  try {
+    const payload = { updated_at: nowIso() }
+    if (name != null) payload.name = name
+    if (cards != null) payload.cards = normalizeCards(cards)
+    await updateDoc(doc(db, 'flashcard_decks', deckId), payload)
+    return {
+      deck: { id: deckId, ...payload },
+      error: null,
+    }
+  } catch (err) {
+    return { deck: null, error: err?.message || String(err) }
+  }
 }
 
 /** @returns {Promise<{ error: string | null }>} */
 export async function deleteDeck(deckId) {
-  const { error } = await supabase.from('flashcard_decks').delete().eq('id', deckId)
-  return { error: error?.message || null }
+  try {
+    await deleteDoc(doc(db, 'flashcard_decks', deckId))
+    return { error: null }
+  } catch (err) {
+    return { error: err?.message || String(err) }
+  }
 }

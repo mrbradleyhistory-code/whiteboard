@@ -1,155 +1,89 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient'
+import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut as firebaseSignOut,
+} from 'firebase/auth'
+import { auth, firebaseConfigured, useEmulators } from '../firebaseClient'
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-const envReady = !!(supabaseUrl && supabaseAnonKey)
-
-const isLocalDev =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-
-const supabaseHost = supabaseUrl ? new URL(supabaseUrl).hostname : ''
-const supabaseCallback = supabaseHost
-  ? `https://${supabaseHost}/auth/v1/callback`
-  : 'https://YOUR-PROJECT.supabase.co/auth/v1/callback'
-
-function readCallbackError() {
-  if (typeof window === 'undefined') return ''
-  const search = new URLSearchParams(window.location.search)
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-  const raw =
-    search.get('error_description') ||
-    search.get('error') ||
-    hash.get('error_description') ||
-    hash.get('error')
-  if (!raw) return ''
-  try {
-    return decodeURIComponent(raw.replace(/\+/g, ' '))
-  } catch {
-    return raw
-  }
-}
-
-function clearAuthCallbackParams() {
-  if (typeof window === 'undefined') return
-  window.history.replaceState(null, '', window.location.pathname)
-}
+const googleProvider = new GoogleAuthProvider()
 
 function friendlyAuthError(message) {
   if (!message) return 'Sign-in failed. Please try again.'
-  if (message.includes('audience') || message.includes('client_id'))
-    return 'Google Client ID mismatch: the same Web Client ID must be in .env.local, Google Cloud, and Supabase → Authentication → Google.'
-  if (message.includes('exchange') || message.includes('external code'))
-    return 'Supabase could not complete Google sign-in. Confirm Google Client ID + Secret in Supabase match your Google Cloud OAuth client.'
-  if (message.includes('redirect'))
-    return `Add ${window.location.origin} to Supabase → Authentication → URL Configuration → Redirect URLs (e.g. ${window.location.origin}/**).`
+  if (/popup-closed-by-user|cancelled-popup-request/i.test(message)) {
+    return 'Sign-in popup was closed before completing.'
+  }
+  if (/unauthorized-domain/i.test(message)) {
+    return 'Add this site’s domain under Firebase Console → Authentication → Settings → Authorized domains.'
+  }
+  if (/operation-not-allowed/i.test(message)) {
+    return 'Enable the Google provider in Firebase Console → Authentication → Sign-in method.'
+  }
+  if (/invalid-api-key/i.test(message)) {
+    return 'Invalid Firebase API key. Check VITE_FIREBASE_* values in .env.local.'
+  }
   return message
 }
 
 export default function Auth() {
   const [signingIn, setSigningIn] = useState(false)
   const [authError, setAuthError] = useState('')
-  const [gisReady, setGisReady] = useState(false)
+  const [email, setEmail] = useState('teacher@example.com')
+  const [password, setPassword] = useState('Password123!')
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
+  const envReady = firebaseConfigured || useEmulators
 
-  useEffect(() => {
-    const callbackErr = readCallbackError()
-    if (callbackErr) {
-      setAuthError(friendlyAuthError(callbackErr))
-      clearAuthCallbackParams()
-    }
-  }, [])
-
-  const handleGoogleCredential = useCallback(async (response) => {
-    if (!response?.credential) {
-      setAuthError('Google did not return a sign-in token.')
-      return
-    }
-    if (!googleClientId) {
-      setAuthError('Missing VITE_GOOGLE_CLIENT_ID in .env.local for local sign-in.')
-      return
-    }
+  const finishGoogle = useCallback(async (fn) => {
     setSigningIn(true)
     setAuthError('')
     try {
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: 'google',
-        token: response.credential,
-      })
-      if (error) {
-        setAuthError(friendlyAuthError(error.message))
-        setSigningIn(false)
-        return
-      }
-      if (!data.session) {
-        setAuthError('No session after Google sign-in. Match Client ID in Supabase Google provider and .env.local.')
-        setSigningIn(false)
-      }
+      await fn()
     } catch (err) {
       setAuthError(friendlyAuthError(err?.message || String(err)))
       setSigningIn(false)
     }
   }, [])
 
-  const initGisButton = useCallback(() => {
-    if (!window.google?.accounts?.id || !googleClientId) return
-    const el = document.getElementById('google-signin-btn')
-    if (!el) return
-    el.innerHTML = ''
-    window.google.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: handleGoogleCredential,
-    })
-    window.google.accounts.id.renderButton(el, {
-      theme: 'outline',
-      size: 'large',
-      text: 'signin_with',
-      shape: 'rectangular',
-    })
-    setGisReady(true)
-  }, [handleGoogleCredential])
+  const signInGooglePopup = () => finishGoogle(() => signInWithPopup(auth, googleProvider))
+  const signInGoogleRedirect = () => finishGoogle(() => signInWithRedirect(auth, googleProvider))
 
-  useEffect(() => {
-    if (!isLocalDev || !googleClientId) return
-    if (window.google?.accounts?.id) {
-      initGisButton()
-      return
-    }
-    const existing = document.querySelector('script[data-gis-client]')
-    if (existing) {
-      existing.addEventListener('load', initGisButton)
-      return () => existing.removeEventListener('load', initGisButton)
-    }
-    const script = document.createElement('script')
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.dataset.gisClient = 'true'
-    script.onload = initGisButton
-    script.onerror = () => setAuthError('Failed to load Google sign-in script.')
-    document.head.appendChild(script)
-  }, [initGisButton])
-
-  const signInWithOAuthRedirect = async () => {
+  const signInDevEmail = async (mode) => {
     setSigningIn(true)
     setAuthError('')
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: origin, skipBrowserRedirect: true },
-      })
-      if (error) throw error
-      if (!data?.url) {
-        throw new Error(`No redirect URL. Add ${origin}/** to Supabase Redirect URLs.`)
+      if (mode === 'register') {
+        await createUserWithEmailAndPassword(auth, email.trim(), password)
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password)
       }
-      window.location.assign(data.url)
     } catch (err) {
+      // If user already exists, fall back to sign-in on register attempt.
+      if (mode === 'register' && /email-already-in-use/i.test(err?.code || err?.message || '')) {
+        try {
+          await signInWithEmailAndPassword(auth, email.trim(), password)
+          return
+        } catch (err2) {
+          setAuthError(friendlyAuthError(err2?.message || String(err2)))
+          setSigningIn(false)
+          return
+        }
+      }
       setAuthError(friendlyAuthError(err?.message || String(err)))
       setSigningIn(false)
     }
   }
+
+  // Keep signingIn true until auth state flips; clear if still anonymous after a bit.
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) setSigningIn(false)
+    })
+    return unsub
+  }, [])
 
   if (!envReady) {
     return (
@@ -160,8 +94,10 @@ export default function Auth() {
             <h1 className="wb-auth__title">Class Launchpad</h1>
           </div>
           <p className="wb-auth__error">
-            Missing <code>VITE_SUPABASE_URL</code> or <code>VITE_SUPABASE_ANON_KEY</code> in <code>.env.local</code>.
-            Restart <code>npm run dev</code> after adding them.
+            Missing Firebase config. Add <code>VITE_FIREBASE_API_KEY</code>,{' '}
+            <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> to{' '}
+            <code>.env.local</code> (see Firebase Console → Project settings → Your apps), then restart{' '}
+            <code>npm run dev</code>. For local emulators set <code>VITE_USE_FIREBASE_EMULATORS=true</code>.
           </p>
         </div>
       </div>
@@ -179,43 +115,69 @@ export default function Auth() {
           </div>
         </div>
 
-        {isLocalDev ? (
-          <div className="wb-auth__actions">
-            <p className="wb-auth__hint">
-              Local dev uses the Google sign-in button. Production uses redirect sign-in.
-            </p>
-            {googleClientId ? (
-              <div
-                id="google-signin-btn"
-                className={`wb-auth__google-slot${signingIn ? ' wb-auth__google-slot--busy' : ''}`}
-              />
-            ) : (
-              <p className="wb-auth__error">
-                Add <code>VITE_GOOGLE_CLIENT_ID</code> to <code>.env.local</code> and restart the dev server.
-              </p>
-            )}
-            {!gisReady && googleClientId && !signingIn && (
-              <p className="wb-auth__hint">Loading Google button…</p>
-            )}
+        <div className="wb-auth__actions">
+          <button
+            type="button"
+            className="wb-auth__google-btn"
+            onClick={signInGooglePopup}
+            disabled={signingIn || useEmulators}
+            title={useEmulators ? 'Google sign-in needs a real Firebase project (not emulators)' : undefined}
+          >
+            <GoogleIcon />
+            {signingIn ? 'Signing in…' : 'Sign in with Google'}
+          </button>
+          {!useEmulators && (
             <button
               type="button"
               className="wb-auth__link-btn"
-              onClick={signInWithOAuthRedirect}
+              onClick={signInGoogleRedirect}
               disabled={signingIn}
             >
               Try redirect sign-in instead
             </button>
+          )}
+        </div>
+
+        {useEmulators && (
+          <div className="wb-auth__actions" style={{ marginTop: 12 }}>
+            <p className="wb-auth__hint">
+              Emulator mode: use email/password (Auth emulator). Google OAuth needs a real Firebase project.
+            </p>
+            <input
+              className="wb-hub-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              aria-label="Dev email"
+              style={{ width: '100%' }}
+            />
+            <input
+              className="wb-hub-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              aria-label="Dev password"
+              style={{ width: '100%' }}
+            />
+            <button
+              type="button"
+              className="wb-auth__google-btn"
+              onClick={() => signInDevEmail('login')}
+              disabled={signingIn}
+            >
+              {signingIn ? 'Signing in…' : 'Dev sign in'}
+            </button>
+            <button
+              type="button"
+              className="wb-auth__link-btn"
+              onClick={() => signInDevEmail('register')}
+              disabled={signingIn}
+            >
+              Create emulator account
+            </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="wb-auth__google-btn"
-            onClick={signInWithOAuthRedirect}
-            disabled={signingIn}
-          >
-            <GoogleIcon />
-            {signingIn ? 'Redirecting to Google…' : 'Sign in with Google'}
-          </button>
         )}
 
         {signingIn && <p className="wb-auth__status">Signing in…</p>}
@@ -229,20 +191,20 @@ export default function Auth() {
         <details className="wb-auth__details">
           <summary>Setup checklist</summary>
           <ol>
-            {isLocalDev && (
-              <>
-                <li>Google Cloud → <strong>Authorized JavaScript origins</strong>: <code>{origin}</code></li>
-                <li><code>VITE_GOOGLE_CLIENT_ID</code> must match Supabase → Google → Client ID</li>
-              </>
-            )}
-            <li>Supabase → URL Configuration: Redirect URLs include <code>{origin}/**</code></li>
-            <li>Supabase → Google provider enabled (Client ID + Secret)</li>
-            <li>Google Cloud → redirect URI: <code>{supabaseCallback}</code></li>
+            <li>Create a Firebase project and enable <strong>Google</strong> (and optionally Email/Password for emulators).</li>
+            <li>Firebase Console → Authentication → Settings → Authorized domains includes <code>{typeof window !== 'undefined' ? window.location.hostname : 'localhost'}</code>.</li>
+            <li>Copy the web app config into <code>.env.local</code> as <code>VITE_FIREBASE_*</code> vars.</li>
+            <li>Deploy <code>firestore.rules</code> (or use <code>npm run emulators</code> locally).</li>
+            <li>Origin: <code>{origin}</code></li>
           </ol>
         </details>
       </div>
     </div>
   )
+}
+
+export async function signOut() {
+  await firebaseSignOut(auth)
 }
 
 function GoogleIcon() {
