@@ -5,9 +5,10 @@
 ## Cursor Cloud specific instructions
 
 ### Services and standard commands
-- Single service: the **Vite dev server**. Scripts are in `package.json`: `npm run dev` (serves on `http://localhost:5173`), `npm run build`, `npm run preview`. There is **no lint config and no test runner** in this repo, so there are no lint/test commands — "build" is `npm run build`.
+- Single service: the **Vite dev server**. Scripts are in `package.json`: `npm run dev` (serves on **`http://localhost:5173`**, not 3000), `npm run build`, `npm run preview`. There is **no lint config and no test runner** in this repo, so there are no lint/test commands — "build" is `npm run build`.
 - The app needs a `.env.local` (gitignored, **not committed**, so recreate it each session) with at least `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Without them the sign-in screen just shows a "Missing env" error. `VITE_GOOGLE_CLIENT_ID` is only needed for real Google sign-in.
 - Restart `npm run dev` after editing `.env.local`; Vite only reads env vars at startup.
+- **Phone / other devices cannot reach this cloud VM's localhost.** For remote use, open the deployed Vercel URL (`https://whiteboard-smoky.vercel.app`) or a public tunnel to the Vite server. Local phone testing on the same Wi‑Fi needs `npm run dev -- --host` and the machine's LAN IP.
 
 ### Backend options
 1. **Hosted Supabase (production/intended path):** requires user-provided `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` secrets and a Google OAuth client (login is Google-only). Run the SQL files in `supabase/` once in the hosted SQL editor.
