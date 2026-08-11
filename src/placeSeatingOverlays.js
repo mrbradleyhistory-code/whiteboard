@@ -1,4 +1,4 @@
-import { listSeats } from './seatingChart'
+import { getFurniture, listSeats } from './seatingChart'
 
 const SEAT_COLORS = ['#f6e05e', '#90cdf4', '#9ae6b4', '#feb2b2', '#e9d8fd']
 
@@ -13,6 +13,13 @@ const stickyDefaults = {
   listStyle: 'none',
 }
 
+const FURNITURE_COLORS = {
+  promethean: '#2d3748',
+  teacher_desk: '#ed8936',
+  table: '#c6f6d5',
+  rect: '#e2e8f0',
+}
+
 /**
  * Build stickies that mirror a saved seating chart on the whiteboard.
  */
@@ -20,6 +27,7 @@ export function buildSeatingStickies(saved, students, viewport) {
   const { name, chart } = saved
   const byId = new Map(students.map(s => [s.id, s.name]))
   const seats = listSeats(chart)
+  const furniture = getFurniture(chart)
   const { centerX, centerY, zoom = 1 } = viewport
 
   const seatW = 148
@@ -67,6 +75,24 @@ export function buildSeatingStickies(saved, students, viewport) {
     bold: true,
     ...stickyDefaults,
   })
+
+  for (const item of furniture) {
+    const x = gridX + item.col * (seatW + gap) / zoom
+    const y = gridY + item.row * (seatH + gap) / zoom
+    stickies.push({
+      id: uid(),
+      x,
+      y,
+      text: item.label || item.type,
+      color: FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect,
+      width: Math.round((item.w * seatW + (item.w - 1) * gap) / zoom),
+      height: Math.round((item.h * seatH + (item.h - 1) * gap) / zoom),
+      fontSize: Math.max(12, Math.round(13 / zoom)),
+      bold: true,
+      ...stickyDefaults,
+      textAlign: 'center',
+    })
+  }
 
   for (const seat of seats) {
     const studentId = chart.assignments?.[seat.key]

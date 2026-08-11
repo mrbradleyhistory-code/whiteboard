@@ -3782,10 +3782,166 @@ input[type='range'].wb-range::-moz-range-thumb {
   box-shadow: 0 0 0 2px var(--wb-accent-ring);
 }
 
+/* Room designer canvas */
+.wb-room {
+  margin-bottom: 14px;
+}
+
+.wb-room__front {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #5c6570;
+  margin-bottom: 8px;
+}
+
+.wb-room__scroll {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.wb-room__canvas {
+  position: relative;
+  margin: 10px;
+  background-color: #eef2f7;
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+  border-radius: 8px;
+  touch-action: none;
+}
+
+.wb-room__canvas--design {
+  cursor: crosshair;
+}
+
+.wb-room__seat,
+.wb-room__item {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  user-select: none;
+}
+
+.wb-room__seat {
+  border: 2px dashed var(--wb-accent, #457b9d);
+  background: #fff;
+  cursor: pointer;
+  touch-action: none;
+  font: inherit;
+  color: inherit;
+}
+
+.wb-room__seat--filled {
+  border-style: solid;
+}
+
+.wb-room__seat--design {
+  cursor: grab;
+  border-color: #64748b;
+  background: #f1f5f9;
+}
+
+.wb-room__seat--selected,
+.wb-room__item--selected {
+  outline: 2px solid var(--wb-accent, #457b9d);
+  outline-offset: 2px;
+  z-index: 3;
+}
+
+.wb-room__seat--dragging,
+.wb-room__item--dragging {
+  opacity: 0.85;
+  z-index: 5;
+  cursor: grabbing;
+}
+
+.wb-room__seat-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.wb-room__item {
+  border: 2px solid rgba(15, 23, 42, 0.2);
+  cursor: grab;
+  z-index: 1;
+  text-align: center;
+}
+
+.wb-room__item-label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.wb-room__item-size {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.wb-room__item--promethean {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #0f172a;
+}
+
+.wb-room__item--teacher {
+  background: #fdba74;
+  color: #7c2d12;
+  border-color: #ea580c;
+}
+
+.wb-room__item--table {
+  background: #bbf7d0;
+  color: #14532d;
+  border-color: #16a34a;
+  border-style: dashed;
+}
+
+.wb-room__item--rect {
+  background: #e2e8f0;
+  color: #334155;
+  border-style: dashed;
+}
+
+.wb-room-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: var(--wb-surface-muted, #f6f8fa);
+}
+
+.wb-room-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.wb-room__meta {
+  text-align: center;
+  margin-top: 8px;
+}
+
 .wb-class-section {
   border-top: 1px solid var(--wb-border);
   margin-top: 4px;
 }
+
 
 .wb-class-section__head {
   display: flex;
