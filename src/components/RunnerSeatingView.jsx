@@ -1,4 +1,4 @@
-import { getFurniture, getSeatDefs, studentAtSeat } from '../seatingChart'
+import { getFurniture, getSeatDefs } from '../seatingChart'
 import { studentNameById } from '../localClassData'
 import SeatingRoomCanvas from './SeatingRoomCanvas'
 
