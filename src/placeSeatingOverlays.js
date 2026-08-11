@@ -1,4 +1,4 @@
-import { furnitureCells, getFurniture, listSeats } from './seatingChart'
+import { furnitureCells, getFurniture, listSeats, resolveSeatingColor } from './seatingChart'
 
 const SEAT_COLORS = ['#f6e05e', '#90cdf4', '#9ae6b4', '#feb2b2', '#e9d8fd']
 
@@ -79,7 +79,10 @@ export function buildSeatingStickies(saved, students, viewport) {
   })
 
   for (const item of furniture) {
-    const color = FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect
+    const tint = item.color ? resolveSeatingColor(item.color) : null
+    const color = item.outline
+      ? (tint?.soft || '#f0fff4')
+      : (tint?.fill || FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect)
     const cells = furnitureCells(item)
     for (const cell of cells) {
       const x = gridX + cell.col * (seatW + gap) / zoom
@@ -91,7 +94,7 @@ export function buildSeatingStickies(saved, students, viewport) {
         text: item.outline
           ? ''
           : (cell.row === item.row && cell.col === item.col ? (item.label || item.type) : ''),
-        color: item.outline ? '#f0fff4' : color,
+        color,
         width: Math.round(seatW / zoom),
         height: Math.round(seatH / zoom),
         fontSize: Math.max(11, Math.round(12 / zoom)),
@@ -121,6 +124,10 @@ export function buildSeatingStickies(saved, students, viewport) {
     const label = studentId ? (byId.get(studentId) || 'Unknown') : '—'
     const x = gridX + seat.col * (seatW + gap) / zoom
     const y = gridY + seat.row * (seatH + gap) / zoom
+    const tableFurn = seat.tableId ? furniture.find(f => f.id === seat.tableId) : null
+    const seatTint = seat.color
+      ? resolveSeatingColor(seat.color)
+      : (tableFurn?.color ? resolveSeatingColor(tableFurn.color) : null)
 
     stickies.push({
       id: uid(),
@@ -129,7 +136,7 @@ export function buildSeatingStickies(saved, students, viewport) {
       text: label,
       color: studentId
         ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length]
-        : (seat.tableId ? '#f0fff4' : '#f6f8fa'),
+        : (seatTint?.soft || (seat.tableId ? '#f0fff4' : '#f6f8fa')),
       width: Math.round(seatW / zoom),
       height: Math.round(seatH / zoom),
       fontSize: Math.max(13, Math.round(15 / zoom)),

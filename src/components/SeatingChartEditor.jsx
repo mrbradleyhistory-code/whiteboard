@@ -22,6 +22,9 @@ import {
   resizeCanvas,
   resizeFurniture,
   seatKey,
+  SEATING_COLOR_PALETTE,
+  setFurnitureColor,
+  setSeatColor,
   studentAtSeat,
   switchLayoutType,
   toggleFurnitureCell,
@@ -271,7 +274,7 @@ export default function SeatingChartEditor({
           <p className="wb-hub-hint" style={{ margin: 0 }}>
             {editShapeId
               ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
-              : 'Drag items to snap them on the grid. Use U-table or Custom shape for non-rectangular tables; Convert to seats keeps an outline.'}
+              : 'Drag items to snap them on the grid. Use U-table or Custom shape for non-rectangular tables; pick a color to code groups. Convert to seats keeps the outline and tint.'}
           </p>
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton
@@ -304,6 +307,20 @@ export default function SeatingChartEditor({
                     {selectedFurniture.label}
                     {selectedFurniture.outline ? ' (outline)' : ''}
                   </strong>
+                  <div className="wb-room-colors" role="group" aria-label="Table color">
+                    <span className="wb-room-colors__label">Color</span>
+                    {SEATING_COLOR_PALETTE.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        title={c.label}
+                        aria-label={c.label}
+                        className={`wb-room-colors__swatch${selectedFurniture.color === c.id ? ' wb-room-colors__swatch--active' : ''}`}
+                        style={{ background: c.fill, borderColor: c.border }}
+                        onClick={() => onChange(setFurnitureColor(chart, selectedFurniture.id, c.id))}
+                      />
+                    ))}
+                  </div>
                   {!selectedFurniture.outline && selectedFurniture.type !== FURNITURE_TYPES.POLYGON && (
                     <>
                       <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
@@ -351,7 +368,23 @@ export default function SeatingChartEditor({
                 </>
               )}
               {selectedSeat && !selectedFurniture && (
-                <strong>Desk at {selectedSeat.row},{selectedSeat.col}</strong>
+                <>
+                  <strong>Desk at {selectedSeat.row},{selectedSeat.col}</strong>
+                  <div className="wb-room-colors" role="group" aria-label="Desk color">
+                    <span className="wb-room-colors__label">Color</span>
+                    {SEATING_COLOR_PALETTE.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        title={c.label}
+                        aria-label={c.label}
+                        className={`wb-room-colors__swatch${(selectedSeat.color || '') === c.id ? ' wb-room-colors__swatch--active' : ''}`}
+                        style={{ background: c.fill, borderColor: c.border }}
+                        onClick={() => onChange(setSeatColor(chart, selectedSeat.key, c.id))}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
               <HubButton variant="danger" onClick={deleteSelected}>Delete</HubButton>
             </div>

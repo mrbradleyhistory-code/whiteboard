@@ -5,6 +5,7 @@ import {
   furnitureLabel,
   getFurniture,
   listSeats,
+  seatingColorStyle,
   studentAtSeat,
 } from '../seatingChart'
 
@@ -156,7 +157,9 @@ export default function SeatingRoomCanvas({
             return (
               <div
                 key={item.id}
-                className={`wb-room__poly ${furnitureClass(item.type, item.outline)}${selected ? ' wb-room__poly--selected' : ''}${item.outline ? ' wb-room__poly--outline' : ''}${editing ? ' wb-room__poly--editing' : ''}`}
+                className={`wb-room__poly ${furnitureClass(item.type, item.outline)}${selected ? ' wb-room__poly--selected' : ''}${item.outline ? ' wb-room__poly--outline' : ''}${editing ? ' wb-room__poly--editing' : ''} wb-room__poly--tinted`}
+                data-color={item.color || undefined}
+                style={seatingColorStyle(item.color, { outline: !!item.outline })}
                 onPointerDown={designMode && !item.outline && !editShapeId ? (e) => startDrag(e, {
                   kind: 'furniture',
                   id: item.id,
@@ -200,12 +203,19 @@ export default function SeatingRoomCanvas({
             const w = seat.w || 1
             const h = seat.h || 1
             const atTable = !!seat.tableId
+            const colorId = seat.color || (atTable
+              ? furniture.find(f => f.id === seat.tableId)?.color
+              : null)
+            const seatStyle = {
+              ...posStyle(seat.row, seat.col, w, h, preview),
+              ...(colorId ? seatingColorStyle(colorId, { asSeat: true }) : null),
+            }
             return (
               <button
                 key={seat.key}
                 type="button"
-                className={`wb-room__seat${studentId ? ' wb-room__seat--filled' : ''}${designMode ? ' wb-room__seat--design' : ''}${selected ? ' wb-room__seat--selected' : ''}${preview ? ' wb-room__seat--dragging' : ''}${atTable ? ' wb-room__seat--table' : ''}`}
-                style={posStyle(seat.row, seat.col, w, h, preview)}
+                className={`wb-room__seat${studentId ? ' wb-room__seat--filled' : ''}${designMode ? ' wb-room__seat--design' : ''}${selected ? ' wb-room__seat--selected' : ''}${preview ? ' wb-room__seat--dragging' : ''}${atTable ? ' wb-room__seat--table' : ''}${colorId ? ' wb-room__seat--tinted' : ''}`}
+                style={seatStyle}
                 onPointerDown={designMode && !editShapeId ? (e) => startDrag(e, {
                   kind: 'seat',
                   id: seat.id || seat.key,

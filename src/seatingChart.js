@@ -18,6 +18,62 @@ export const FURNITURE_PRESETS = [
   { type: FURNITURE_TYPES.RECT, label: 'Rectangle', w: 2, h: 1 },
 ]
 
+/** Classroom-friendly color codes for tables / seat groups. */
+export const SEATING_COLOR_PALETTE = [
+  { id: 'green', label: 'Green', fill: '#bbf7d0', border: '#16a34a', soft: '#f0fdf4' },
+  { id: 'blue', label: 'Blue', fill: '#bfdbfe', border: '#2563eb', soft: '#eff6ff' },
+  { id: 'yellow', label: 'Yellow', fill: '#fde68a', border: '#ca8a04', soft: '#fefce8' },
+  { id: 'orange', label: 'Orange', fill: '#fdba74', border: '#ea580c', soft: '#fff7ed' },
+  { id: 'pink', label: 'Pink', fill: '#fbcfe8', border: '#db2777', soft: '#fdf2f8' },
+  { id: 'purple', label: 'Purple', fill: '#ddd6fe', border: '#7c3aed', soft: '#f5f3ff' },
+  { id: 'teal', label: 'Teal', fill: '#99f6e4', border: '#0d9488', soft: '#f0fdfa' },
+  { id: 'slate', label: 'Slate', fill: '#cbd5e1', border: '#475569', soft: '#f8fafc' },
+  { id: 'red', label: 'Red', fill: '#fecaca', border: '#dc2626', soft: '#fef2f2' },
+  { id: 'charcoal', label: 'Charcoal', fill: '#1e293b', border: '#0f172a', soft: '#e2e8f0' },
+]
+
+const DEFAULT_COLOR_BY_TYPE = {
+  [FURNITURE_TYPES.PROMETHEAN]: 'charcoal',
+  [FURNITURE_TYPES.TEACHER_DESK]: 'orange',
+  [FURNITURE_TYPES.TABLE]: 'green',
+  [FURNITURE_TYPES.U_TABLE]: 'green',
+  [FURNITURE_TYPES.POLYGON]: 'blue',
+  [FURNITURE_TYPES.RECT]: 'slate',
+}
+
+export function defaultColorForType(type) {
+  return DEFAULT_COLOR_BY_TYPE[type] || 'green'
+}
+
+export function resolveSeatingColor(colorId) {
+  const id = typeof colorId === 'string' ? colorId : null
+  return SEATING_COLOR_PALETTE.find(c => c.id === id) || SEATING_COLOR_PALETTE[0]
+}
+
+/** Inline CSS vars for canvas furniture / seats. */
+export function seatingColorStyle(colorId, { outline = false, asSeat = false } = {}) {
+  const c = resolveSeatingColor(colorId)
+  if (outline) {
+    return {
+      '--room-fill': `${c.fill}33`,
+      '--room-border': c.border,
+      '--room-soft': c.soft,
+    }
+  }
+  if (asSeat) {
+    return {
+      '--room-fill': c.soft,
+      '--room-border': c.border,
+      '--room-soft': c.soft,
+    }
+  }
+  return {
+    '--room-fill': c.fill,
+    '--room-border': c.border,
+    '--room-soft': c.soft,
+  }
+}
+
 export function seatKey(row, col) {
   return `${row}-${col}`
 }
@@ -31,6 +87,11 @@ export function newItemId(prefix = 'item') {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`
 }
 
+function normalizeColorId(raw) {
+  if (typeof raw !== 'string' || !raw) return null
+  return SEATING_COLOR_PALETTE.some(c => c.id === raw) ? raw : null
+}
+
 function seatDef(row, col, extras = {}) {
   const key = extras.key || seatKey(row, col)
   return {
@@ -42,6 +103,7 @@ function seatDef(row, col, extras = {}) {
     h: Math.max(1, extras.h || 1),
     label: extras.label || '',
     tableId: extras.tableId || null,
+    color: normalizeColorId(extras.color),
   }
 }
 
@@ -156,6 +218,7 @@ export function normalizeFurnitureItem(raw) {
     cells,
     outline: !!raw.outline,
     label: typeof raw.label === 'string' ? raw.label : furnitureLabel(type),
+    color: normalizeColorId(raw.color) || defaultColorForType(type),
   }
 }
 
@@ -398,7 +461,15 @@ export function moveSeat(chart, key, nextRow, nextCol) {
   if (newKey !== key && defs.some(s => s.key === newKey)) return chart // occupied
   const nextDefs = defs.map(s => (
     s.key === key
-      ? seatDef(fitted.row, fitted.col, { ...s, id: s.id, w: fitted.w, h: fitted.h, label: s.label, tableId: s.tableId })
+      ? seatDef(fitted.row, fitted.col, {
+        ...s,
+        id: s.id,
+        w: fitted.w,
+        h: fitted.h,
+        label: s.label,
+        tableId: s.tableId,
+        color: s.color,
+      })
       : s
   ))
   const assignments = { ...(chart.assignments || {}) }
@@ -430,12 +501,34 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
     label: size.label || preset.label,
     cells: clipped.length ? clipped : defaultCellsForType(preset.type, fitted.row, fitted.col, fitted.w, fitted.h),
     outline: false,
+    color: size.color || defaultColorForType(preset.type),
   })
   return {
     ...chart,
     layout: chart.layout === 'grid' ? 'custom' : chart.layout,
     furniture: [...getFurniture(chart), item],
   }
+}
+
+/** Set color on furniture; also retints linked table seats. */
+export function setFurnitureColor(chart, id, colorId) {
+  const color = normalizeColorId(colorId) || defaultColorForType(FURNITURE_TYPES.TABLE)
+  const furniture = getFurniture(chart).map(f => (
+    f.id === id ? normalizeFurnitureItem({ ...f, color }) : f
+  ))
+  const seatDefs = getSeatDefs(chart).map(s => (
+    s.tableId === id ? seatDef(s.row, s.col, { ...s, color }) : s
+  ))
+  return setSeatDefs({ ...chart, furniture }, seatDefs)
+}
+
+/** Color a single desk (does not change its table furniture). */
+export function setSeatColor(chart, key, colorId) {
+  const color = normalizeColorId(colorId)
+  const seatDefs = getSeatDefs(chart).map(s => (
+    s.key === key ? seatDef(s.row, s.col, { ...s, color }) : s
+  ))
+  return setSeatDefs(chart, seatDefs)
 }
 
 export function updateFurniture(chart, id, patch) {
@@ -548,6 +641,7 @@ export function toggleFurnitureCell(chart, furnitureId, row, col) {
 export function convertFurnitureToSeats(chart, furnitureId) {
   const item = getFurniture(chart).find(f => f.id === furnitureId)
   if (!item) return chart
+  const color = item.color || defaultColorForType(item.type)
   const defs = getSeatDefs(chart)
   const byKey = new Map(defs.map(s => [s.key, s]))
   for (const cell of furnitureCells(item)) {
@@ -556,14 +650,19 @@ export function convertFurnitureToSeats(chart, furnitureId) {
       byKey.set(key, seatDef(cell.row, cell.col, {
         label: item.label || furnitureLabel(item.type),
         tableId: item.id,
+        color,
       }))
     } else {
-      byKey.set(key, { ...byKey.get(key), tableId: item.id })
+      byKey.set(key, seatDef(byKey.get(key).row, byKey.get(key).col, {
+        ...byKey.get(key),
+        tableId: item.id,
+        color,
+      }))
     }
   }
   const furniture = getFurniture(chart).map(f => (
     f.id === furnitureId
-      ? normalizeFurnitureItem({ ...f, outline: true })
+      ? normalizeFurnitureItem({ ...f, outline: true, color })
       : f
   ))
   return setSeatDefs({ ...chart, furniture }, [...byKey.values()])
