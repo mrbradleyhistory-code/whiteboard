@@ -24,6 +24,7 @@ import {
   seatKey,
   studentAtSeat,
   switchLayoutType,
+  toggleFurnitureCell,
   unassignedStudents,
 } from '../seatingChart'
 import { HubButton } from './hubUi'
@@ -45,6 +46,7 @@ export default function SeatingChartEditor({
   const [designMode, setDesignMode] = useState(false)
   const [placeTool, setPlaceTool] = useState('seat') // seat | null when selecting only
   const [selectedId, setSelectedId] = useState(null)
+  const [editShapeId, setEditShapeId] = useState(null)
   const [seed, setSeed] = useState('')
   const [fillError, setFillError] = useState('')
   const [dragStudentId, setDragStudentId] = useState(null)
@@ -169,10 +171,15 @@ export default function SeatingChartEditor({
     onChange(exists ? removeSeat(chartRef.current, key) : addSeatAt(chartRef.current, row, col))
   }, [onChange])
 
+  const handleToggleFurnitureCell = useCallback((id, row, col) => {
+    onChange(toggleFurnitureCell(chartRef.current, id, row, col))
+  }, [onChange])
+
   const deleteSelected = () => {
     if (selectedFurniture) {
       onChange(removeFurniture(chart, selectedFurniture.id))
       setSelectedId(null)
+      setEditShapeId(null)
       return
     }
     if (selectedSeat) {
@@ -182,17 +189,25 @@ export default function SeatingChartEditor({
   }
 
   const convertSelected = () => {
-    if (!selectedFurniture) return
+    if (!selectedFurniture || selectedFurniture.outline) return
     const next = convertFurnitureToSeats(chart, selectedFurniture.id)
     onChange(next)
-    setSelectedId(null)
+    setEditShapeId(null)
+    setSelectedId(selectedFurniture.id) // keep outline selected
   }
+
+  const shapeTypesConvertible = new Set([
+    FURNITURE_TYPES.TABLE,
+    FURNITURE_TYPES.RECT,
+    FURNITURE_TYPES.U_TABLE,
+    FURNITURE_TYPES.POLYGON,
+  ])
 
   return (
     <div className="wb-seating">
       <p className="wb-hub-hint">
-        Design your room on a snappable grid: drag desks and furniture, add tables/shapes and convert them into seats.
-        Then place students and auto-fill the rest.
+        Design your room on a snappable grid: drag desks and furniture, paint custom polygons (U-tables),
+        then convert shapes to seats — the table outline stays so the seating chart stays readable.
       </p>
 
       <div className="wb-hub-radio-row">
@@ -243,6 +258,7 @@ export default function SeatingChartEditor({
           onClick={() => {
             setDesignMode(m => !m)
             setSelectedId(null)
+            setEditShapeId(null)
             setPlaceTool('seat')
           }}
         >
@@ -253,17 +269,28 @@ export default function SeatingChartEditor({
       {designMode && (
         <div className="wb-room-palette">
           <p className="wb-hub-hint" style={{ margin: 0 }}>
-            Drag items to snap them on the grid. Click empty cells to add/remove desks when “Desk” is selected.
+            {editShapeId
+              ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
+              : 'Drag items to snap them on the grid. Use U-table or Custom shape for non-rectangular tables; Convert to seats keeps an outline.'}
           </p>
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton
-              className={placeTool === 'seat' ? 'wb-hub-btn--warn' : ''}
-              onClick={() => setPlaceTool(t => (t === 'seat' ? null : 'seat'))}
+              className={placeTool === 'seat' && !editShapeId ? 'wb-hub-btn--warn' : ''}
+              onClick={() => {
+                setEditShapeId(null)
+                setPlaceTool(t => (t === 'seat' ? null : 'seat'))
+              }}
             >
-              {placeTool === 'seat' ? 'Desk tool on' : 'Desk tool'}
+              {placeTool === 'seat' && !editShapeId ? 'Desk tool on' : 'Desk tool'}
             </HubButton>
             {FURNITURE_PRESETS.map(p => (
-              <HubButton key={p.type} onClick={() => placeFurniture(p.type)}>
+              <HubButton
+                key={p.type}
+                onClick={() => {
+                  setEditShapeId(null)
+                  placeFurniture(p.type)
+                }}
+              >
                 + {p.label}
               </HubButton>
             ))}
@@ -273,33 +300,50 @@ export default function SeatingChartEditor({
             <div className="wb-room-inspector">
               {selectedFurniture && (
                 <>
-                  <strong>{selectedFurniture.label}</strong>
-                  <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
-                    W
-                    <input
-                      type="number"
-                      min={1}
-                      max={12}
-                      className="wb-hub-input"
-                      style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
-                      value={selectedFurniture.w}
-                      onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, parseInt(e.target.value, 10) || 1, selectedFurniture.h))}
-                    />
-                  </label>
-                  <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
-                    H
-                    <input
-                      type="number"
-                      min={1}
-                      max={12}
-                      className="wb-hub-input"
-                      style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
-                      value={selectedFurniture.h}
-                      onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, selectedFurniture.w, parseInt(e.target.value, 10) || 1))}
-                    />
-                  </label>
-                  {(selectedFurniture.type === FURNITURE_TYPES.TABLE
-                    || selectedFurniture.type === FURNITURE_TYPES.RECT) && (
+                  <strong>
+                    {selectedFurniture.label}
+                    {selectedFurniture.outline ? ' (outline)' : ''}
+                  </strong>
+                  {!selectedFurniture.outline && selectedFurniture.type !== FURNITURE_TYPES.POLYGON && (
+                    <>
+                      <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
+                        W
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          className="wb-hub-input"
+                          style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
+                          value={selectedFurniture.w}
+                          onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, parseInt(e.target.value, 10) || 1, selectedFurniture.h))}
+                        />
+                      </label>
+                      <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
+                        H
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          className="wb-hub-input"
+                          style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
+                          value={selectedFurniture.h}
+                          onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, selectedFurniture.w, parseInt(e.target.value, 10) || 1))}
+                        />
+                      </label>
+                    </>
+                  )}
+                  {!selectedFurniture.outline && (
+                    <HubButton
+                      className={editShapeId === selectedFurniture.id ? 'wb-hub-btn--warn' : ''}
+                      onClick={() => {
+                        setPlaceTool(null)
+                        setEditShapeId(id => (id === selectedFurniture.id ? null : selectedFurniture.id))
+                      }}
+                    >
+                      {editShapeId === selectedFurniture.id ? 'Done editing shape' : 'Edit shape cells'}
+                    </HubButton>
+                  )}
+                  {!selectedFurniture.outline && shapeTypesConvertible.has(selectedFurniture.type) && (
                     <HubButton variant="primary" onClick={convertSelected}>
                       Convert to seats
                     </HubButton>
@@ -319,15 +363,20 @@ export default function SeatingChartEditor({
         chart={chart}
         designMode={designMode}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        onSelect={(id) => {
+          setSelectedId(id)
+          if (editShapeId && id !== editShapeId) setEditShapeId(null)
+        }}
         onMoveSeat={handleMoveSeat}
         onMoveFurniture={handleMoveFurniture}
         onToggleSeatAt={handleToggleSeatAt}
+        onToggleFurnitureCell={handleToggleFurnitureCell}
         onSeatClick={handleSeatClick}
         onSeatDrop={handleSeatDrop}
         onDragOverSeat={handleDragOver}
         studentName={studentName}
-        placeTool={designMode ? placeTool : null}
+        placeTool={designMode && !editShapeId ? placeTool : null}
+        editShapeId={designMode ? editShapeId : null}
       />
 
       <p className="wb-hub-hint" style={{ textAlign: 'center' }}>

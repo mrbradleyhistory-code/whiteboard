@@ -1,4 +1,4 @@
-import { getFurniture, listSeats } from './seatingChart'
+import { furnitureCells, getFurniture, listSeats } from './seatingChart'
 
 const SEAT_COLORS = ['#f6e05e', '#90cdf4', '#9ae6b4', '#feb2b2', '#e9d8fd']
 
@@ -17,6 +17,8 @@ const FURNITURE_COLORS = {
   promethean: '#2d3748',
   teacher_desk: '#ed8936',
   table: '#c6f6d5',
+  u_table: '#c6f6d5',
+  polygon: '#e2e8f0',
   rect: '#e2e8f0',
 }
 
@@ -77,21 +79,41 @@ export function buildSeatingStickies(saved, students, viewport) {
   })
 
   for (const item of furniture) {
-    const x = gridX + item.col * (seatW + gap) / zoom
-    const y = gridY + item.row * (seatH + gap) / zoom
-    stickies.push({
-      id: uid(),
-      x,
-      y,
-      text: item.label || item.type,
-      color: FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect,
-      width: Math.round((item.w * seatW + (item.w - 1) * gap) / zoom),
-      height: Math.round((item.h * seatH + (item.h - 1) * gap) / zoom),
-      fontSize: Math.max(12, Math.round(13 / zoom)),
-      bold: true,
-      ...stickyDefaults,
-      textAlign: 'center',
-    })
+    const color = FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect
+    const cells = furnitureCells(item)
+    for (const cell of cells) {
+      const x = gridX + cell.col * (seatW + gap) / zoom
+      const y = gridY + cell.row * (seatH + gap) / zoom
+      stickies.push({
+        id: uid(),
+        x,
+        y,
+        text: item.outline
+          ? ''
+          : (cell.row === item.row && cell.col === item.col ? (item.label || item.type) : ''),
+        color: item.outline ? '#f0fff4' : color,
+        width: Math.round(seatW / zoom),
+        height: Math.round(seatH / zoom),
+        fontSize: Math.max(11, Math.round(12 / zoom)),
+        bold: true,
+        ...stickyDefaults,
+        textAlign: 'center',
+      })
+    }
+    if (item.outline) {
+      stickies.push({
+        id: uid(),
+        x: gridX + item.col * (seatW + gap) / zoom,
+        y: gridY + item.row * (seatH + gap) / zoom,
+        text: `${item.label || item.type} outline`,
+        color: '#ffffff',
+        width: Math.round(seatW / zoom),
+        height: Math.round(Math.max(28, seatH * 0.55) / zoom),
+        fontSize: Math.max(11, Math.round(12 / zoom)),
+        bold: true,
+        ...stickyDefaults,
+      })
+    }
   }
 
   for (const seat of seats) {
@@ -105,7 +127,9 @@ export function buildSeatingStickies(saved, students, viewport) {
       x,
       y,
       text: label,
-      color: studentId ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length] : '#f6f8fa',
+      color: studentId
+        ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length]
+        : (seat.tableId ? '#f0fff4' : '#f6f8fa'),
       width: Math.round(seatW / zoom),
       height: Math.round(seatH / zoom),
       fontSize: Math.max(13, Math.round(15 / zoom)),

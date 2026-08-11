@@ -5,13 +5,17 @@ export const FURNITURE_TYPES = {
   TEACHER_DESK: 'teacher_desk',
   TABLE: 'table',
   RECT: 'rect',
+  U_TABLE: 'u_table',
+  POLYGON: 'polygon',
 }
 
 export const FURNITURE_PRESETS = [
   { type: FURNITURE_TYPES.PROMETHEAN, label: 'Promethean', w: 4, h: 1 },
   { type: FURNITURE_TYPES.TEACHER_DESK, label: 'Teacher desk', w: 2, h: 1 },
   { type: FURNITURE_TYPES.TABLE, label: 'Table', w: 2, h: 2 },
-  { type: FURNITURE_TYPES.RECT, label: 'Shape', w: 2, h: 1 },
+  { type: FURNITURE_TYPES.U_TABLE, label: 'U-table', w: 5, h: 4 },
+  { type: FURNITURE_TYPES.POLYGON, label: 'Custom shape', w: 3, h: 3 },
+  { type: FURNITURE_TYPES.RECT, label: 'Rectangle', w: 2, h: 1 },
 ]
 
 export function seatKey(row, col) {
@@ -37,6 +41,7 @@ function seatDef(row, col, extras = {}) {
     w: Math.max(1, extras.w || 1),
     h: Math.max(1, extras.h || 1),
     label: extras.label || '',
+    tableId: extras.tableId || null,
   }
 }
 
@@ -45,19 +50,111 @@ export function furnitureLabel(type) {
   return preset?.label || 'Furniture'
 }
 
+/** Filled rectangle of cells. */
+export function rectCells(row, col, w, h) {
+  const cells = []
+  for (let r = row; r < row + h; r++) {
+    for (let c = col; c < col + w; c++) {
+      cells.push({ row: r, col: c })
+    }
+  }
+  return cells
+}
+
+/**
+ * U-shape opening toward the front of the room (top of canvas).
+ * Left column + bottom row + right column of the bounding box.
+ */
+export function uShapeCells(row, col, w = 5, h = 4) {
+  const ww = Math.max(3, w)
+  const hh = Math.max(2, h)
+  const cells = []
+  const seen = new Set()
+  const add = (r, c) => {
+    const k = seatKey(r, c)
+    if (seen.has(k)) return
+    seen.add(k)
+    cells.push({ row: r, col: c })
+  }
+  for (let r = row; r < row + hh; r++) {
+    add(r, col)
+    add(r, col + ww - 1)
+  }
+  for (let c = col; c < col + ww; c++) add(row + hh - 1, c)
+  return cells
+}
+
+export function boundsFromCells(cells) {
+  if (!cells?.length) return { row: 0, col: 0, w: 1, h: 1 }
+  let minR = Infinity
+  let minC = Infinity
+  let maxR = -Infinity
+  let maxC = -Infinity
+  for (const cell of cells) {
+    minR = Math.min(minR, cell.row)
+    minC = Math.min(minC, cell.col)
+    maxR = Math.max(maxR, cell.row)
+    maxC = Math.max(maxC, cell.col)
+  }
+  return {
+    row: minR,
+    col: minC,
+    w: maxC - minC + 1,
+    h: maxR - minR + 1,
+  }
+}
+
+export function defaultCellsForType(type, row, col, w, h) {
+  if (type === FURNITURE_TYPES.U_TABLE) return uShapeCells(row, col, w, h)
+  if (type === FURNITURE_TYPES.POLYGON) {
+    // Start as a hollow-ish 3x3 ring so it's obviously editable
+    const cells = rectCells(row, col, w, h)
+    if (w >= 3 && h >= 3) {
+      return cells.filter(c => c.row === row || c.row === row + h - 1 || c.col === col || c.col === col + w - 1)
+    }
+    return cells
+  }
+  return rectCells(row, col, w, h)
+}
+
+function normalizeCellList(rawCells, fallbackRow, fallbackCol, w, h, type) {
+  if (Array.isArray(rawCells) && rawCells.length) {
+    const cells = rawCells
+      .map(c => ({ row: Number(c.row), col: Number(c.col) }))
+      .filter(c => Number.isFinite(c.row) && Number.isFinite(c.col) && c.row >= 0 && c.col >= 0)
+    if (cells.length) return cells
+  }
+  return defaultCellsForType(type, fallbackRow, fallbackCol, w, h)
+}
+
+/** Absolute cells for a furniture item (polygon footprint). */
+export function furnitureCells(item) {
+  if (!item) return []
+  if (Array.isArray(item.cells) && item.cells.length) {
+    return item.cells.map(c => ({ row: c.row, col: c.col }))
+  }
+  return defaultCellsForType(item.type, item.row, item.col, item.w || 1, item.h || 1)
+}
+
 export function normalizeFurnitureItem(raw) {
   if (!raw || typeof raw !== 'object') return null
   const type = Object.values(FURNITURE_TYPES).includes(raw.type) ? raw.type : FURNITURE_TYPES.RECT
   const row = Number(raw.row)
   const col = Number(raw.col)
   if (!Number.isFinite(row) || !Number.isFinite(col)) return null
+  const w = Math.max(1, Math.min(12, Number(raw.w) || 1))
+  const h = Math.max(1, Math.min(12, Number(raw.h) || 1))
+  const cells = normalizeCellList(raw.cells, Math.max(0, row), Math.max(0, col), w, h, type)
+  const bounds = boundsFromCells(cells)
   return {
     id: raw.id || newItemId('furn'),
     type,
-    row: Math.max(0, row),
-    col: Math.max(0, col),
-    w: Math.max(1, Math.min(12, Number(raw.w) || 1)),
-    h: Math.max(1, Math.min(12, Number(raw.h) || 1)),
+    row: bounds.row,
+    col: bounds.col,
+    w: bounds.w,
+    h: bounds.h,
+    cells,
+    outline: !!raw.outline,
     label: typeof raw.label === 'string' ? raw.label : furnitureLabel(type),
   }
 }
@@ -252,10 +349,12 @@ export function resizeCanvas(chart, rows, cols) {
   }
   const furniture = getFurniture(chart)
     .map(f => {
-      const fitted = clampItem({ rows: nextRows, cols: nextCols }, f.row, f.col, f.w, f.h)
-      return { ...f, ...fitted }
+      const cells = furnitureCells(f)
+        .filter(c => c.row < nextRows && c.col < nextCols)
+      if (!cells.length) return null
+      return normalizeFurnitureItem({ ...f, cells })
     })
-    .filter(f => f.row < nextRows && f.col < nextCols)
+    .filter(Boolean)
 
   return {
     ...chart,
@@ -299,7 +398,7 @@ export function moveSeat(chart, key, nextRow, nextCol) {
   if (newKey !== key && defs.some(s => s.key === newKey)) return chart // occupied
   const nextDefs = defs.map(s => (
     s.key === key
-      ? seatDef(fitted.row, fitted.col, { ...s, id: s.id, w: fitted.w, h: fitted.h, label: s.label })
+      ? seatDef(fitted.row, fitted.col, { ...s, id: s.id, w: fitted.w, h: fitted.h, label: s.label, tableId: s.tableId })
       : s
   ))
   const assignments = { ...(chart.assignments || {}) }
@@ -318,15 +417,19 @@ export function moveSeat(chart, key, nextRow, nextCol) {
 }
 
 export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
-  const preset = FURNITURE_PRESETS.find(p => p.type === type) || FURNITURE_PRESETS[3]
+  const preset = FURNITURE_PRESETS.find(p => p.type === type) || FURNITURE_PRESETS.find(p => p.type === FURNITURE_TYPES.RECT)
   const w = size.w || preset.w
   const h = size.h || preset.h
   const fitted = clampItem(chart, row, col, w, h)
+  const cells = size.cells || defaultCellsForType(preset.type, fitted.row, fitted.col, fitted.w, fitted.h)
+  // Keep cells inside canvas
+  const clipped = cells.filter(c => c.row >= 0 && c.col >= 0 && c.row < (chart.rows || 12) && c.col < (chart.cols || 14))
   const item = normalizeFurnitureItem({
     id: newItemId('furn'),
     type: preset.type,
     label: size.label || preset.label,
-    ...fitted,
+    cells: clipped.length ? clipped : defaultCellsForType(preset.type, fitted.row, fitted.col, fitted.w, fitted.h),
+    outline: false,
   })
   return {
     ...chart,
@@ -339,8 +442,33 @@ export function updateFurniture(chart, id, patch) {
   const furniture = getFurniture(chart).map(f => {
     if (f.id !== id) return f
     const next = { ...f, ...patch }
-    const fitted = clampItem(chart, next.row, next.col, next.w, next.h)
-    return normalizeFurnitureItem({ ...next, ...fitted })
+    if (patch.cells) {
+      return normalizeFurnitureItem(next)
+    }
+    if (patch.row != null || patch.col != null || patch.w != null || patch.h != null) {
+      // If only bbox changes without cells, rebuild rect/U from new bbox for non-custom polygons
+      const row = patch.row != null ? patch.row : f.row
+      const col = patch.col != null ? patch.col : f.col
+      const w = patch.w != null ? patch.w : f.w
+      const h = patch.h != null ? patch.h : f.h
+      const fitted = clampItem(chart, row, col, w, h)
+      if (f.type === FURNITURE_TYPES.POLYGON || (Array.isArray(f.cells) && f.type !== FURNITURE_TYPES.U_TABLE && f.type !== FURNITURE_TYPES.TABLE && f.type !== FURNITURE_TYPES.RECT && f.type !== FURNITURE_TYPES.PROMETHEAN && f.type !== FURNITURE_TYPES.TEACHER_DESK)) {
+        // translate existing cells by delta from old origin
+        const dRow = fitted.row - f.row
+        const dCol = fitted.col - f.col
+        const cells = furnitureCells(f).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
+        return normalizeFurnitureItem({ ...next, cells, outline: f.outline })
+      }
+      if (patch.w != null || patch.h != null || f.type === FURNITURE_TYPES.U_TABLE) {
+        const cells = defaultCellsForType(f.type, fitted.row, fitted.col, fitted.w, fitted.h)
+        return normalizeFurnitureItem({ ...next, ...fitted, cells, outline: f.outline })
+      }
+      const dRow = fitted.row - f.row
+      const dCol = fitted.col - f.col
+      const cells = furnitureCells(f).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
+      return normalizeFurnitureItem({ ...next, cells, outline: f.outline })
+    }
+    return normalizeFurnitureItem(next)
   })
   return { ...chart, furniture }
 }
@@ -348,42 +476,97 @@ export function updateFurniture(chart, id, patch) {
 export function moveFurniture(chart, id, nextRow, nextCol) {
   const item = getFurniture(chart).find(f => f.id === id)
   if (!item) return chart
-  return updateFurniture(chart, id, { row: nextRow, col: nextCol })
+  const dRow = nextRow - item.row
+  const dCol = nextCol - item.col
+  if (!dRow && !dCol) return chart
+  const rows = chart.rows || 12
+  const cols = chart.cols || 14
+  let cells = furnitureCells(item).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
+  // Clamp translation so all cells stay on canvas
+  const minR = Math.min(...cells.map(c => c.row))
+  const minC = Math.min(...cells.map(c => c.col))
+  const maxR = Math.max(...cells.map(c => c.row))
+  const maxC = Math.max(...cells.map(c => c.col))
+  let adjR = 0
+  let adjC = 0
+  if (minR < 0) adjR = -minR
+  if (minC < 0) adjC = -minC
+  if (maxR + adjR > rows - 1) adjR = rows - 1 - maxR
+  if (maxC + adjC > cols - 1) adjC = cols - 1 - maxC
+  cells = cells.map(c => ({ row: c.row + adjR, col: c.col + adjC }))
+  return updateFurniture(chart, id, { cells })
 }
 
 export function resizeFurniture(chart, id, w, h) {
-  return updateFurniture(chart, id, { w, h })
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item) return chart
+  const fitted = clampItem(chart, item.row, item.col, w, h)
+  // Regenerating footprint from type keeps U/rect coherent; polygons keep relative paint if possible
+  if (item.type === FURNITURE_TYPES.POLYGON) {
+    // Scale is hard for freeform; just update bbox label and leave cells — user edits with paint
+    return chart
+  }
+  const cells = defaultCellsForType(item.type, fitted.row, fitted.col, fitted.w, fitted.h)
+  return updateFurniture(chart, id, { cells, w: fitted.w, h: fitted.h, row: fitted.row, col: fitted.col })
 }
 
 export function removeFurniture(chart, id) {
-  return {
-    ...chart,
-    furniture: getFurniture(chart).filter(f => f.id !== id),
-  }
+  // Also clear tableId links on seats
+  const seatDefs = getSeatDefs(chart).map(s => (
+    s.tableId === id ? { ...s, tableId: null } : s
+  ))
+  return setSeatDefs(
+    { ...chart, furniture: getFurniture(chart).filter(f => f.id !== id) },
+    seatDefs,
+  )
+}
+
+/** Toggle a canvas cell in a custom polygon / editable shape. */
+export function toggleFurnitureCell(chart, furnitureId, row, col) {
+  const item = getFurniture(chart).find(f => f.id === furnitureId)
+  if (!item || item.outline) return chart
+  const key = seatKey(row, col)
+  const cells = furnitureCells(item)
+  const exists = cells.some(c => seatKey(c.row, c.col) === key)
+  const nextCells = exists
+    ? cells.filter(c => seatKey(c.row, c.col) !== key)
+    : [...cells, { row, col }]
+  if (!nextCells.length) return chart // keep at least one cell
+  return updateFurniture(chart, furnitureId, {
+    type: item.type === FURNITURE_TYPES.RECT || item.type === FURNITURE_TYPES.TABLE || item.type === FURNITURE_TYPES.U_TABLE
+      ? FURNITURE_TYPES.POLYGON
+      : item.type,
+    cells: nextCells,
+    label: item.type === FURNITURE_TYPES.U_TABLE || item.label === 'U-table' ? (item.label || 'U-table') : item.label,
+  })
 }
 
 /**
- * Convert a furniture shape (table/rect/etc.) into individual seats covering its footprint.
- * Existing seats in those cells are kept; the furniture item is removed.
+ * Convert a furniture shape into individual seats on its cells.
+ * Keeps the furniture as an outline so the table silhouette remains visible.
  */
 export function convertFurnitureToSeats(chart, furnitureId) {
   const item = getFurniture(chart).find(f => f.id === furnitureId)
   if (!item) return chart
   const defs = getSeatDefs(chart)
   const byKey = new Map(defs.map(s => [s.key, s]))
-  for (let r = item.row; r < item.row + item.h; r++) {
-    for (let c = item.col; c < item.col + item.w; c++) {
-      const key = seatKey(r, c)
-      if (!byKey.has(key)) {
-        const seat = seatDef(r, c, { label: item.type === FURNITURE_TYPES.TABLE ? 'Table seat' : '' })
-        byKey.set(key, seat)
-      }
+  for (const cell of furnitureCells(item)) {
+    const key = seatKey(cell.row, cell.col)
+    if (!byKey.has(key)) {
+      byKey.set(key, seatDef(cell.row, cell.col, {
+        label: item.label || furnitureLabel(item.type),
+        tableId: item.id,
+      }))
+    } else {
+      byKey.set(key, { ...byKey.get(key), tableId: item.id })
     }
   }
-  return setSeatDefs(
-    { ...chart, furniture: getFurniture(chart).filter(f => f.id !== furnitureId) },
-    [...byKey.values()],
-  )
+  const furniture = getFurniture(chart).map(f => (
+    f.id === furnitureId
+      ? normalizeFurnitureItem({ ...f, outline: true })
+      : f
+  ))
+  return setSeatDefs({ ...chart, furniture }, [...byKey.values()])
 }
 
 export function switchLayoutType(chart, layout) {
