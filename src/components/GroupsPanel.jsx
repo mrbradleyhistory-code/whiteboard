@@ -539,6 +539,7 @@ export default function GroupsPanel({ userId }) {
                   name,
                   c.seatingChart,
                   opts.replaceId || null,
+                  { forceNew: !!opts.forceNew },
                 )
                 updateClass(c.id, {
                   savedSeatingCharts: list,

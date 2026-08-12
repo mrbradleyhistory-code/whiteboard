@@ -992,7 +992,7 @@ export function wipeSeatingChart(chart) {
 }
 
 /** Insert or replace a named snapshot in the saved list. */
-export function upsertSavedSeatingChart(list, name, chart, replaceId = null) {
+export function upsertSavedSeatingChart(list, name, chart, replaceId = null, { forceNew = false } = {}) {
   const now = new Date().toISOString()
   const charts = Array.isArray(list) ? [...list] : []
   if (replaceId) {
@@ -1009,17 +1009,19 @@ export function upsertSavedSeatingChart(list, name, chart, replaceId = null) {
       return { list: [updated, ...charts], entry: updated }
     }
   }
-  const sameName = charts.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase())
-  if (sameName >= 0 && !replaceId) {
-    const prev = charts[sameName]
-    const updated = {
-      ...prev,
-      name: name.trim(),
-      updatedAt: now,
-      chart: cloneChart(chart),
+  if (!forceNew) {
+    const sameName = charts.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase())
+    if (sameName >= 0) {
+      const prev = charts[sameName]
+      const updated = {
+        ...prev,
+        name: name.trim(),
+        updatedAt: now,
+        chart: cloneChart(chart),
+      }
+      charts.splice(sameName, 1)
+      return { list: [updated, ...charts], entry: updated }
     }
-    charts.splice(sameName, 1)
-    return { list: [updated, ...charts], entry: updated }
   }
   const entry = createSavedSeatingChart(name, chart)
   return { list: [entry, ...charts], entry }

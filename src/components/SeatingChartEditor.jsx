@@ -117,7 +117,7 @@ export default function SeatingChartEditor({
   const handleSave = (asNew = false) => {
     const name = saveName.trim()
     if (!name || !onSave) return
-    onSave(name, { replaceId: asNew ? null : activeChartId })
+    onSave(name, { replaceId: asNew ? null : activeChartId, forceNew: asNew })
   }
 
   const handleNewChart = () => {
