@@ -810,6 +810,54 @@ html, body, #root {
   color: var(--wb-text-muted);
 }
 
+.wb-seating-library {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid var(--wb-border);
+  border-radius: 12px;
+  background: var(--wb-surface-muted, #f6f8fa);
+}
+
+.wb-seating-library__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.wb-seating-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wb-seating-library__list {
+  margin-top: 4px;
+}
+
+.wb-seating-library__item--active {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--wb-accent, #457b9d);
+}
+
+.wb-seating-library__badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+  color: #fff;
+  background: var(--wb-accent, #457b9d);
+}
+
 .wb-hub-deck-actions {
   display: flex;
   gap: 8px;

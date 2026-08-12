@@ -56,11 +56,13 @@ export function normalizeClass(c) {
         }))
       : [],
     seatingChart: normalizeSeatingChart(c.seatingChart, students.map(s => s.id)),
+    activeSeatingChartId: typeof c.activeSeatingChartId === 'string' ? c.activeSeatingChartId : null,
     savedSeatingCharts: Array.isArray(c.savedSeatingCharts)
       ? c.savedSeatingCharts.map(entry => ({
           id: entry.id || newSeatingChartId(),
           name: String(entry.name || 'Seating chart'),
           createdAt: entry.createdAt || new Date().toISOString(),
+          updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
           chart: normalizeSeatingChart(entry.chart, students.map(s => s.id)),
         }))
       : [],
@@ -75,6 +77,7 @@ export function createClass(name = 'New class') {
     constraints: { neverApart: [], alwaysTogether: [], neverTogether: [] },
     savedArrangements: [],
     seatingChart: createDefaultSeatingChart(),
+    activeSeatingChartId: null,
     savedSeatingCharts: [],
   }
 }

@@ -22,6 +22,7 @@ import {
   resizeCanvas,
   resizeFurniture,
   seatKey,
+  SEATING_CHART_NAME_PRESETS,
   SEATING_COLOR_PALETTE,
   setFurnitureColor,
   setSeatColor,
@@ -29,9 +30,24 @@ import {
   switchLayoutType,
   toggleFurnitureCell,
   unassignedStudents,
+  wipeSeatingChart,
 } from '../seatingChart'
 import { HubButton } from './hubUi'
 import SeatingRoomCanvas from './SeatingRoomCanvas'
+
+function formatChartWhen(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
 
 export default function SeatingChartEditor({
   students,
@@ -39,10 +55,13 @@ export default function SeatingChartEditor({
   chart,
   onChange,
   savedCharts = [],
+  activeChartId = null,
   onSave,
   onLoad,
   onDelete,
-  savePlaceholder = 'e.g. Period 3 — Week 1',
+  onNewChart,
+  onWipe,
+  savePlaceholder = 'e.g. Solo work / Group work / Testing',
 }) {
   const [layoutRows, setLayoutRows] = useState(chart.rows)
   const [layoutCols, setLayoutCols] = useState(chart.cols)
@@ -58,10 +77,16 @@ export default function SeatingChartEditor({
   const chartRef = useRef(chart)
   chartRef.current = chart
 
+  const activeEntry = savedCharts.find(e => e.id === activeChartId) || null
+
   useEffect(() => {
     setLayoutRows(chart.rows)
     setLayoutCols(chart.cols)
   }, [chart.rows, chart.cols])
+
+  useEffect(() => {
+    if (activeEntry?.name) setSaveName(activeEntry.name)
+  }, [activeEntry?.id, activeEntry?.name])
 
   const isCustom = chart.layout === 'custom'
   const seats = listSeats(chart)
@@ -87,6 +112,37 @@ export default function SeatingChartEditor({
     onChange(switchLayoutType(chart, layout))
     setFillError('')
     setSelectedId(null)
+  }
+
+  const handleSave = (asNew = false) => {
+    const name = saveName.trim()
+    if (!name || !onSave) return
+    onSave(name, { replaceId: asNew ? null : activeChartId })
+  }
+
+  const handleNewChart = () => {
+    if (!onNewChart) return
+    const dirty = seatCount > 0 || furniture.length > 0 || manualCount > 0
+    if (dirty && !confirm('Start a new blank seating chart? Unsaved changes to the current room will be lost. Save first if you need them.')) {
+      return
+    }
+    onNewChart()
+    setSaveName('')
+    setFillError('')
+    setSelectedId(null)
+    setEditShapeId(null)
+    setPickStudentId(null)
+    setDesignMode(false)
+  }
+
+  const handleWipe = () => {
+    if (!confirm('Wipe this seating chart? This clears all desks, furniture, and assignments. Saved charts are not deleted.')) return
+    if (onWipe) onWipe()
+    else onChange(wipeSeatingChart(chart))
+    setFillError('')
+    setSelectedId(null)
+    setEditShapeId(null)
+    setPickStudentId(null)
   }
 
   const handleDragStart = (e, studentId) => {
@@ -208,6 +264,114 @@ export default function SeatingChartEditor({
 
   return (
     <div className="wb-seating">
+      <div className="wb-seating-library">
+        <div className="wb-seating-library__head">
+          <div>
+            <h4 className="wb-hub-subheading" style={{ marginBottom: 4 }}>Seating charts for this class</h4>
+            <p className="wb-hub-hint" style={{ margin: 0 }}>
+              Save multiple layouts (solo, group work, testing) and switch between them.
+              {activeEntry ? (
+                <> Currently editing <strong>{activeEntry.name}</strong>.</>
+              ) : (
+                <> Working chart is unsaved until you name and save it.</>
+              )}
+            </p>
+          </div>
+          <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
+            {onNewChart && (
+              <HubButton onClick={handleNewChart}>New chart</HubButton>
+            )}
+            <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
+          </div>
+        </div>
+
+        {onSave && (
+          <div className="wb-hub-save-banner" style={{ marginBottom: 12 }}>
+            <input
+              className="wb-hub-input"
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              placeholder={savePlaceholder}
+              aria-label="Saved chart name"
+            />
+            {activeChartId ? (
+              <>
+                <HubButton variant="primary" onClick={() => handleSave(false)} disabled={!saveName.trim()}>
+                  Update “{activeEntry?.name || 'chart'}”
+                </HubButton>
+                <HubButton onClick={() => handleSave(true)} disabled={!saveName.trim()}>
+                  Save as new
+                </HubButton>
+              </>
+            ) : (
+              <HubButton variant="primary" onClick={() => handleSave(true)} disabled={!saveName.trim()}>
+                Save chart
+              </HubButton>
+            )}
+          </div>
+        )}
+
+        {onSave && (
+          <div className="wb-seating-presets" role="group" aria-label="Suggested chart names">
+            <span className="wb-hub-hint" style={{ margin: 0 }}>Quick name:</span>
+            {SEATING_CHART_NAME_PRESETS.map(label => (
+              <HubButton
+                key={label}
+                onClick={() => setSaveName(label)}
+                className={saveName === label ? 'wb-hub-btn--warn' : ''}
+              >
+                {label}
+              </HubButton>
+            ))}
+          </div>
+        )}
+
+        {savedCharts.length > 0 ? (
+          <ul className="wb-hub-saved-list wb-seating-library__list">
+            {savedCharts.map(entry => {
+              const isActive = entry.id === activeChartId
+              return (
+                <li key={entry.id} className={isActive ? 'wb-seating-library__item--active' : ''}>
+                  <span className="wb-hub-saved-list__name">
+                    {entry.name}
+                    {isActive ? <span className="wb-seating-library__badge">Active</span> : null}
+                  </span>
+                  <span className="wb-hub-saved-list__meta">
+                    {assignedCount(entry.chart)} seated · {listSeats(entry.chart).length} desks
+                    {(getFurniture(entry.chart).length) ? ` · ${getFurniture(entry.chart).length} furniture` : ''}
+                    {entry.chart.layout === 'custom' ? ' · custom' : ''}
+                    {entry.updatedAt || entry.createdAt
+                      ? ` · ${formatChartWhen(entry.updatedAt || entry.createdAt)}`
+                      : ''}
+                  </span>
+                  {onLoad && (
+                    <HubButton
+                      variant={isActive ? 'primary' : undefined}
+                      onClick={() => {
+                        onLoad(cloneChart(entry.chart), entry.id)
+                        setSaveName(entry.name)
+                        setFillError('')
+                        setSelectedId(null)
+                        setEditShapeId(null)
+                        setPickStudentId(null)
+                        setDesignMode(entry.chart.layout === 'custom')
+                      }}
+                    >
+                      {isActive ? 'Loaded' : 'Load'}
+                    </HubButton>
+                  )}
+                  {onDelete && (
+                    <HubButton variant="danger" onClick={() => onDelete(entry.id)}>Delete</HubButton>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="wb-hub-hint">No saved charts yet — design a room, pick a quick name, then Save chart.</p>
+        )}
+      </div>
+
       <p className="wb-hub-hint">
         Design your room on a snappable grid: drag desks and furniture, paint custom polygons (U-tables),
         then convert shapes to seats — the table outline stays so the seating chart stays readable.
@@ -456,6 +620,7 @@ export default function SeatingChartEditor({
             <HubButton onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }}>
               Clear assignments
             </HubButton>
+            <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
             <label className="wb-hub-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
               Seed
               <input
@@ -469,55 +634,10 @@ export default function SeatingChartEditor({
           </div>
           <p className="wb-hub-hint">
             Place students manually first, then use Fill remaining to seat everyone else using your never-together and keep-together rules.
+            Clear assignments keeps the room layout; Wipe room deletes desks and furniture too.
           </p>
           {fillError && <p className="wb-hub-alert">{fillError}</p>}
         </>
-      )}
-
-      {onSave && (
-        <div className="wb-hub-save-banner">
-          <input
-            className="wb-hub-input"
-            value={saveName}
-            onChange={e => setSaveName(e.target.value)}
-            placeholder={savePlaceholder}
-            aria-label="Saved chart name"
-          />
-          <HubButton
-            variant="primary"
-            onClick={() => {
-              if (!saveName.trim()) return
-              onSave(saveName.trim())
-              setSaveName('')
-            }}
-          >
-            Save seating chart
-          </HubButton>
-        </div>
-      )}
-
-      {savedCharts.length > 0 && (
-        <div style={{ paddingTop: 4 }}>
-          <h4 className="wb-hub-subheading">Saved seating charts</h4>
-          <ul className="wb-hub-saved-list">
-            {savedCharts.map(entry => (
-              <li key={entry.id}>
-                <span className="wb-hub-saved-list__name">{entry.name}</span>
-                <span className="wb-hub-saved-list__meta">
-                  {assignedCount(entry.chart)} seated · {listSeats(entry.chart).length} desks
-                  {(getFurniture(entry.chart).length) ? ` · ${getFurniture(entry.chart).length} furniture` : ''}
-                  {entry.chart.layout === 'custom' ? ' · custom' : ''}
-                </span>
-                {onLoad && (
-                  <HubButton onClick={() => onLoad(cloneChart(entry.chart))}>Load</HubButton>
-                )}
-                {onDelete && (
-                  <HubButton variant="danger" onClick={() => onDelete(entry.id)}>Delete</HubButton>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
     </div>
   )

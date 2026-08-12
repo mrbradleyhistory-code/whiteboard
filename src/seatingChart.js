@@ -960,12 +960,69 @@ export function cloneChart(chart) {
 }
 
 export function createSavedSeatingChart(name, chart) {
+  const now = new Date().toISOString()
   return {
     id: newSeatingChartId(),
     name: name.trim(),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     chart: cloneChart(chart),
   }
+}
+
+/** Suggested names for common classroom chart variants. */
+export const SEATING_CHART_NAME_PRESETS = [
+  'Solo work',
+  'Group work',
+  'Testing',
+  'Partner work',
+]
+
+/**
+ * Full room wipe: empty desks/furniture/assignments.
+ * Keeps canvas size; custom rooms stay custom, grids stay grids.
+ */
+export function wipeSeatingChart(chart) {
+  const rows = Math.max(1, chart?.rows || 5)
+  const cols = Math.max(1, chart?.cols || 6)
+  if (chart?.layout === 'custom') {
+    return createCustomSeatingChart(rows, cols)
+  }
+  return createDefaultSeatingChart(rows, cols, 'grid')
+}
+
+/** Insert or replace a named snapshot in the saved list. */
+export function upsertSavedSeatingChart(list, name, chart, replaceId = null) {
+  const now = new Date().toISOString()
+  const charts = Array.isArray(list) ? [...list] : []
+  if (replaceId) {
+    const idx = charts.findIndex(e => e.id === replaceId)
+    if (idx >= 0) {
+      const prev = charts[idx]
+      const updated = {
+        ...prev,
+        name: (name || prev.name).trim(),
+        updatedAt: now,
+        chart: cloneChart(chart),
+      }
+      charts.splice(idx, 1)
+      return { list: [updated, ...charts], entry: updated }
+    }
+  }
+  const sameName = charts.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase())
+  if (sameName >= 0 && !replaceId) {
+    const prev = charts[sameName]
+    const updated = {
+      ...prev,
+      name: name.trim(),
+      updatedAt: now,
+      chart: cloneChart(chart),
+    }
+    charts.splice(sameName, 1)
+    return { list: [updated, ...charts], entry: updated }
+  }
+  const entry = createSavedSeatingChart(name, chart)
+  return { list: [entry, ...charts], entry }
 }
 
 export function purgeStudentFromClassSeating(classObj, studentId) {

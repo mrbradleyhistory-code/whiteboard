@@ -13,7 +13,7 @@ import { createRng, generateSimpleGroups, generateJigsawGroups } from '../groupi
 import { cloneGroups, createSavedArrangement } from '../groupArrangements'
 import GroupEditor from './GroupEditor'
 import SeatingChartEditor from './SeatingChartEditor'
-import { createSavedSeatingChart, purgeStudentFromClassSeating } from '../seatingChart'
+import { purgeStudentFromClassSeating, upsertSavedSeatingChart, wipeSeatingChart, createDefaultSeatingChart } from '../seatingChart'
 import {
   HubButton,
   HubChip,
@@ -531,20 +531,40 @@ export default function GroupsPanel({ userId }) {
               chart={c.seatingChart}
               onChange={nextChart => updateClass(c.id, { seatingChart: nextChart })}
               savedCharts={c.savedSeatingCharts || []}
-              savePlaceholder={`e.g. ${c.name || 'Class'} — Week 1`}
-              onSave={name => {
-                const entry = createSavedSeatingChart(name, c.seatingChart)
+              activeChartId={c.activeSeatingChartId || null}
+              savePlaceholder={`e.g. Solo work / Group work / Testing`}
+              onSave={(name, opts = {}) => {
+                const { list, entry } = upsertSavedSeatingChart(
+                  c.savedSeatingCharts,
+                  name,
+                  c.seatingChart,
+                  opts.replaceId || null,
+                )
                 updateClass(c.id, {
-                  savedSeatingCharts: [entry, ...(c.savedSeatingCharts || [])],
+                  savedSeatingCharts: list,
+                  activeSeatingChartId: entry.id,
                 })
               }}
-              onLoad={nextChart => updateClass(c.id, { seatingChart: nextChart })}
+              onLoad={(nextChart, entryId) => updateClass(c.id, {
+                seatingChart: nextChart,
+                activeSeatingChartId: entryId || null,
+              })}
               onDelete={entryId => {
                 if (!confirm('Delete this saved seating chart?')) return
+                const nextSaved = (c.savedSeatingCharts || []).filter(s => s.id !== entryId)
                 updateClass(c.id, {
-                  savedSeatingCharts: (c.savedSeatingCharts || []).filter(s => s.id !== entryId),
+                  savedSeatingCharts: nextSaved,
+                  activeSeatingChartId: c.activeSeatingChartId === entryId ? null : c.activeSeatingChartId,
                 })
               }}
+              onNewChart={() => updateClass(c.id, {
+                seatingChart: createDefaultSeatingChart(),
+                activeSeatingChartId: null,
+              })}
+              onWipe={() => updateClass(c.id, {
+                seatingChart: wipeSeatingChart(c.seatingChart),
+                // Keep activeSeatingChartId so Update can overwrite the saved snapshot with the wiped room if desired
+              })}
             />
           </CollapsibleSection>
         </div>
