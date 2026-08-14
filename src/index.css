@@ -3865,18 +3865,6 @@ input[type='range'].wb-range::-moz-range-thumb {
   cursor: crosshair;
 }
 
-.wb-room__canvas--design .wb-room__poly {
-  z-index: 3;
-}
-
-.wb-room__canvas--design .wb-room__poly--selected {
-  z-index: 4;
-}
-
-.wb-room__canvas--design .wb-room__poly--outline {
-  z-index: 2;
-}
-
 .wb-room__canvas--paint {
   cursor: cell;
 }
@@ -3935,27 +3923,39 @@ input[type='range'].wb-range::-moz-range-thumb {
   border: 2px solid rgba(15, 23, 42, 0.25);
 }
 
+.wb-room__furniture-cell {
+  z-index: 3;
+}
+
+.wb-room__canvas--design .wb-room__furniture-cell.wb-room__poly--selected {
+  z-index: 4;
+}
+
+.wb-room__canvas--design .wb-room__furniture-cell.wb-room__poly--outline {
+  z-index: 2;
+}
+
+.wb-room__poly--tinted.wb-room__poly-cell,
 .wb-room__poly--tinted .wb-room__poly-cell {
   background: var(--room-fill);
   border-color: var(--room-border);
   border-style: solid;
 }
 
-.wb-room__poly--outline {
-  z-index: 0;
-}
-
+.wb-room__poly--outline.wb-room__poly-cell,
 .wb-room__poly--outline .wb-room__poly-cell {
   background: transparent !important;
   border-width: 3px;
-  pointer-events: none;
 }
 
+.wb-room__poly--tinted.wb-room__poly--outline.wb-room__poly-cell,
 .wb-room__poly--tinted.wb-room__poly--outline .wb-room__poly-cell {
   background: var(--room-fill) !important;
   border-color: var(--room-border);
+  pointer-events: none;
 }
 
+.wb-room__poly--selected.wb-room__poly-cell,
 .wb-room__poly--selected .wb-room__poly-cell {
   outline: 2px solid var(--wb-accent, #457b9d);
   outline-offset: 1px;

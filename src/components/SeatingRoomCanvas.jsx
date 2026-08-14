@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, Fragment } from 'react'
 import {
   FURNITURE_TYPES,
   furnitureCells,
@@ -153,14 +153,14 @@ export default function SeatingRoomCanvas({
     if (!designMode) return
     if (e.shiftKey) return
     if (e.target.closest('.wb-room__seat') && !editShapeId) return
-    if (e.target.closest('.wb-room__poly') && !editShapeId) return
+    if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
     const { row, col } = clientToCell(e.clientX, e.clientY)
     if (editShapeId) {
       onToggleFurnitureCell?.(editShapeId, row, col)
       return
     }
     if (placeTool === 'seat') onToggleSeatAt?.(row, col)
-    else if (!e.target.closest('.wb-room__poly, .wb-room__seat')) onSelect?.(null)
+    else if (!e.target.closest('.wb-room__furniture-cell, .wb-room__seat')) onSelect?.(null)
   }
 
   const posStyle = (row, col, w = 1, h = 1, preview) => {
@@ -179,12 +179,82 @@ export default function SeatingRoomCanvas({
     return { dRow: dragPreview.row - item.row, dCol: dragPreview.col - item.col }
   }
 
-  const polyWrapStyle = (item, dRow, dCol) => ({
-    left: (item.col + dCol) * CELL,
-    top: (item.row + dRow) * CELL,
-    width: Math.max(CELL, item.w * CELL),
-    height: Math.max(CELL, item.h * CELL),
-  })
+  const renderFurnitureItem = (item) => {
+    const cells = furnitureCells(item)
+    const { dRow, dCol } = previewDelta(item)
+    const selected = selectedId === item.id
+    const editing = editShapeId === item.id
+    const canEdit = designMode && !item.outline && !editShapeId
+    const fClass = furnitureClass(item.type, item.outline)
+    const colorStyle = seatingColorStyle(item.color, { outline: !!item.outline })
+    const cellClass = [
+      'wb-room__poly-cell',
+      'wb-room__furniture-cell',
+      fClass,
+      'wb-room__poly--tinted',
+      selected ? 'wb-room__poly--selected' : '',
+      item.outline ? 'wb-room__poly--outline' : '',
+      editing ? 'wb-room__poly--editing' : '',
+    ].filter(Boolean).join(' ')
+
+    const onFurniturePointerDown = canEdit ? (e) => {
+      if (handleShiftCopy(e, () => onDuplicateFurniture?.(item.id))) return
+      startDrag(e, {
+        kind: 'furniture',
+        id: item.id,
+        row: item.row,
+        col: item.col,
+      })
+    } : undefined
+
+    return (
+      <Fragment key={item.id}>
+        {cells.map(cell => (
+          <div
+            key={`${item.id}-${cell.row}-${cell.col}`}
+            className={cellClass}
+            data-color={item.color || undefined}
+            data-furniture-id={item.id}
+            style={{
+              ...colorStyle,
+              left: (cell.col + dCol) * CELL + 2,
+              top: (cell.row + dRow) * CELL + 2,
+              width: CELL - 4,
+              height: CELL - 4,
+            }}
+            onPointerDown={onFurniturePointerDown}
+            onContextMenu={canEdit ? (e) => {
+              if (e.shiftKey) handleShiftDelete(e, () => onDeleteFurniture?.(item.id))
+            } : undefined}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (designMode && !editShapeId && !e.shiftKey) onSelect?.(item.id)
+            }}
+            onMouseEnter={(e) => {
+              if (!designMode) return
+              setHoverTip({
+                x: e.clientX + 12,
+                y: e.clientY + 12,
+                text: furnitureTooltip(item),
+              })
+            }}
+            onMouseLeave={() => setHoverTip(null)}
+            title={designMode ? furnitureTooltip(item) : undefined}
+          />
+        ))}
+        <div
+          className="wb-room__poly-label"
+          style={{
+            left: (item.col + dCol) * CELL + 4,
+            top: (item.row + dRow) * CELL + 4,
+            zIndex: selected ? 5 : 4,
+          }}
+        >
+          {item.outline ? `${item.label || furnitureLabel(item.type)} (outline)` : (item.label || furnitureLabel(item.type))}
+        </div>
+      </Fragment>
+    )
+  }
 
   return (
     <div className="wb-room">
@@ -209,74 +279,7 @@ export default function SeatingRoomCanvas({
           }}
           role="presentation"
         >
-          {furniture.map(item => {
-            const cells = furnitureCells(item)
-            const { dRow, dCol } = previewDelta(item)
-            const selected = selectedId === item.id
-            const editing = editShapeId === item.id
-            const canEdit = designMode && !item.outline && !editShapeId
-            return (
-              <div
-                key={item.id}
-                className={`wb-room__poly ${furnitureClass(item.type, item.outline)}${selected ? ' wb-room__poly--selected' : ''}${item.outline ? ' wb-room__poly--outline' : ''}${editing ? ' wb-room__poly--editing' : ''} wb-room__poly--tinted`}
-                data-color={item.color || undefined}
-                style={{
-                  ...seatingColorStyle(item.color, { outline: !!item.outline }),
-                  ...polyWrapStyle(item, dRow, dCol),
-                }}
-                onPointerDown={canEdit ? (e) => {
-                  if (handleShiftCopy(e, () => onDuplicateFurniture?.(item.id))) return
-                  startDrag(e, {
-                    kind: 'furniture',
-                    id: item.id,
-                    row: item.row,
-                    col: item.col,
-                  })
-                } : undefined}
-                onContextMenu={canEdit ? (e) => {
-                  if (e.shiftKey) {
-                    handleShiftDelete(e, () => onDeleteFurniture?.(item.id))
-                  }
-                } : undefined}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (designMode && !editShapeId && !e.shiftKey) onSelect?.(item.id)
-                }}
-                onMouseEnter={(e) => {
-                  if (!designMode) return
-                  setHoverTip({
-                    x: e.clientX + 12,
-                    y: e.clientY + 12,
-                    text: furnitureTooltip(item),
-                  })
-                }}
-                onMouseLeave={() => setHoverTip(null)}
-                title={designMode ? furnitureTooltip(item) : undefined}
-              >
-                {cells.map(cell => (
-                  <div
-                    key={`${item.id}-${cell.row}-${cell.col}`}
-                    className="wb-room__poly-cell"
-                    style={{
-                      left: (cell.col - item.col) * CELL + 2,
-                      top: (cell.row - item.row) * CELL + 2,
-                      width: CELL - 4,
-                      height: CELL - 4,
-                    }}
-                  />
-                ))}
-                <div
-                  className="wb-room__poly-label"
-                  style={{
-                    left: 4,
-                    top: 4,
-                  }}
-                >
-                  {item.outline ? `${item.label || furnitureLabel(item.type)} (outline)` : (item.label || furnitureLabel(item.type))}
-                </div>
-              </div>
-            )
-          })}
+          {furniture.map(renderFurnitureItem)}
 
           {seats.map(seat => {
             const studentId = studentAtSeat(chart.assignments, seat.key)
