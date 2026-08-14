@@ -11,6 +11,8 @@ import {
 
 const CELL = 56
 
+const DESIGN_SHORTCUTS = 'Drag to move · Shift+click duplicate · Shift+right-click delete · Delete key removes selection'
+
 function furnitureClass(type, outline) {
   const base = (() => {
     switch (type) {
@@ -25,6 +27,19 @@ function furnitureClass(type, outline) {
   return outline ? `${base} wb-room__item--outline` : base
 }
 
+function furnitureTooltip(item) {
+  const name = item.label || furnitureLabel(item.type)
+  const cells = furnitureCells(item).length
+  if (item.outline) return `${name} outline · ${cells} cells`
+  return `${name} · ${cells} cells · Shift+click to copy`
+}
+
+function seatTooltip(seat, designMode, atTable) {
+  if (!designMode) return undefined
+  const kind = atTable ? 'Table seat' : 'Desk'
+  return `${kind} (${seat.row}, ${seat.col}) · Shift+click copy · Shift+right-click delete`
+}
+
 /**
  * Snappable room canvas for seats + furniture (including polygon cell shapes).
  */
@@ -37,6 +52,10 @@ export default function SeatingRoomCanvas({
   onMoveFurniture,
   onToggleSeatAt,
   onToggleFurnitureCell,
+  onDuplicateSeat,
+  onDuplicateFurniture,
+  onDeleteSeat,
+  onDeleteFurniture,
   onSeatClick,
   onSeatDrop,
   onDragOverSeat,
@@ -49,6 +68,7 @@ export default function SeatingRoomCanvas({
   const moveRef = useRef(null)
   const upRef = useRef(null)
   const [dragPreview, setDragPreview] = useState(null)
+  const [hoverTip, setHoverTip] = useState(null)
 
   const seats = listSeats(chart)
   const furniture = getFurniture(chart)
@@ -82,8 +102,11 @@ export default function SeatingRoomCanvas({
       const cell = clientToCell(e.clientX, e.clientY)
       const nextRow = Math.max(0, cell.row - drag.grabRow)
       const nextCol = Math.max(0, cell.col - drag.grabCol)
-      if (drag.kind === 'seat') onMoveSeat?.(drag.key, nextRow, nextCol)
-      else onMoveFurniture?.(drag.id, nextRow, nextCol)
+      if (drag.kind === 'seat') {
+        onMoveSeat?.(drag.key, nextRow, nextCol)
+      } else {
+        onMoveFurniture?.(drag.id, nextRow, nextCol)
+      }
       dragRef.current = null
       setDragPreview(null)
       window.removeEventListener('pointermove', onWinMove)
@@ -95,7 +118,7 @@ export default function SeatingRoomCanvas({
   const onWinUp = (e) => upRef.current?.(e)
 
   const startDrag = (e, payload) => {
-    if (!designMode || editShapeId) return
+    if (!designMode || editShapeId || e.shiftKey) return
     e.preventDefault()
     e.stopPropagation()
     const cell = clientToCell(e.clientX, e.clientY)
@@ -110,8 +133,25 @@ export default function SeatingRoomCanvas({
     window.addEventListener('pointerup', onWinUp)
   }
 
+  const handleShiftCopy = (e, action) => {
+    if (!designMode || editShapeId || !e.shiftKey) return false
+    e.preventDefault()
+    e.stopPropagation()
+    action()
+    return true
+  }
+
+  const handleShiftDelete = (e, action) => {
+    if (!designMode || editShapeId) return false
+    e.preventDefault()
+    e.stopPropagation()
+    action()
+    return true
+  }
+
   const handleCanvasPointer = (e) => {
     if (!designMode) return
+    if (e.shiftKey) return
     if (e.target.closest('.wb-room__seat') && !editShapeId) return
     if (e.target.closest('.wb-room__poly') && !editShapeId) return
     const { row, col } = clientToCell(e.clientX, e.clientY)
@@ -139,14 +179,34 @@ export default function SeatingRoomCanvas({
     return { dRow: dragPreview.row - item.row, dCol: dragPreview.col - item.col }
   }
 
+  const polyWrapStyle = (item, dRow, dCol) => ({
+    left: (item.col + dCol) * CELL,
+    top: (item.row + dRow) * CELL,
+    width: Math.max(CELL, item.w * CELL),
+    height: Math.max(CELL, item.h * CELL),
+  })
+
   return (
     <div className="wb-room">
       <div className="wb-room__front">↑ Front of room</div>
+      {designMode && !editShapeId && (
+        <p className="wb-room__shortcuts" title={DESIGN_SHORTCUTS}>
+          {DESIGN_SHORTCUTS}
+        </p>
+      )}
+      {hoverTip && designMode && (
+        <div className="wb-room__tooltip" style={{ left: hoverTip.x, top: hoverTip.y }} role="tooltip">
+          {hoverTip.text}
+        </div>
+      )}
       <div className="wb-room__scroll" ref={wrapRef}>
         <div
           className={`wb-room__canvas${designMode ? ' wb-room__canvas--design' : ''}${editShapeId ? ' wb-room__canvas--paint' : ''}`}
           style={{ width, height, backgroundSize: `${CELL}px ${CELL}px` }}
           onPointerDown={handleCanvasPointer}
+          onContextMenu={(e) => {
+            if (designMode) e.preventDefault()
+          }}
           role="presentation"
         >
           {furniture.map(item => {
@@ -154,30 +214,52 @@ export default function SeatingRoomCanvas({
             const { dRow, dCol } = previewDelta(item)
             const selected = selectedId === item.id
             const editing = editShapeId === item.id
+            const canEdit = designMode && !item.outline && !editShapeId
             return (
               <div
                 key={item.id}
                 className={`wb-room__poly ${furnitureClass(item.type, item.outline)}${selected ? ' wb-room__poly--selected' : ''}${item.outline ? ' wb-room__poly--outline' : ''}${editing ? ' wb-room__poly--editing' : ''} wb-room__poly--tinted`}
                 data-color={item.color || undefined}
-                style={seatingColorStyle(item.color, { outline: !!item.outline })}
-                onPointerDown={designMode && !item.outline && !editShapeId ? (e) => startDrag(e, {
-                  kind: 'furniture',
-                  id: item.id,
-                  row: item.row,
-                  col: item.col,
-                }) : undefined}
+                style={{
+                  ...seatingColorStyle(item.color, { outline: !!item.outline }),
+                  ...polyWrapStyle(item, dRow, dCol),
+                }}
+                onPointerDown={canEdit ? (e) => {
+                  if (handleShiftCopy(e, () => onDuplicateFurniture?.(item.id))) return
+                  startDrag(e, {
+                    kind: 'furniture',
+                    id: item.id,
+                    row: item.row,
+                    col: item.col,
+                  })
+                } : undefined}
+                onContextMenu={canEdit ? (e) => {
+                  if (e.shiftKey) {
+                    handleShiftDelete(e, () => onDeleteFurniture?.(item.id))
+                  }
+                } : undefined}
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (designMode && !editShapeId) onSelect?.(item.id)
+                  if (designMode && !editShapeId && !e.shiftKey) onSelect?.(item.id)
                 }}
+                onMouseEnter={(e) => {
+                  if (!designMode) return
+                  setHoverTip({
+                    x: e.clientX + 12,
+                    y: e.clientY + 12,
+                    text: furnitureTooltip(item),
+                  })
+                }}
+                onMouseLeave={() => setHoverTip(null)}
+                title={designMode ? furnitureTooltip(item) : undefined}
               >
                 {cells.map(cell => (
                   <div
                     key={`${item.id}-${cell.row}-${cell.col}`}
                     className="wb-room__poly-cell"
                     style={{
-                      left: (cell.col + dCol) * CELL + 2,
-                      top: (cell.row + dRow) * CELL + 2,
+                      left: (cell.col - item.col) * CELL + 2,
+                      top: (cell.row - item.row) * CELL + 2,
                       width: CELL - 4,
                       height: CELL - 4,
                     }}
@@ -186,8 +268,8 @@ export default function SeatingRoomCanvas({
                 <div
                   className="wb-room__poly-label"
                   style={{
-                    left: (item.col + dCol) * CELL + 4,
-                    top: (item.row + dRow) * CELL + 4,
+                    left: 4,
+                    top: 4,
                   }}
                 >
                   {item.outline ? `${item.label || furnitureLabel(item.type)} (outline)` : (item.label || furnitureLabel(item.type))}
@@ -210,31 +292,47 @@ export default function SeatingRoomCanvas({
               ...posStyle(seat.row, seat.col, w, h, preview),
               ...(colorId ? seatingColorStyle(colorId, { asSeat: true }) : null),
             }
+            const tip = seatTooltip(seat, designMode, atTable)
+            const canEdit = designMode && !editShapeId
             return (
               <button
                 key={seat.key}
                 type="button"
                 className={`wb-room__seat${studentId ? ' wb-room__seat--filled' : ''}${designMode ? ' wb-room__seat--design' : ''}${selected ? ' wb-room__seat--selected' : ''}${preview ? ' wb-room__seat--dragging' : ''}${atTable ? ' wb-room__seat--table' : ''}${colorId ? ' wb-room__seat--tinted' : ''}`}
                 style={seatStyle}
-                onPointerDown={designMode && !editShapeId ? (e) => startDrag(e, {
-                  kind: 'seat',
-                  id: seat.id || seat.key,
-                  key: seat.key,
-                  row: seat.row,
-                  col: seat.col,
-                }) : undefined}
+                title={tip}
+                onPointerDown={canEdit ? (e) => {
+                  if (handleShiftCopy(e, () => onDuplicateSeat?.(seat.key))) return
+                  startDrag(e, {
+                    kind: 'seat',
+                    id: seat.id || seat.key,
+                    key: seat.key,
+                    row: seat.row,
+                    col: seat.col,
+                  })
+                } : undefined}
+                onContextMenu={canEdit ? (e) => {
+                  if (e.shiftKey) {
+                    handleShiftDelete(e, () => onDeleteSeat?.(seat.key))
+                  }
+                } : undefined}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (editShapeId) {
                     onToggleFurnitureCell?.(editShapeId, seat.row, seat.col)
                     return
                   }
-                  if (designMode) {
+                  if (designMode && !e.shiftKey) {
                     onSelect?.(seat.id || seat.key)
                     return
                   }
                   onSeatClick?.(seat.key, seat.row, seat.col)
                 }}
+                onMouseEnter={(e) => {
+                  if (!designMode || !tip) return
+                  setHoverTip({ x: e.clientX + 12, y: e.clientY + 12, text: tip })
+                }}
+                onMouseLeave={() => setHoverTip(null)}
                 onDragOver={designMode ? undefined : onDragOverSeat}
                 onDrop={designMode ? undefined : (e) => onSeatDrop?.(e, seat.key)}
               >

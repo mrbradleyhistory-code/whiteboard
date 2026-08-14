@@ -552,7 +552,7 @@ export function updateFurniture(chart, id, patch) {
         const cells = furnitureCells(f).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
         return normalizeFurnitureItem({ ...next, cells, outline: f.outline })
       }
-      if (patch.w != null || patch.h != null || f.type === FURNITURE_TYPES.U_TABLE) {
+      if (patch.w != null || patch.h != null) {
         const cells = defaultCellsForType(f.type, fitted.row, fitted.col, fitted.w, fitted.h)
         return normalizeFurnitureItem({ ...next, ...fitted, cells, outline: f.outline })
       }
@@ -612,6 +612,100 @@ export function removeFurniture(chart, id) {
     { ...chart, furniture: getFurniture(chart).filter(f => f.id !== id) },
     seatDefs,
   )
+}
+
+const DUPLICATE_OFFSETS = [
+  { row: 1, col: 0 }, { row: 0, col: 1 }, { row: 1, col: 1 },
+  { row: 2, col: 0 }, { row: 0, col: 2 }, { row: -1, col: 0 }, { row: 0, col: -1 },
+]
+
+function occupiedCellKeys(chart, { skipFurnitureId = null, skipSeatKey = null } = {}) {
+  const keys = new Set()
+  for (const s of getSeatDefs(chart)) {
+    if (s.key !== skipSeatKey) keys.add(s.key)
+  }
+  for (const f of getFurniture(chart)) {
+    if (f.id === skipFurnitureId) continue
+    for (const c of furnitureCells(f)) keys.add(seatKey(c.row, c.col))
+  }
+  return keys
+}
+
+function shiftCellsOntoCanvas(cells, chart) {
+  const rows = chart.rows || 12
+  const cols = chart.cols || 14
+  let minR = Infinity
+  let minC = Infinity
+  let maxR = -Infinity
+  let maxC = -Infinity
+  for (const c of cells) {
+    minR = Math.min(minR, c.row)
+    minC = Math.min(minC, c.col)
+    maxR = Math.max(maxR, c.row)
+    maxC = Math.max(maxC, c.col)
+  }
+  let adjR = 0
+  let adjC = 0
+  if (minR < 0) adjR = -minR
+  if (minC < 0) adjC = -minC
+  if (maxR + adjR > rows - 1) adjR = rows - 1 - maxR
+  if (maxC + adjC > cols - 1) adjC = cols - 1 - maxC
+  return cells.map(c => ({ row: c.row + adjR, col: c.col + adjC }))
+}
+
+function findDuplicateCellPlacement(chart, baseCells, opts = {}) {
+  const rows = chart.rows || 12
+  const cols = chart.cols || 14
+  const occupied = occupiedCellKeys(chart, opts)
+  for (const d of DUPLICATE_OFFSETS) {
+    let shifted = baseCells.map(c => ({ row: c.row + d.row, col: c.col + d.col }))
+    shifted = shiftCellsOntoCanvas(shifted, chart)
+    if (shifted.every(c => c.row >= 0 && c.col >= 0 && c.row < rows && c.col < cols)) {
+      if (!shifted.some(c => occupied.has(seatKey(c.row, c.col)))) return shifted
+    }
+  }
+  return null
+}
+
+/** Copy furniture (including U-tables / polygons) offset on the grid. */
+export function duplicateFurniture(chart, id) {
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item || item.outline) return { chart, newId: null }
+  const base = furnitureCells(item)
+  const cells = findDuplicateCellPlacement(chart, base, { skipFurnitureId: id })
+  if (!cells) return { chart, newId: null }
+  const newItem = normalizeFurnitureItem({
+    ...item,
+    id: newItemId('furn'),
+    cells,
+    outline: false,
+  })
+  return {
+    chart: { ...chart, furniture: [...getFurniture(chart), newItem] },
+    newId: newItem.id,
+  }
+}
+
+/** Copy a single desk to the nearest free neighboring cell. */
+export function duplicateSeat(chart, key) {
+  const defs = getSeatDefs(chart)
+  const seat = defs.find(s => s.key === key)
+  if (!seat) return { chart, newId: null }
+  const base = [{ row: seat.row, col: seat.col }]
+  const placed = findDuplicateCellPlacement(chart, base, { skipSeatKey: key })
+  if (!placed) return { chart, newId: null }
+  const { row, col } = placed[0]
+  const newKey = seatKey(row, col)
+  const newSeat = seatDef(row, col, {
+    ...seat,
+    id: `seat_${newKey}`,
+    key: newKey,
+    tableId: null,
+  })
+  return {
+    chart: setSeatDefs(chart, [...defs, newSeat]),
+    newId: newSeat.id,
+  }
 }
 
 /** Toggle a canvas cell in a custom polygon / editable shape. */

@@ -3869,6 +3869,31 @@ input[type='range'].wb-range::-moz-range-thumb {
   cursor: cell;
 }
 
+.wb-room__shortcuts {
+  margin: 0 10px 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #475569;
+  background: #fff;
+  border: 1px dashed var(--wb-border, #cbd5e1);
+  border-radius: 8px;
+}
+
+.wb-room__tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 260px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.92);
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 .wb-room__seat,
 .wb-room__item {
   position: absolute;
@@ -3885,9 +3910,9 @@ input[type='range'].wb-range::-moz-range-thumb {
 
 .wb-room__poly {
   position: absolute;
-  inset: 0;
   pointer-events: none;
   z-index: 1;
+  box-sizing: border-box;
 }
 
 .wb-room__poly-cell {

@@ -10,6 +10,8 @@ import {
   clearAllAssignments,
   cloneChart,
   convertFurnitureToSeats,
+  duplicateFurniture,
+  duplicateSeat,
   FURNITURE_PRESETS,
   FURNITURE_TYPES,
   getFurniture,
@@ -234,6 +236,31 @@ export default function SeatingChartEditor({
     onChange(toggleFurnitureCell(chartRef.current, id, row, col))
   }, [onChange])
 
+  const handleDuplicateFurniture = useCallback((id) => {
+    const { chart: next, newId } = duplicateFurniture(chartRef.current, id)
+    if (!newId) return
+    onChange(next)
+    setSelectedId(newId)
+  }, [onChange])
+
+  const handleDuplicateSeat = useCallback((key) => {
+    const { chart: next, newId } = duplicateSeat(chartRef.current, key)
+    if (!newId) return
+    onChange(next)
+    setSelectedId(newId)
+  }, [onChange])
+
+  const handleDeleteSeat = useCallback((key) => {
+    onChange(removeSeat(chartRef.current, key))
+    setSelectedId(prev => (prev === key ? null : prev))
+  }, [onChange])
+
+  const handleDeleteFurniture = useCallback((id) => {
+    onChange(removeFurniture(chartRef.current, id))
+    setSelectedId(prev => (prev === id ? null : prev))
+    setEditShapeId(prev => (prev === id ? null : prev))
+  }, [onChange])
+
   const deleteSelected = () => {
     if (selectedFurniture) {
       onChange(removeFurniture(chart, selectedFurniture.id))
@@ -246,6 +273,26 @@ export default function SeatingChartEditor({
       setSelectedId(null)
     }
   }
+
+  useEffect(() => {
+    if (!designMode || editShapeId) return undefined
+    const onKeyDown = (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return
+      if (!selectedId) return
+      e.preventDefault()
+      const furn = getFurniture(chartRef.current).find(f => f.id === selectedId)
+      if (furn) {
+        handleDeleteFurniture(furn.id)
+        return
+      }
+      const seat = listSeats(chartRef.current).find(s => s.id === selectedId || s.key === selectedId)
+      if (seat) handleDeleteSeat(seat.key)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [designMode, editShapeId, selectedId, handleDeleteFurniture, handleDeleteSeat])
 
   const convertSelected = () => {
     if (!selectedFurniture || selectedFurniture.outline) return
@@ -438,7 +485,7 @@ export default function SeatingChartEditor({
           <p className="wb-hub-hint" style={{ margin: 0 }}>
             {editShapeId
               ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
-              : 'Drag items to snap them on the grid. Use U-table or Custom shape for non-rectangular tables; pick a color to code groups. Convert to seats keeps the outline and tint.'}
+              : 'Drag to move · Shift+click duplicate · Shift+right-click delete · Delete key removes selection. U-table opens toward the front.'}
           </p>
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton
@@ -568,6 +615,10 @@ export default function SeatingChartEditor({
         onMoveFurniture={handleMoveFurniture}
         onToggleSeatAt={handleToggleSeatAt}
         onToggleFurnitureCell={handleToggleFurnitureCell}
+        onDuplicateSeat={handleDuplicateSeat}
+        onDuplicateFurniture={handleDuplicateFurniture}
+        onDeleteSeat={handleDeleteSeat}
+        onDeleteFurniture={handleDeleteFurniture}
         onSeatClick={handleSeatClick}
         onSeatDrop={handleSeatDrop}
         onDragOverSeat={handleDragOver}
