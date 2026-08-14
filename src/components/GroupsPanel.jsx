@@ -8,12 +8,20 @@ import {
   importClassDataJson,
   parseRosterPaste,
   studentNameById,
+  getClassSeatingChartFromData,
 } from '../localClassData'
 import { createRng, generateSimpleGroups, generateJigsawGroups } from '../grouping'
 import { cloneGroups, createSavedArrangement } from '../groupArrangements'
 import GroupEditor from './GroupEditor'
 import SeatingChartEditor from './SeatingChartEditor'
-import { purgeStudentFromClassSeating, upsertSavedSeatingChart, wipeSeatingChart, createDefaultSeatingChart } from '../seatingChart'
+import {
+  createRoomLayout,
+  createDefaultSeatingChart,
+  purgeStudentFromClassSeating,
+  upsertSeatingPreset,
+  presetToChart,
+  mergeLayoutWithAssignments,
+} from '../seatingChart'
 import {
   HubButton,
   HubChip,
@@ -68,8 +76,11 @@ export default function GroupsPanel({ userId }) {
   }, [userId])
 
   const persist = (next) => {
-    saveClassData(userId, next)
-    setData(next)
+    setData(prev => {
+      const resolved = typeof next === 'function' ? next(prev) : next
+      saveClassData(userId, resolved)
+      return resolved
+    })
   }
 
   const activeClass = data.classes.find(c => c.id === expandedClassId)
@@ -99,27 +110,34 @@ export default function GroupsPanel({ userId }) {
   }
 
   const updateClass = (id, patch) => {
-    persist({
-      ...data,
-      classes: data.classes.map(c => (c.id === id ? { ...c, ...patch } : c)),
-    })
+    persist(prev => ({
+      ...prev,
+      classes: prev.classes.map(c => (c.id === id ? { ...c, ...patch } : c)),
+    }))
   }
 
   const addClass = () => {
-    const c = createClass(`Class ${data.classes.length + 1}`)
-    const next = { ...data, classes: [...data.classes, c] }
-    persist(next)
-    setExpandedClassId(c.id)
+    persist(prev => {
+      let roomLayouts = [...(prev.roomLayouts || [])]
+      if (!roomLayouts.length) {
+        roomLayouts.push(createRoomLayout('Default room', createDefaultSeatingChart()))
+      }
+      const c = createClass(`Class ${prev.classes.length + 1}`, roomLayouts[0].id)
+      setExpandedClassId(c.id)
+      return { ...prev, roomLayouts, classes: [...prev.classes, c] }
+    })
   }
 
   const removeClass = (id) => {
     if (!confirm('Delete this class and its roster?')) return
-    const next = { ...data, classes: data.classes.filter(c => c.id !== id) }
-    persist(next)
-    if (expandedClassId === id) {
-      setExpandedClassId(next.classes[0]?.id || null)
-      setEditableGroups(null)
-    }
+    persist(prev => {
+      const next = { ...prev, classes: prev.classes.filter(c => c.id !== id) }
+      if (expandedClassId === id) {
+        setExpandedClassId(next.classes[0]?.id || null)
+        setEditableGroups(null)
+      }
+      return next
+    })
   }
 
   const addStudentsFromPaste = () => {
@@ -521,52 +539,94 @@ export default function GroupsPanel({ userId }) {
 
           <CollapsibleSection
             title="Seating chart"
-            summary={`${(c.savedSeatingCharts || []).length} saved`}
+            summary={`${(c.savedSeatingPresets || []).length} saved`}
             open={classSections(c.id).seating}
             onToggle={() => toggleSection(c.id, 'seating')}
           >
-            <SeatingChartEditor
-              students={c.students}
-              constraints={c.constraints}
-              chart={c.seatingChart}
-              onChange={nextChart => updateClass(c.id, { seatingChart: nextChart })}
-              savedCharts={c.savedSeatingCharts || []}
-              activeChartId={c.activeSeatingChartId || null}
-              savePlaceholder={`e.g. Solo work / Group work / Testing`}
-              onSave={(name, opts = {}) => {
-                const { list, entry } = upsertSavedSeatingChart(
-                  c.savedSeatingCharts,
-                  name,
-                  c.seatingChart,
-                  opts.replaceId || null,
-                  { forceNew: !!opts.forceNew },
-                )
-                updateClass(c.id, {
-                  savedSeatingCharts: list,
-                  activeSeatingChartId: entry.id,
-                })
-              }}
-              onLoad={(nextChart, entryId) => updateClass(c.id, {
-                seatingChart: nextChart,
-                activeSeatingChartId: entryId || null,
-              })}
-              onDelete={entryId => {
-                if (!confirm('Delete this saved seating chart?')) return
-                const nextSaved = (c.savedSeatingCharts || []).filter(s => s.id !== entryId)
-                updateClass(c.id, {
-                  savedSeatingCharts: nextSaved,
-                  activeSeatingChartId: c.activeSeatingChartId === entryId ? null : c.activeSeatingChartId,
-                })
-              }}
-              onNewChart={() => updateClass(c.id, {
-                seatingChart: createDefaultSeatingChart(),
-                activeSeatingChartId: null,
-              })}
-              onWipe={() => updateClass(c.id, {
-                seatingChart: wipeSeatingChart(c.seatingChart),
-                // Keep activeSeatingChartId so Update can overwrite the saved snapshot with the wiped room if desired
-              })}
-            />
+            {(data.roomLayouts || []).length === 0 ? (
+              <p className="wb-hub-hint">
+                Create a room layout under the <strong>Rooms</strong> tab first, then assign students here.
+              </p>
+            ) : (
+              <>
+                <label className="wb-hub-hint" style={{ display: 'block', marginBottom: 12 }}>
+                  Room layout
+                  <select
+                    className="wb-hub-input"
+                    value={c.roomLayoutId || data.roomLayouts[0]?.id || ''}
+                    onChange={e => {
+                      const roomLayoutId = e.target.value
+                      const layout = data.roomLayouts.find(r => r.id === roomLayoutId)?.layout
+                      const merged = layout
+                        ? mergeLayoutWithAssignments(layout, c.seatingAssignments)
+                        : null
+                      updateClass(c.id, {
+                        roomLayoutId,
+                        seatingAssignments: merged?.assignments || {},
+                        activeSeatingPresetId: null,
+                      })
+                    }}
+                    style={{ display: 'block', maxWidth: 320, marginTop: 6 }}
+                  >
+                    {(data.roomLayouts || []).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <SeatingChartEditor
+                  students={c.students}
+                  constraints={c.constraints}
+                  chart={getClassSeatingChartFromData(data, c)}
+                  layoutLocked
+                  libraryTitle="Seating presets for this class"
+                  libraryHint="Save student assignments (solo, group work, testing) for the selected room."
+                  onChange={nextChart => updateClass(c.id, { seatingAssignments: { ...nextChart.assignments } })}
+                  savedCharts={(c.savedSeatingPresets || []).map(preset => ({
+                    ...preset,
+                    chart: presetToChart(preset, data.roomLayouts, c.students.map(s => s.id))
+                      || getClassSeatingChartFromData(data, c),
+                  })).filter(entry => entry.chart)}
+                  activeChartId={c.activeSeatingPresetId || null}
+                  savePlaceholder="e.g. Solo work / Group work / Testing"
+                  onSave={(name, opts = {}) => {
+                    const { list, entry } = upsertSeatingPreset(
+                      c.savedSeatingPresets,
+                      name,
+                      c.roomLayoutId,
+                      c.seatingAssignments,
+                      opts.replaceId || null,
+                      { forceNew: !!opts.forceNew },
+                    )
+                    updateClass(c.id, {
+                      savedSeatingPresets: list,
+                      activeSeatingPresetId: entry.id,
+                    })
+                  }}
+                  onLoad={(nextChart, entryId) => {
+                    const preset = (c.savedSeatingPresets || []).find(p => p.id === entryId)
+                    updateClass(c.id, {
+                      seatingAssignments: { ...nextChart.assignments },
+                      roomLayoutId: preset?.roomLayoutId || c.roomLayoutId,
+                      activeSeatingPresetId: entryId || null,
+                    })
+                  }}
+                  onDelete={entryId => {
+                    if (!confirm('Delete this saved seating preset?')) return
+                    const nextSaved = (c.savedSeatingPresets || []).filter(s => s.id !== entryId)
+                    updateClass(c.id, {
+                      savedSeatingPresets: nextSaved,
+                      activeSeatingPresetId: c.activeSeatingPresetId === entryId ? null : c.activeSeatingPresetId,
+                    })
+                  }}
+                  onNewChart={() => updateClass(c.id, {
+                    seatingAssignments: {},
+                    activeSeatingPresetId: null,
+                  })}
+                  onWipe={() => updateClass(c.id, { seatingAssignments: {} })}
+                />
+              </>
+            )}
           </CollapsibleSection>
         </div>
           )}

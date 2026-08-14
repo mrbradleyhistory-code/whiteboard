@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, Fragment } from 'react'
+import { useCallback, useRef, useState, Fragment } from 'react'
 import {
   FURNITURE_TYPES,
   furnitureCells,
+  furnitureDragOrigin,
   furnitureLabel,
   getFurniture,
   listSeats,
+  seatDragPosition,
   seatingColorStyle,
   studentAtSeat,
 } from '../seatingChart'
@@ -68,9 +70,16 @@ export default function SeatingRoomCanvas({
   editShapeId = null,
 }) {
   const wrapRef = useRef(null)
+  const chartRef = useRef(chart)
+  chartRef.current = chart
+
   const dragRef = useRef(null)
-  const moveRef = useRef(null)
-  const upRef = useRef(null)
+  const committedRef = useRef(false)
+  const onMoveSeatRef = useRef(onMoveSeat)
+  const onMoveFurnitureRef = useRef(onMoveFurniture)
+  onMoveSeatRef.current = onMoveSeat
+  onMoveFurnitureRef.current = onMoveFurniture
+
   const [dragPreview, setDragPreview] = useState(null)
   const [hoverTip, setHoverTip] = useState(null)
 
@@ -91,40 +100,93 @@ export default function SeatingRoomCanvas({
     }
   }, [chart.cols, chart.rows])
 
-  useEffect(() => {
-    moveRef.current = (e) => {
-      const drag = dragRef.current
-      if (!drag) return
-      const cell = clientToCell(e.clientX, e.clientY)
-      const nextRow = Math.max(0, cell.row - drag.grabRow)
-      const nextCol = Math.max(0, cell.col - drag.grabCol)
-      setDragPreview({ id: drag.id, kind: drag.kind, row: nextRow, col: nextCol })
-    }
-    upRef.current = (e) => {
-      const drag = dragRef.current
-      if (!drag) return
-      const cell = clientToCell(e.clientX, e.clientY)
-      const nextRow = Math.max(0, cell.row - drag.grabRow)
-      const nextCol = Math.max(0, cell.col - drag.grabCol)
-      if (drag.kind === 'seat') {
-        onMoveSeat?.(drag.key, nextRow, nextCol)
-      } else {
-        onMoveFurniture?.(drag.id, nextRow, nextCol)
-      }
-      dragRef.current = null
-      setDragPreview(null)
-      window.removeEventListener('pointermove', onWinMove)
-      window.removeEventListener('pointerup', onWinUp)
-    }
-  }, [clientToCell, onMoveFurniture, onMoveSeat])
+  const updatePreview = useCallback((clientX, clientY) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const cell = clientToCell(clientX, clientY)
+    const targetRow = Math.max(0, cell.row - drag.grabRow)
+    const targetCol = Math.max(0, cell.col - drag.grabCol)
+    const currentChart = chartRef.current
 
-  const onWinMove = (e) => moveRef.current?.(e)
-  const onWinUp = (e) => upRef.current?.(e)
+    if (drag.kind === 'seat') {
+      const pos = seatDragPosition(currentChart, drag.key, targetRow, targetCol)
+      setDragPreview({
+        id: drag.id,
+        kind: 'seat',
+        row: pos.row,
+        col: pos.col,
+        ok: pos.ok,
+      })
+      return
+    }
+
+    const origin = furnitureDragOrigin(currentChart, drag.id, targetRow, targetCol)
+    setDragPreview({
+      id: drag.id,
+      kind: 'furniture',
+      row: origin.row,
+      col: origin.col,
+      dRow: origin.dRow,
+      dCol: origin.dCol,
+    })
+  }, [clientToCell])
+
+  const finishDrag = useCallback((clientX, clientY) => {
+    if (committedRef.current) return
+    committedRef.current = true
+
+    const drag = dragRef.current
+    dragRef.current = null
+    setDragPreview(null)
+
+    if (!drag) return
+
+    const cell = clientToCell(clientX, clientY)
+    const targetRow = Math.max(0, cell.row - drag.grabRow)
+    const targetCol = Math.max(0, cell.col - drag.grabCol)
+    const currentChart = chartRef.current
+
+    if (drag.kind === 'seat') {
+      const pos = seatDragPosition(currentChart, drag.key, targetRow, targetCol)
+      if (pos.ok) onMoveSeatRef.current?.(drag.key, pos.row, pos.col)
+    } else {
+      const origin = furnitureDragOrigin(currentChart, drag.id, targetRow, targetCol)
+      if (origin.dRow || origin.dCol) {
+        onMoveFurnitureRef.current?.(drag.id, origin.row, origin.col)
+      }
+    }
+  }, [clientToCell])
+
+  const windowHandlersRef = useRef({ move: null, up: null })
+  windowHandlersRef.current.move = (e) => {
+    if (!dragRef.current) return
+    e.preventDefault()
+    updatePreview(e.clientX, e.clientY)
+  }
+  windowHandlersRef.current.up = (e) => {
+    finishDrag(e.clientX, e.clientY)
+    window.removeEventListener('pointermove', windowHandlersRef.current.move)
+    window.removeEventListener('pointerup', windowHandlersRef.current.up)
+    window.removeEventListener('pointercancel', windowHandlersRef.current.up)
+  }
+
+  const endDragListeners = () => {
+    window.removeEventListener('pointermove', windowHandlersRef.current.move)
+    window.removeEventListener('pointerup', windowHandlersRef.current.up)
+    window.removeEventListener('pointercancel', windowHandlersRef.current.up)
+  }
 
   const startDrag = (e, payload) => {
     if (!designMode || editShapeId || e.shiftKey || modClick(e)) return
     e.preventDefault()
     e.stopPropagation()
+
+    if (dragRef.current) {
+      finishDrag(e.clientX, e.clientY)
+      endDragListeners()
+    }
+
+    committedRef.current = false
     const cell = clientToCell(e.clientX, e.clientY)
     dragRef.current = {
       ...payload,
@@ -132,9 +194,29 @@ export default function SeatingRoomCanvas({
       grabCol: Math.max(0, cell.col - payload.col),
     }
     onSelect?.(payload.id)
-    setDragPreview({ id: payload.id, kind: payload.kind, row: payload.row, col: payload.col })
-    window.addEventListener('pointermove', onWinMove)
-    window.addEventListener('pointerup', onWinUp)
+
+    if (payload.kind === 'seat') {
+      setDragPreview({ id: payload.id, kind: 'seat', row: payload.row, col: payload.col, ok: true })
+    } else {
+      setDragPreview({
+        id: payload.id,
+        kind: 'furniture',
+        row: payload.row,
+        col: payload.col,
+        dRow: 0,
+        dCol: 0,
+      })
+    }
+
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId)
+    } catch {
+      // ignore capture failures
+    }
+
+    window.addEventListener('pointermove', windowHandlersRef.current.move)
+    window.addEventListener('pointerup', windowHandlersRef.current.up)
+    window.addEventListener('pointercancel', windowHandlersRef.current.up)
   }
 
   const handleShiftCopy = (e, action) => {
@@ -179,8 +261,10 @@ export default function SeatingRoomCanvas({
   }
 
   const previewDelta = (item) => {
-    if (!(dragPreview?.id === item.id && dragPreview.kind === 'furniture')) return { dRow: 0, dCol: 0 }
-    return { dRow: dragPreview.row - item.row, dCol: dragPreview.col - item.col }
+    if (!(dragPreview?.id === item.id && dragPreview.kind === 'furniture')) {
+      return { dRow: 0, dCol: 0 }
+    }
+    return { dRow: dragPreview.dRow ?? 0, dCol: dragPreview.dCol ?? 0 }
   }
 
   const renderFurnitureItem = (item) => {
@@ -282,7 +366,9 @@ export default function SeatingRoomCanvas({
 
           {seats.map(seat => {
             const studentId = studentAtSeat(chart.assignments, seat.key)
-            const preview = dragPreview?.id === (seat.id || seat.key) && dragPreview.kind === 'seat' ? dragPreview : null
+            const preview = dragPreview?.id === (seat.id || seat.key) && dragPreview.kind === 'seat'
+              ? dragPreview
+              : null
             const selected = selectedId === seat.id || selectedId === seat.key
             const w = seat.w || 1
             const h = seat.h || 1

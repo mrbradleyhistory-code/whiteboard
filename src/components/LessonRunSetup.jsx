@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react'
-import { loadClassData } from '../localClassData'
+import { loadClassData, getClassSeatingChartFromData } from '../localClassData'
 import { lessonThemeClass } from '../lessonThemes'
 import { HubButton } from './hubUi'
 
 export default function LessonRunSetup({ userId, lesson, defaultClassId, onStart, onCancel }) {
   const [classes, setClasses] = useState([])
+  const [roomLayouts, setRoomLayouts] = useState([])
   const [classId, setClassId] = useState('')
 
   useEffect(() => {
-    const { classes: list } = loadClassData(userId)
-    setClasses(list)
+    const data = loadClassData(userId)
+    setClasses(data.classes)
+    setRoomLayouts(data.roomLayouts || [])
+    const list = data.classes
     const preferred = defaultClassId && list.some(c => c.id === defaultClassId)
       ? defaultClassId
       : (list[0]?.id || '')
     setClassId(preferred)
   }, [userId, defaultClassId])
+
+  const hasSeating = (c) => {
+    const chart = getClassSeatingChartFromData({ roomLayouts, classes: [c] }, c)
+    return chart && Object.values(chart.assignments || {}).some(Boolean)
+  }
 
   return (
     <div className="wb-modal-backdrop" role="presentation" onClick={onCancel}>
@@ -43,7 +51,7 @@ export default function LessonRunSetup({ userId, lesson, defaultClassId, onStart
               {classes.map(c => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.students?.length || 0})
-                  {c.seatingChart ? ' · seating' : ''}
+                  {hasSeating(c) ? ' · seating' : ''}
                 </option>
               ))}
             </select>

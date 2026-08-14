@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listBoards } from '../boardsApi'
-import { loadClassData } from '../localClassData'
+import { loadClassData, getClassSeatingChartFromData } from '../localClassData'
 import { LESSON_THEMES } from '../lessonThemes'
 import { folderDragHandleProps } from '../folderDrag'
 import {
@@ -356,7 +356,11 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
   }
 
   const startRunning = (lesson, classId) => {
-    const activeClass = classId ? classes.find(c => c.id === classId) : null
+    const data = loadClassData(userId)
+    const classObj = classId ? data.classes.find(c => c.id === classId) : null
+    const activeClass = classObj
+      ? { ...classObj, seatingChart: getClassSeatingChartFromData(data, classObj) }
+      : null
     setRunningSession({ lesson, activeClass })
     setRunSetupLesson(null)
   }

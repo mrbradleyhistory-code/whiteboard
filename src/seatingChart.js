@@ -453,12 +453,13 @@ export function removeSeat(chart, key) {
 }
 
 export function moveSeat(chart, key, nextRow, nextCol) {
+  const pos = seatDragPosition(chart, key, nextRow, nextCol)
+  if (!pos.ok) return chart
   const defs = getSeatDefs(chart)
   const seat = defs.find(s => s.key === key)
   if (!seat) return chart
-  const fitted = clampItem(chart, nextRow, nextCol, seat.w || 1, seat.h || 1)
+  const fitted = clampItem(chart, pos.row, pos.col, seat.w || 1, seat.h || 1)
   const newKey = seatKey(fitted.row, fitted.col)
-  if (newKey !== key && defs.some(s => s.key === newKey)) return chart // occupied
   const nextDefs = defs.map(s => (
     s.key === key
       ? seatDef(fitted.row, fitted.col, {
@@ -485,6 +486,64 @@ export function moveSeat(chart, key, nextRow, nextCol) {
     ...setSeatDefs({ ...chart, assignments }, nextDefs),
     assignments: pruneAssignments({ ...chart, assignments }, nextDefs.map(s => s.key)),
   }
+}
+
+/** Preview / validate a desk move (matches moveSeat commit rules). */
+export function seatDragPosition(chart, key, targetRow, targetCol) {
+  const defs = getSeatDefs(chart)
+  const seat = defs.find(s => s.key === key)
+  if (!seat) return { row: targetRow, col: targetCol, ok: false }
+  const fitted = clampItem(chart, targetRow, targetCol, seat.w || 1, seat.h || 1)
+  const newKey = seatKey(fitted.row, fitted.col)
+  if (newKey !== key && defs.some(s => s.key === newKey)) {
+    return { row: seat.row, col: seat.col, ok: false }
+  }
+  return { row: fitted.row, col: fitted.col, ok: true }
+}
+
+function translateFurnitureCells(chart, item, targetRow, targetCol) {
+  const dRow = targetRow - item.row
+  const dCol = targetCol - item.col
+  if (!dRow && !dCol) {
+    return { cells: furnitureCells(item), row: item.row, col: item.col, dRow: 0, dCol: 0 }
+  }
+  const rows = chart.rows || 12
+  const cols = chart.cols || 14
+  let cells = furnitureCells(item).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
+  const minR = Math.min(...cells.map(c => c.row))
+  const minC = Math.min(...cells.map(c => c.col))
+  const maxR = Math.max(...cells.map(c => c.row))
+  const maxC = Math.max(...cells.map(c => c.col))
+  let adjR = 0
+  let adjC = 0
+  if (minR < 0) adjR = -minR
+  if (minC < 0) adjC = -minC
+  if (maxR + adjR > rows - 1) adjR = rows - 1 - maxR
+  if (maxC + adjC > cols - 1) adjC = cols - 1 - maxC
+  cells = cells.map(c => ({ row: c.row + adjR, col: c.col + adjC }))
+  const bounds = boundsFromCells(cells)
+  return {
+    cells,
+    row: bounds.row,
+    col: bounds.col,
+    dRow: bounds.row - item.row,
+    dCol: bounds.col - item.col,
+  }
+}
+
+/** Preview furniture drag so the canvas matches moveFurniture commit. */
+export function furnitureDragOrigin(chart, id, targetRow, targetCol) {
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item) return { row: 0, col: 0, dRow: 0, dCol: 0 }
+  return translateFurnitureCells(chart, item, targetRow, targetCol)
+}
+
+export function moveFurniture(chart, id, nextRow, nextCol) {
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item) return chart
+  const { cells, dRow, dCol } = translateFurnitureCells(chart, item, nextRow, nextCol)
+  if (!dRow && !dCol) return chart
+  return updateFurniture(chart, id, { cells })
 }
 
 export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
@@ -567,30 +626,6 @@ export function updateFurniture(chart, id, patch) {
     return normalizeFurnitureItem(next)
   })
   return { ...chart, furniture }
-}
-
-export function moveFurniture(chart, id, nextRow, nextCol) {
-  const item = getFurniture(chart).find(f => f.id === id)
-  if (!item) return chart
-  const dRow = nextRow - item.row
-  const dCol = nextCol - item.col
-  if (!dRow && !dCol) return chart
-  const rows = chart.rows || 12
-  const cols = chart.cols || 14
-  let cells = furnitureCells(item).map(c => ({ row: c.row + dRow, col: c.col + dCol }))
-  // Clamp translation so all cells stay on canvas
-  const minR = Math.min(...cells.map(c => c.row))
-  const minC = Math.min(...cells.map(c => c.col))
-  const maxR = Math.max(...cells.map(c => c.row))
-  const maxC = Math.max(...cells.map(c => c.col))
-  let adjR = 0
-  let adjC = 0
-  if (minR < 0) adjR = -minR
-  if (minC < 0) adjC = -minC
-  if (maxR + adjR > rows - 1) adjR = rows - 1 - maxR
-  if (maxC + adjC > cols - 1) adjC = cols - 1 - maxC
-  cells = cells.map(c => ({ row: c.row + adjR, col: c.col + adjC }))
-  return updateFurniture(chart, id, { cells })
 }
 
 export function resizeFurniture(chart, id, w, h) {
@@ -1125,13 +1160,179 @@ export function upsertSavedSeatingChart(list, name, chart, replaceId = null, { f
 }
 
 export function purgeStudentFromClassSeating(classObj, studentId) {
-  return {
-    seatingChart: purgeStudentFromChart(classObj.seatingChart, studentId),
-    savedSeatingCharts: (classObj.savedSeatingCharts || []).map(entry => ({
+  const patch = {
+    seatingAssignments: purgeStudentAssignments(classObj.seatingAssignments, studentId),
+    savedSeatingPresets: (classObj.savedSeatingPresets || []).map(entry => ({
       ...entry,
-      chart: purgeStudentFromChart(entry.chart, studentId),
+      assignments: purgeStudentAssignments(entry.assignments, studentId),
     })),
   }
+  if (classObj.seatingChart) {
+    patch.seatingChart = purgeStudentFromChart(classObj.seatingChart, studentId)
+    patch.savedSeatingCharts = (classObj.savedSeatingCharts || []).map(entry => ({
+      ...entry,
+      chart: purgeStudentFromChart(entry.chart, studentId),
+    }))
+  }
+  return patch
+}
+
+export function newRoomLayoutId() {
+  return `room_${crypto.randomUUID().slice(0, 8)}`
+}
+
+/** Layout-only snapshot (no student assignments). */
+export function stripAssignments(chart) {
+  const base = cloneChart(chart)
+  return { ...base, assignments: {} }
+}
+
+export function layoutSignature(layout) {
+  const stripped = stripAssignments(layout)
+  return JSON.stringify({
+    layout: stripped.layout,
+    rows: stripped.rows,
+    cols: stripped.cols,
+    seatDefs: stripped.seatDefs,
+    furniture: stripped.furniture,
+  })
+}
+
+export function mergeLayoutWithAssignments(layout, assignments = {}) {
+  const base = cloneChart(layout)
+  const seatKeys = new Set(listSeats(base).map(s => s.key))
+  const nextAssignments = {}
+  for (const [key, studentId] of Object.entries(assignments || {})) {
+    if (seatKeys.has(key) && studentId) nextAssignments[key] = studentId
+  }
+  return { ...base, assignments: nextAssignments }
+}
+
+export function purgeStudentAssignments(assignments, studentId) {
+  if (!assignments || typeof assignments !== 'object') return {}
+  const next = { ...assignments }
+  for (const key of Object.keys(next)) {
+    if (next[key] === studentId) next[key] = null
+  }
+  return next
+}
+
+export function getRoomLayoutById(roomLayouts, id) {
+  return (roomLayouts || []).find(r => r.id === id) || null
+}
+
+export function getClassSeatingChart(classObj, roomLayouts, studentIds) {
+  const layoutEntry = getRoomLayoutById(roomLayouts, classObj.roomLayoutId)
+  const layout = layoutEntry?.layout || classObj.seatingChart
+  if (!layout) return createDefaultSeatingChart()
+  const assignments = classObj.seatingAssignments != null
+    ? classObj.seatingAssignments
+    : (classObj.seatingChart?.assignments || {})
+  return normalizeSeatingChart(
+    mergeLayoutWithAssignments(layout, assignments),
+    studentIds,
+  )
+}
+
+export function createRoomLayout(name, chart) {
+  const now = new Date().toISOString()
+  return {
+    id: newRoomLayoutId(),
+    name: String(name || 'Room').trim() || 'Room',
+    createdAt: now,
+    updatedAt: now,
+    layout: stripAssignments(chart),
+  }
+}
+
+export function upsertRoomLayout(list, { id = null, name, layout }) {
+  const now = new Date().toISOString()
+  const layouts = Array.isArray(list) ? [...list] : []
+  const stripped = stripAssignments(layout)
+  if (id) {
+    const idx = layouts.findIndex(r => r.id === id)
+    if (idx >= 0) {
+      const prev = layouts[idx]
+      const updated = {
+        ...prev,
+        name: (name || prev.name).trim(),
+        updatedAt: now,
+        layout: stripped,
+      }
+      layouts.splice(idx, 1)
+      return { list: [updated, ...layouts], entry: updated }
+    }
+  }
+  const entry = createRoomLayout(name, stripped)
+  return { list: [entry, ...layouts], entry }
+}
+
+export function createSeatingPreset(name, roomLayoutId, assignments) {
+  const now = new Date().toISOString()
+  return {
+    id: newSeatingChartId(),
+    name: name.trim(),
+    roomLayoutId,
+    assignments: { ...(assignments || {}) },
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export function presetToChart(preset, roomLayouts, studentIds) {
+  const layoutEntry = getRoomLayoutById(roomLayouts, preset.roomLayoutId)
+  if (!layoutEntry) return null
+  return normalizeSeatingChart(
+    mergeLayoutWithAssignments(layoutEntry.layout, preset.assignments),
+    studentIds,
+  )
+}
+
+/** Insert or replace a named assignment preset for a class. */
+export function upsertSeatingPreset(list, name, roomLayoutId, assignments, replaceId = null, { forceNew = false } = {}) {
+  const now = new Date().toISOString()
+  const presets = Array.isArray(list) ? [...list] : []
+  const nextAssignments = { ...(assignments || {}) }
+  if (replaceId) {
+    const idx = presets.findIndex(e => e.id === replaceId)
+    if (idx >= 0) {
+      const prev = presets[idx]
+      const updated = {
+        ...prev,
+        name: (name || prev.name).trim(),
+        roomLayoutId: roomLayoutId || prev.roomLayoutId,
+        assignments: nextAssignments,
+        updatedAt: now,
+      }
+      presets.splice(idx, 1)
+      return { list: [updated, ...presets], entry: updated }
+    }
+  }
+  if (!forceNew) {
+    const sameName = presets.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase())
+    if (sameName >= 0) {
+      const prev = presets[sameName]
+      const updated = {
+        ...prev,
+        name: name.trim(),
+        roomLayoutId: roomLayoutId || prev.roomLayoutId,
+        assignments: nextAssignments,
+        updatedAt: now,
+      }
+      presets.splice(sameName, 1)
+      return { list: [updated, ...presets], entry: updated }
+    }
+  }
+  const entry = createSeatingPreset(name, roomLayoutId, nextAssignments)
+  return { list: [entry, ...presets], entry }
+}
+
+export function findOrCreateRoomLayout(roomLayouts, chart, nameHint = 'Room') {
+  const sig = layoutSignature(chart)
+  const existing = (roomLayouts || []).find(r => layoutSignature(r.layout) === sig)
+  if (existing) return { list: roomLayouts || [], entry: existing, created: false }
+  const { list, entry } = upsertRoomLayout(roomLayouts || [], { name: nameHint, layout: chart })
+  return { list, entry, created: true }
 }
 
 export function assignedCount(chart) {

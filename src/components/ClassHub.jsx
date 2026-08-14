@@ -4,6 +4,7 @@ import { auth } from '../firebaseClient'
 import BoardsPanel from './BoardsPanel'
 import FlashcardsPanel from './FlashcardsPanel'
 import GroupsPanel from './GroupsPanel'
+import RoomsPanel from './RoomsPanel'
 import TimerPresetsPanel from './TimerPresetsPanel'
 import LessonLauncherPanel from './LessonLauncherPanel'
 
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'lessons', label: 'Lessons', fullLabel: 'Lesson Launcher' },
   { id: 'boards', label: 'Boards', fullLabel: 'Boards' },
   { id: 'flashcards', label: 'Cards', fullLabel: 'Flashcards' },
+  { id: 'rooms', label: 'Rooms', fullLabel: 'Room layouts' },
   { id: 'tools', label: 'Classes', fullLabel: 'Class tools' },
   { id: 'timers', label: 'Timers', fullLabel: 'Timer presets' },
 ]
@@ -100,6 +102,7 @@ export default function ClassHub({ session, onOpenBoard }) {
         {tab === 'lessons' && <LessonLauncherPanel userId={userId} session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'boards' && <BoardsPanel session={session} onOpenBoard={onOpenBoard} />}
         {tab === 'flashcards' && <FlashcardsPanel userId={userId} />}
+        {tab === 'rooms' && <RoomsPanel userId={userId} />}
         {tab === 'tools' && <GroupsPanel userId={userId} />}
         {tab === 'timers' && <TimerPresetsPanel userId={userId} />}
       </main>
