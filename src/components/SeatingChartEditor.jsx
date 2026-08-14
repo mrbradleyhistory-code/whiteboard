@@ -64,11 +64,16 @@ export default function SeatingChartEditor({
   onNewChart,
   onWipe,
   savePlaceholder = 'e.g. Solo work / Group work / Testing',
+  layoutLocked = false,
+  hidePresetLibrary = false,
+  hideAssignments = false,
+  libraryTitle = 'Seating charts for this class',
+  libraryHint = 'Save multiple layouts (solo, group work, testing) and switch between them.',
 }) {
   const [layoutRows, setLayoutRows] = useState(chart.rows)
   const [layoutCols, setLayoutCols] = useState(chart.cols)
   const [designMode, setDesignMode] = useState(false)
-  const [placeTool, setPlaceTool] = useState('seat') // seat | null when selecting only
+  const [placeTool, setPlaceTool] = useState('seat')
   const [selectedId, setSelectedId] = useState(null)
   const [editShapeId, setEditShapeId] = useState(null)
   const [seed, setSeed] = useState('')
@@ -78,6 +83,12 @@ export default function SeatingChartEditor({
   const [saveName, setSaveName] = useState('')
   const chartRef = useRef(chart)
   chartRef.current = chart
+
+  useEffect(() => {
+    if (layoutLocked && designMode) setDesignMode(false)
+  }, [layoutLocked, designMode])
+
+  const effectiveDesignMode = layoutLocked ? false : designMode
 
   const activeEntry = savedCharts.find(e => e.id === activeChartId) || null
 
@@ -275,7 +286,7 @@ export default function SeatingChartEditor({
   }
 
   useEffect(() => {
-    if (!designMode || editShapeId) return undefined
+    if (!effectiveDesignMode || editShapeId) return undefined
     const onKeyDown = (e) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return
       const tag = e.target?.tagName
@@ -292,7 +303,7 @@ export default function SeatingChartEditor({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [designMode, editShapeId, selectedId, handleDeleteFurniture, handleDeleteSeat])
+  }, [effectiveDesignMode, editShapeId, selectedId, handleDeleteFurniture, handleDeleteSeat])
 
   const convertSelected = () => {
     if (!selectedFurniture || selectedFurniture.outline) return
@@ -311,12 +322,13 @@ export default function SeatingChartEditor({
 
   return (
     <div className="wb-seating">
+      {!hidePresetLibrary && (
       <div className="wb-seating-library">
         <div className="wb-seating-library__head">
           <div>
-            <h4 className="wb-hub-subheading" style={{ marginBottom: 4 }}>Seating charts for this class</h4>
+            <h4 className="wb-hub-subheading" style={{ marginBottom: 4 }}>{libraryTitle}</h4>
             <p className="wb-hub-hint" style={{ margin: 0 }}>
-              Save multiple layouts (solo, group work, testing) and switch between them.
+              {libraryHint}
               {activeEntry ? (
                 <> Currently editing <strong>{activeEntry.name}</strong>.</>
               ) : (
@@ -328,7 +340,9 @@ export default function SeatingChartEditor({
             {onNewChart && (
               <HubButton onClick={handleNewChart}>New chart</HubButton>
             )}
-            <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
+            {!layoutLocked && (
+              <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
+            )}
           </div>
         </div>
 
@@ -418,12 +432,24 @@ export default function SeatingChartEditor({
           <p className="wb-hub-hint">No saved charts yet — design a room, pick a quick name, then Save chart.</p>
         )}
       </div>
+      )}
 
+      {!layoutLocked && (
       <p className="wb-hub-hint">
         Design your room on a snappable grid: drag desks and furniture, paint custom polygons (U-tables),
         then convert shapes to seats — the table outline stays so the seating chart stays readable.
       </p>
+      )}
 
+      {layoutLocked && (
+        <p className="wb-hub-hint">
+          Room layout is shared across classes. Design or edit the physical room under the <strong>Rooms</strong> tab,
+          then assign students here.
+        </p>
+      )}
+
+      {!layoutLocked && (
+      <>
       <div className="wb-hub-radio-row">
         <label>
           <input type="radio" checked={!isCustom} onChange={() => setLayout('grid')} />
@@ -468,7 +494,7 @@ export default function SeatingChartEditor({
           {isCustom ? 'Apply canvas size' : 'Apply grid'}
         </HubButton>
         <HubButton
-          className={designMode ? 'wb-hub-btn--warn' : ''}
+          className={effectiveDesignMode ? 'wb-hub-btn--warn' : ''}
           onClick={() => {
             setDesignMode(m => !m)
             setSelectedId(null)
@@ -476,11 +502,11 @@ export default function SeatingChartEditor({
             setPlaceTool('seat')
           }}
         >
-          {designMode ? 'Done designing' : 'Design room'}
+          {effectiveDesignMode ? 'Done designing' : 'Design room'}
         </HubButton>
       </div>
 
-      {designMode && (
+      {effectiveDesignMode && (
         <div className="wb-room-palette">
           <p className="wb-hub-hint" style={{ margin: 0 }}>
             {editShapeId
@@ -602,10 +628,12 @@ export default function SeatingChartEditor({
           )}
         </div>
       )}
+      </>
+      )}
 
       <SeatingRoomCanvas
         chart={chart}
-        designMode={designMode}
+        designMode={effectiveDesignMode}
         selectedId={selectedId}
         onSelect={(id) => {
           setSelectedId(id)
@@ -623,16 +651,17 @@ export default function SeatingChartEditor({
         onSeatDrop={handleSeatDrop}
         onDragOverSeat={handleDragOver}
         studentName={studentName}
-        placeTool={designMode && !editShapeId ? placeTool : null}
-        editShapeId={designMode ? editShapeId : null}
+        placeTool={effectiveDesignMode && !editShapeId ? placeTool : null}
+        editShapeId={effectiveDesignMode ? editShapeId : null}
       />
 
       <p className="wb-hub-hint" style={{ textAlign: 'center' }}>
-        {seatCount} desks · {manualCount} placed · {unassigned.length} unassigned
+        {seatCount} desks · {manualCount} placed
+        {!hideAssignments ? ` · ${unassigned.length} unassigned` : ''}
         {furniture.length ? ` · ${furniture.length} furniture` : ''}
       </p>
 
-      {!designMode && unassigned.length > 0 && (
+      {!hideAssignments && !effectiveDesignMode && unassigned.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <h4 className="wb-hub-subheading">Unassigned</h4>
           <div className="wb-seating__pool">
@@ -657,7 +686,7 @@ export default function SeatingChartEditor({
         </div>
       )}
 
-      {!designMode && (
+      {!hideAssignments && !effectiveDesignMode && (
         <>
           <div className="wb-hub-toolbar" style={{ marginBottom: 8 }}>
             <HubButton
@@ -671,7 +700,6 @@ export default function SeatingChartEditor({
             <HubButton onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }}>
               Clear assignments
             </HubButton>
-            <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
             <label className="wb-hub-hint" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
               Seed
               <input
@@ -685,7 +713,6 @@ export default function SeatingChartEditor({
           </div>
           <p className="wb-hub-hint">
             Place students manually first, then use Fill remaining to seat everyone else using your never-together and keep-together rules.
-            Clear assignments keeps the room layout; Wipe room deletes desks and furniture too.
           </p>
           {fillError && <p className="wb-hub-alert">{fillError}</p>}
         </>

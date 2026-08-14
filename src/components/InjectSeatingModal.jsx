@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadClassData } from '../localClassData'
-import { assignedCount, listSeats } from '../seatingChart'
+import { assignedCount, listSeats, presetToChart } from '../seatingChart'
 import { colors, touchBtn } from '../uiTheme'
 
 export default function InjectSeatingModal({ userId, open, onClose, onInject }) {
@@ -15,12 +15,15 @@ export default function InjectSeatingModal({ userId, open, onClose, onInject }) 
     setData(loaded)
     const first = loaded.classes[0]
     setClassId(first?.id || '')
-    setSavedId(first?.savedSeatingCharts?.[0]?.id || '')
+    setSavedId(first?.savedSeatingPresets?.[0]?.id || '')
     setError('')
   }, [open, userId])
 
   const activeClass = data.classes.find(c => c.id === classId)
-  const savedList = activeClass?.savedSeatingCharts || []
+  const savedList = (activeClass?.savedSeatingPresets || []).map(preset => ({
+    ...preset,
+    chart: presetToChart(preset, data.roomLayouts, activeClass?.students?.map(s => s.id)),
+  })).filter(entry => entry.chart)
 
   useEffect(() => {
     if (!activeClass) return
@@ -79,7 +82,7 @@ export default function InjectSeatingModal({ userId, open, onClose, onInject }) 
               >
                 {data.classes.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({c.savedSeatingCharts?.length || 0} saved)
+                    {c.name} ({c.savedSeatingPresets?.length || 0} saved)
                   </option>
                 ))}
               </select>
