@@ -32,3 +32,7 @@ Vite + React 18 (JSX, no TypeScript) classroom toolkit (whiteboards, lessons, fl
 ### Gotchas
 - Connect emulators only once (guarded in `src/firebaseClient.js`). Hot reload can warn if the module reinits; a full refresh is fine.
 - `listBoards` sorts `updated_at` client-side to avoid a composite index requirement.
+
+### Class tools localStorage (`wb-class-data:<userId>`, v5)
+- **Rooms** hub tab: shared `roomLayouts[]` (physical desk/furniture layout, no student assignments).
+- **Classes** tab seating: each class picks a `roomLayoutId` and stores `seatingAssignments` + named `savedSeatingPresets` (assignments only). Design the room under Rooms; assign students under Classes.
