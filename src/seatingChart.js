@@ -503,11 +503,14 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
     outline: false,
     color: size.color || defaultColorForType(preset.type),
   })
-  return {
+  const footprint = new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
+  const nextChart = {
     ...chart,
     layout: chart.layout === 'grid' ? 'custom' : chart.layout,
     furniture: [...getFurniture(chart), item],
   }
+  const seatDefs = getSeatDefs(nextChart).filter(s => !footprint.has(s.key))
+  return setSeatDefs(nextChart, seatDefs)
 }
 
 /** Set color on furniture; also retints linked table seats. */

@@ -3865,6 +3865,18 @@ input[type='range'].wb-range::-moz-range-thumb {
   cursor: crosshair;
 }
 
+.wb-room__canvas--design .wb-room__poly {
+  z-index: 3;
+}
+
+.wb-room__canvas--design .wb-room__poly--selected {
+  z-index: 4;
+}
+
+.wb-room__canvas--design .wb-room__poly--outline {
+  z-index: 2;
+}
+
 .wb-room__canvas--paint {
   cursor: cell;
 }
