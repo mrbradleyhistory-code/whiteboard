@@ -356,7 +356,12 @@ function clampItem(chart, row, col, w, h) {
 }
 
 export function setSeatDefs(chart, seatDefs) {
-  const normalized = seatDefs.map(s => seatDef(s.row, s.col, s))
+  const byKey = new Map()
+  for (const s of seatDefs) {
+    const normalized = seatDef(s.row, s.col, s)
+    byKey.set(normalized.key, normalized)
+  }
+  const normalized = [...byKey.values()]
   const keys = normalized.map(s => s.key)
   const maxRow = normalized.reduce((m, s) => Math.max(m, s.row + (s.h || 1) - 1), 0)
   const maxCol = normalized.reduce((m, s) => Math.max(m, s.col + (s.w || 1) - 1), 0)
@@ -452,6 +457,70 @@ export function removeSeat(chart, key) {
   return setSeatDefs(chart, getSeatDefs(chart).filter(s => s.key !== key))
 }
 
+function seatFootprintCells(seat) {
+  return rectCells(seat.row, seat.col, seat.w || 1, seat.h || 1)
+}
+
+function furnitureFootprintSet(item) {
+  return new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
+}
+
+function isInsideFurnitureBBox(seat, item) {
+  const { row, col, w, h } = boundsFromCells(furnitureCells(item))
+  return seat.row >= row && seat.row < row + h && seat.col >= col && seat.col < col + w
+}
+
+/** Leftover grid desk inside a U/L/table hollow (not on the furniture perimeter). */
+function isInteriorOrphanSeat(chart, seat, item) {
+  if (!seat || seat.tableId) return false
+  if (studentAtSeat(chart.assignments, seat.key)) return false
+  if (furnitureFootprintSet(item).has(seat.key)) return false
+  return isInsideFurnitureBBox(seat, item)
+}
+
+function isInteriorOrphanBlocker(chart, seat) {
+  if (!seat) return false
+  return getFurniture(chart).some(f => isInteriorOrphanSeat(chart, seat, f))
+}
+
+function removeInteriorOrphanSeatsForFurniture(chart, item) {
+  const footprint = furnitureFootprintSet(item)
+  const { row, col, w, h } = boundsFromCells(furnitureCells(item))
+  const defs = getSeatDefs(chart).filter(s => {
+    if (footprint.has(s.key)) return true
+    const inside = s.row >= row && s.row < row + h && s.col >= col && s.col < col + w
+    if (!inside) return true
+    if (s.tableId) return true
+    if (studentAtSeat(chart.assignments, s.key)) return true
+    return false
+  })
+  return setSeatDefs(chart, defs)
+}
+
+function buildSeatMoveOccupancy(chart, excludeKey) {
+  const occupied = new Set()
+  for (const s of getSeatDefs(chart)) {
+    if (s.key === excludeKey) continue
+    for (const c of seatFootprintCells(s)) occupied.add(seatKey(c.row, c.col))
+  }
+  for (const f of getFurniture(chart)) {
+    if (f.outline) continue
+    for (const c of furnitureCells(f)) occupied.add(seatKey(c.row, c.col))
+  }
+  return occupied
+}
+
+function chartWithoutInteriorBlockers(chart, movingKey, targetFootprintKeys) {
+  let next = chart
+  for (const tk of targetFootprintKeys) {
+    const blocker = getSeatDefs(next).find(s => s.key === tk && s.key !== movingKey)
+    if (blocker && isInteriorOrphanBlocker(next, blocker)) {
+      next = removeSeat(next, blocker.key)
+    }
+  }
+  return next
+}
+
 export function moveSeat(chart, key, nextRow, nextCol) {
   const pos = seatDragPosition(chart, key, nextRow, nextCol)
   if (!pos.ok) return chart
@@ -459,8 +528,11 @@ export function moveSeat(chart, key, nextRow, nextCol) {
   const seat = defs.find(s => s.key === key)
   if (!seat) return chart
   const fitted = clampItem(chart, pos.row, pos.col, seat.w || 1, seat.h || 1)
+  const moving = { ...seat, ...fitted, row: fitted.row, col: fitted.col }
+  const targetKeys = seatFootprintCells(moving).map(c => seatKey(c.row, c.col))
+  let working = chartWithoutInteriorBlockers(chart, key, targetKeys)
   const newKey = seatKey(fitted.row, fitted.col)
-  const nextDefs = defs.map(s => (
+  const nextDefs = getSeatDefs(working).map(s => (
     s.key === key
       ? seatDef(fitted.row, fitted.col, {
         ...s,
@@ -473,7 +545,7 @@ export function moveSeat(chart, key, nextRow, nextCol) {
       })
       : s
   ))
-  const assignments = { ...(chart.assignments || {}) }
+  const assignments = { ...(working.assignments || {}) }
   if (newKey !== key) {
     if (assignments[key]) {
       assignments[newKey] = assignments[key]
@@ -483,19 +555,21 @@ export function moveSeat(chart, key, nextRow, nextCol) {
     }
   }
   return {
-    ...setSeatDefs({ ...chart, assignments }, nextDefs),
-    assignments: pruneAssignments({ ...chart, assignments }, nextDefs.map(s => s.key)),
+    ...setSeatDefs({ ...working, assignments }, nextDefs),
+    assignments: pruneAssignments({ ...working, assignments }, nextDefs.map(s => s.key)),
   }
 }
 
 /** Preview / validate a desk move (matches moveSeat commit rules). */
 export function seatDragPosition(chart, key, targetRow, targetCol) {
-  const defs = getSeatDefs(chart)
-  const seat = defs.find(s => s.key === key)
+  const seat = getSeatDefs(chart).find(s => s.key === key)
   if (!seat) return { row: targetRow, col: targetCol, ok: false }
   const fitted = clampItem(chart, targetRow, targetCol, seat.w || 1, seat.h || 1)
-  const newKey = seatKey(fitted.row, fitted.col)
-  if (newKey !== key && defs.some(s => s.key === newKey)) {
+  const moving = { ...seat, ...fitted, row: fitted.row, col: fitted.col }
+  const targetKeys = seatFootprintCells(moving).map(c => seatKey(c.row, c.col))
+  const cleared = chartWithoutInteriorBlockers(chart, key, targetKeys)
+  const occupied = buildSeatMoveOccupancy(cleared, key)
+  if (targetKeys.some(tk => occupied.has(tk))) {
     return { row: seat.row, col: seat.col, ok: false }
   }
   return { row: fitted.row, col: fitted.col, ok: true }
@@ -563,11 +637,12 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
     color: size.color || defaultColorForType(preset.type),
   })
   const footprint = new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
-  const nextChart = {
+  let nextChart = {
     ...chart,
     layout: chart.layout === 'grid' ? 'custom' : chart.layout,
     furniture: [...getFurniture(chart), item],
   }
+  nextChart = removeInteriorOrphanSeatsForFurniture(nextChart, item)
   const seatDefs = getSeatDefs(nextChart).filter(s => !footprint.has(s.key))
   return setSeatDefs(nextChart, seatDefs)
 }
@@ -660,10 +735,11 @@ const DUPLICATE_OFFSETS = [
 function occupiedCellKeys(chart, { skipFurnitureId = null, skipSeatKey = null } = {}) {
   const keys = new Set()
   for (const s of getSeatDefs(chart)) {
-    if (s.key !== skipSeatKey) keys.add(s.key)
+    if (s.key === skipSeatKey) continue
+    for (const c of seatFootprintCells(s)) keys.add(seatKey(c.row, c.col))
   }
   for (const f of getFurniture(chart)) {
-    if (f.id === skipFurnitureId) continue
+    if (f.id === skipFurnitureId || f.outline) continue
     for (const c of furnitureCells(f)) keys.add(seatKey(c.row, c.col))
   }
   return keys
@@ -773,8 +849,9 @@ export function toggleFurnitureCell(chart, furnitureId, row, col) {
 export function convertFurnitureToSeats(chart, furnitureId) {
   const item = getFurniture(chart).find(f => f.id === furnitureId)
   if (!item) return chart
+  let base = removeInteriorOrphanSeatsForFurniture(chart, item)
   const color = item.color || defaultColorForType(item.type)
-  const defs = getSeatDefs(chart)
+  const defs = getSeatDefs(base)
   const byKey = new Map(defs.map(s => [s.key, s]))
   for (const cell of furnitureCells(item)) {
     const key = seatKey(cell.row, cell.col)
@@ -797,7 +874,7 @@ export function convertFurnitureToSeats(chart, furnitureId) {
       ? normalizeFurnitureItem({ ...f, outline: true, color })
       : f
   ))
-  return setSeatDefs({ ...chart, furniture }, [...byKey.values()])
+  return setSeatDefs({ ...base, furniture }, [...byKey.values()])
 }
 
 export function switchLayoutType(chart, layout) {
