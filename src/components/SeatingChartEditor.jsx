@@ -485,7 +485,7 @@ export default function SeatingChartEditor({
           <p className="wb-hub-hint" style={{ margin: 0 }}>
             {editShapeId
               ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
-              : 'Drag to move · Shift+click duplicate · Shift+right-click delete · Delete key removes selection. U-table opens toward the front.'}
+              : 'Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection. U-table opens toward the front.'}
           </p>
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton

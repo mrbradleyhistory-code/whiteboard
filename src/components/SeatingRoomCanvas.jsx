@@ -11,7 +11,11 @@ import {
 
 const CELL = 56
 
-const DESIGN_SHORTCUTS = 'Drag to move · Shift+click duplicate · Shift+right-click delete · Delete key removes selection'
+const DESIGN_SHORTCUTS = 'Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection'
+
+function modClick(e) {
+  return e.ctrlKey || e.metaKey
+}
 
 function furnitureClass(type, outline) {
   const base = (() => {
@@ -31,13 +35,13 @@ function furnitureTooltip(item) {
   const name = item.label || furnitureLabel(item.type)
   const cells = furnitureCells(item).length
   if (item.outline) return `${name} outline · ${cells} cells`
-  return `${name} · ${cells} cells · Shift+click to copy`
+  return `${name} · ${cells} cells · Shift+click copy · Ctrl+click delete`
 }
 
 function seatTooltip(seat, designMode, atTable) {
   if (!designMode) return undefined
   const kind = atTable ? 'Table seat' : 'Desk'
-  return `${kind} (${seat.row}, ${seat.col}) · Shift+click copy · Shift+right-click delete`
+  return `${kind} (${seat.row}, ${seat.col}) · Shift+click copy · Ctrl+click delete`
 }
 
 /**
@@ -118,7 +122,7 @@ export default function SeatingRoomCanvas({
   const onWinUp = (e) => upRef.current?.(e)
 
   const startDrag = (e, payload) => {
-    if (!designMode || editShapeId || e.shiftKey) return
+    if (!designMode || editShapeId || e.shiftKey || modClick(e)) return
     e.preventDefault()
     e.stopPropagation()
     const cell = clientToCell(e.clientX, e.clientY)
@@ -134,15 +138,15 @@ export default function SeatingRoomCanvas({
   }
 
   const handleShiftCopy = (e, action) => {
-    if (!designMode || editShapeId || !e.shiftKey) return false
+    if (!designMode || editShapeId || !e.shiftKey || modClick(e)) return false
     e.preventDefault()
     e.stopPropagation()
     action()
     return true
   }
 
-  const handleShiftDelete = (e, action) => {
-    if (!designMode || editShapeId) return false
+  const handleModDelete = (e, action) => {
+    if (!designMode || editShapeId || !modClick(e)) return false
     e.preventDefault()
     e.stopPropagation()
     action()
@@ -151,7 +155,7 @@ export default function SeatingRoomCanvas({
 
   const handleCanvasPointer = (e) => {
     if (!designMode) return
-    if (e.shiftKey) return
+    if (e.shiftKey || modClick(e)) return
     if (e.target.closest('.wb-room__seat') && !editShapeId) return
     if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
     const { row, col } = clientToCell(e.clientX, e.clientY)
@@ -198,6 +202,7 @@ export default function SeatingRoomCanvas({
     ].filter(Boolean).join(' ')
 
     const onFurniturePointerDown = canEdit ? (e) => {
+      if (handleModDelete(e, () => onDeleteFurniture?.(item.id))) return
       if (handleShiftCopy(e, () => onDuplicateFurniture?.(item.id))) return
       startDrag(e, {
         kind: 'furniture',
@@ -223,12 +228,9 @@ export default function SeatingRoomCanvas({
               height: CELL - 4,
             }}
             onPointerDown={onFurniturePointerDown}
-            onContextMenu={canEdit ? (e) => {
-              if (e.shiftKey) handleShiftDelete(e, () => onDeleteFurniture?.(item.id))
-            } : undefined}
             onClick={(e) => {
               e.stopPropagation()
-              if (designMode && !editShapeId && !e.shiftKey) onSelect?.(item.id)
+              if (designMode && !editShapeId && !e.shiftKey && !modClick(e)) onSelect?.(item.id)
             }}
             onMouseEnter={(e) => {
               if (!designMode) return
@@ -274,9 +276,6 @@ export default function SeatingRoomCanvas({
           className={`wb-room__canvas${designMode ? ' wb-room__canvas--design' : ''}${editShapeId ? ' wb-room__canvas--paint' : ''}`}
           style={{ width, height, backgroundSize: `${CELL}px ${CELL}px` }}
           onPointerDown={handleCanvasPointer}
-          onContextMenu={(e) => {
-            if (designMode) e.preventDefault()
-          }}
           role="presentation"
         >
           {furniture.map(renderFurnitureItem)}
@@ -305,6 +304,7 @@ export default function SeatingRoomCanvas({
                 style={seatStyle}
                 title={tip}
                 onPointerDown={canEdit ? (e) => {
+                  if (handleModDelete(e, () => onDeleteSeat?.(seat.key))) return
                   if (handleShiftCopy(e, () => onDuplicateSeat?.(seat.key))) return
                   startDrag(e, {
                     kind: 'seat',
@@ -314,18 +314,13 @@ export default function SeatingRoomCanvas({
                     col: seat.col,
                   })
                 } : undefined}
-                onContextMenu={canEdit ? (e) => {
-                  if (e.shiftKey) {
-                    handleShiftDelete(e, () => onDeleteSeat?.(seat.key))
-                  }
-                } : undefined}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (editShapeId) {
                     onToggleFurnitureCell?.(editShapeId, seat.row, seat.col)
                     return
                   }
-                  if (designMode && !e.shiftKey) {
+                  if (designMode && !e.shiftKey && !modClick(e)) {
                     onSelect?.(seat.id || seat.key)
                     return
                   }
