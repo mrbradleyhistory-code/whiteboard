@@ -224,7 +224,9 @@ export function normalizeFurnitureItem(raw) {
 
 /** Build seat list from legacy rows/cols/disabled or explicit seatDefs. */
 export function getSeatDefs(chart) {
-  if (Array.isArray(chart?.seatDefs) && chart.seatDefs.length) {
+  // An explicit array (including []) is authoritative. Empty must stay empty —
+  // otherwise deleting the last desk regenerates a full grid.
+  if (Array.isArray(chart?.seatDefs)) {
     return chart.seatDefs
       .map(s => {
         const row = Number(s.row)
@@ -234,6 +236,7 @@ export function getSeatDefs(chart) {
       })
       .filter(Boolean)
   }
+  if (chart?.layout === 'custom') return []
   const seats = []
   const rows = chart?.rows || 5
   const cols = chart?.cols || 6
@@ -899,18 +902,17 @@ export function normalizeSeatingChart(raw, studentIds = null) {
   const cols = Math.max(1, Math.min(24, raw?.cols || (layout === 'custom' ? 14 : 6)))
 
   let seatDefs = []
-  if (Array.isArray(raw?.seatDefs) && raw.seatDefs.length) {
+  if (Array.isArray(raw?.seatDefs)) {
     seatDefs = raw.seatDefs
       .map(s => seatDef(Number(s.row), Number(s.col), s))
       .filter(s => s.row >= 0 && s.row < rows && s.col >= 0 && s.col < cols)
-    // Dedupe by key
     const seen = new Set()
     seatDefs = seatDefs.filter(s => {
       if (seen.has(s.key)) return false
       seen.add(s.key)
       return true
     })
-  } else {
+  } else if (layout !== 'custom') {
     const disabled = new Set(raw?.disabled || [])
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
