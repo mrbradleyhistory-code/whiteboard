@@ -26,8 +26,14 @@ function friendlyAuthError(err, { intent } = {}) {
   if (code === 'auth/operation-not-allowed' && intent === 'email') {
     return 'Enable Email/Password in Firebase Console → Authentication → Sign-in method. That is the sign-in that works inside Cursor’s built-in browser.'
   }
+  if (code === 'auth/too-many-requests' || /too-many-requests/i.test(message)) {
+    return 'Firebase paused sign-in after too many tries (usually from the Google popup failing). Wait 15–30 minutes, then click Create account once if you do not have an email login yet.'
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'That email already has an account. If you previously used Google, click Email a password reset, set a password from the email, then Sign in with email.'
+  }
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-    return 'Email or password is incorrect. Create an account if you have not signed in with email before.'
+    return 'Email or password is incorrect. First time: Create account. If this Gmail already used Google, Email a password reset instead.'
   }
   if (code === 'auth/weak-password') return 'Use a password with at least 6 characters.'
   if (code === 'auth/invalid-email') return 'Enter a valid email address.'
@@ -132,7 +138,12 @@ export default function Auth() {
           await signInWithEmailAndPassword(auth, email.trim(), password)
           return
         } catch (err2) {
-          setAuthError(friendlyAuthError(err2, { intent: 'email' }))
+          const code2 = err2?.code || ''
+          if (code2 === 'auth/invalid-credential' || code2 === 'auth/wrong-password') {
+            setAuthError('That email already exists (often from Google). Use Email a password reset, then Sign in with email.')
+          } else {
+            setAuthError(friendlyAuthError(err2, { intent: 'email' }))
+          }
           setSigningIn(false)
           return
         }
@@ -227,7 +238,7 @@ export default function Auth() {
               <p className="wb-auth__hint" style={{ margin: 0 }}>
                 {useEmulators
                   ? 'Emulator mode: email/password talks to the Auth emulator on this machine.'
-                  : 'First time: Create account. After that, Sign in with email.'}
+                  : 'First time: click Create account (not Sign in). If Firebase says too many requests, wait 15–30 minutes and try once.'}
               </p>
           <input
             className="wb-hub-input"
@@ -252,29 +263,27 @@ export default function Auth() {
           <button
             type="button"
             className="wb-auth__google-btn"
+            onClick={() => signInEmail('register')}
+            disabled={signingIn || !email.trim() || !password}
+          >
+            {signingIn ? 'Working…' : 'Create account'}
+          </button>
+          <button
+            type="button"
+            className="wb-auth__google-btn wb-auth__google-btn--secondary"
             onClick={() => signInEmail('login')}
             disabled={signingIn || !email.trim() || !password}
           >
             {signingIn ? 'Signing in…' : 'Sign in with email'}
           </button>
-          <div className="wb-auth__copy-row">
-            <button
-              type="button"
-              className="wb-auth__link-btn"
-              onClick={() => signInEmail('register')}
-              disabled={signingIn || !email.trim() || !password}
-            >
-              Create account
-            </button>
-            <button
-              type="button"
-              className="wb-auth__link-btn"
-              onClick={sendReset}
-              disabled={signingIn || !email.trim()}
-            >
-              Email a password reset
-            </button>
-          </div>
+          <button
+            type="button"
+            className="wb-auth__link-btn"
+            onClick={sendReset}
+            disabled={signingIn || !email.trim()}
+          >
+            Email a password reset
+          </button>
             </div>
 
             <p className="wb-auth__divider">or Google</p>
