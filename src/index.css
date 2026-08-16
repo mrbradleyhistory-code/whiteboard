@@ -4525,6 +4525,33 @@ input[type='range'].wb-range::-moz-range-thumb {
   box-shadow: var(--wb-shadow-lg);
 }
 
+.wb-auth__google-btn--secondary {
+  min-height: 46px;
+  font-size: 0.95rem;
+  background: var(--wb-surface-muted, #f6f8fa);
+}
+
+.wb-auth__copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.wb-auth__url {
+  font-size: 0.78rem;
+  color: var(--wb-text-muted);
+  background: var(--wb-surface-muted, #f6f8fa);
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wb-auth__link-btn {
   padding: 8px 12px;
   border: none;

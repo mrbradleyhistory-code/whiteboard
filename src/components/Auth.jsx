@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -9,13 +10,21 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { auth, firebaseConfigured, useEmulators } from '../firebaseClient'
+import {
+  popupErrorShouldFallback,
+  preferRedirectSignIn,
+  rememberPreferRedirect,
+} from '../googleAuth'
 
 const googleProvider = new GoogleAuthProvider()
 
 function friendlyAuthError(message) {
   if (!message) return 'Sign-in failed. Please try again.'
+  if (/popup-blocked/i.test(message)) {
+    return 'This browser blocked the Google popup. Use “Sign in with Google in this window” instead (needed in Cursor’s preview).'
+  }
   if (/popup-closed-by-user|cancelled-popup-request/i.test(message)) {
-    return 'Sign-in popup was closed before completing.'
+    return 'Sign-in popup was closed before completing. In Cursor’s built-in browser, use “Sign in with Google in this window”.'
   }
   if (/unauthorized-domain/i.test(message)) {
     return 'Add this site’s domain under Firebase Console → Authentication → Settings → Authorized domains.'
@@ -31,7 +40,16 @@ function friendlyAuthError(message) {
 
 export default function Auth() {
   const [signingIn, setSigningIn] = useState(false)
+  const [finishingRedirect, setFinishingRedirect] = useState(() => {
+    try {
+      return Object.keys(sessionStorage).some(k => k.includes('pendingRedirect'))
+    } catch {
+      return false
+    }
+  })
   const [authError, setAuthError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [useThisWindow, setUseThisWindow] = useState(() => preferRedirectSignIn())
   const [email, setEmail] = useState('teacher@example.com')
   const [password, setPassword] = useState('Password123!')
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
@@ -48,8 +66,38 @@ export default function Auth() {
     }
   }, [])
 
-  const signInGooglePopup = () => finishGoogle(() => signInWithPopup(auth, googleProvider))
-  const signInGoogleRedirect = () => finishGoogle(() => signInWithRedirect(auth, googleProvider))
+  const signInGoogleRedirect = useCallback(() => {
+    rememberPreferRedirect()
+    setUseThisWindow(true)
+    return finishGoogle(() => signInWithRedirect(auth, googleProvider))
+  }, [finishGoogle])
+
+  const signInGooglePopup = useCallback(() => {
+    if (useThisWindow) return signInGoogleRedirect()
+    return finishGoogle(async () => {
+      try {
+        await signInWithPopup(auth, googleProvider)
+      } catch (err) {
+        if (popupErrorShouldFallback(err)) {
+          rememberPreferRedirect()
+          setUseThisWindow(true)
+          await signInWithRedirect(auth, googleProvider)
+          return
+        }
+        throw err
+      }
+    })
+  }, [finishGoogle, signInGoogleRedirect, useThisWindow])
+
+  const copyPageUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setAuthError(`Copy this URL into Chrome or Safari: ${window.location.href}`)
+    }
+  }
 
   const signInDevEmail = async (mode) => {
     setSigningIn(true)
@@ -85,6 +133,18 @@ export default function Auth() {
     return unsub
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    getRedirectResult(auth)
+      .catch((err) => {
+        if (!cancelled) setAuthError(friendlyAuthError(err?.message || String(err)))
+      })
+      .finally(() => {
+        if (!cancelled) setFinishingRedirect(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
   if (!envReady) {
     return (
       <div className="wb-auth">
@@ -116,26 +176,45 @@ export default function Auth() {
         </div>
 
         <div className="wb-auth__actions">
+          {useThisWindow && (
+            <p className="wb-auth__hint">
+              Cursor’s built-in browser blocks Google’s sign-in popup. Continue in this window instead — no popup needed.
+            </p>
+          )}
           <button
             type="button"
             className="wb-auth__google-btn"
-            onClick={signInGooglePopup}
-            disabled={signingIn || useEmulators}
+            onClick={useThisWindow ? signInGoogleRedirect : signInGooglePopup}
+            disabled={signingIn || finishingRedirect || useEmulators}
             title={useEmulators ? 'Google sign-in needs a real Firebase project (not emulators)' : undefined}
           >
             <GoogleIcon />
-            {signingIn ? 'Signing in…' : 'Sign in with Google'}
+            {finishingRedirect
+              ? 'Returning from Google…'
+              : signingIn
+                ? 'Signing in…'
+                : (useThisWindow ? 'Sign in with Google in this window' : 'Sign in with Google')}
           </button>
-          {!useEmulators && (
+          {!useThisWindow && (
             <button
               type="button"
-              className="wb-auth__link-btn"
+              className="wb-auth__google-btn wb-auth__google-btn--secondary"
               onClick={signInGoogleRedirect}
-              disabled={signingIn}
+              disabled={signingIn || finishingRedirect || useEmulators}
+              title={useEmulators ? 'Google sign-in needs a real Firebase project (not emulators)' : undefined}
             >
-              Try redirect sign-in instead
+              Sign in with Google in this window
             </button>
           )}
+          <p className="wb-auth__hint">
+            Cursor’s preview fails at Google’s SSO popup. Use “in this window”, or copy the URL into Chrome / Safari.
+          </p>
+          <div className="wb-auth__copy-row">
+            <code className="wb-auth__url">{origin}</code>
+            <button type="button" className="wb-auth__link-btn" onClick={copyPageUrl}>
+              {copied ? 'Copied' : 'Copy URL'}
+            </button>
+          </div>
         </div>
 
         {useEmulators && (
