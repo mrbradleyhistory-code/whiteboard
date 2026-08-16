@@ -2,9 +2,23 @@ import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 
+const firebaseAuthHost = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'classhub-40881.firebaseapp.com'
+
+export const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
+
+/**
+ * Same-origin authDomain so Google redirect can finish in Cursor’s webview.
+ * Vite/Vercel proxy /__/auth → {project}.firebaseapp.com/__/auth.
+ */
+function resolveAuthDomain() {
+  if (useEmulators) return firebaseAuthHost
+  if (typeof window !== 'undefined' && window.location?.host) return window.location.host
+  return firebaseAuthHost
+}
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'demo-class-launchpad.firebaseapp.com',
+  authDomain: resolveAuthDomain(),
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'demo-class-launchpad',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'demo-class-launchpad.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
@@ -17,16 +31,22 @@ export const firebaseConfigured = !!(
   && import.meta.env.VITE_FIREBASE_APP_ID
 )
 
-export const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
-
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 
+function emulatorHostname() {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return window.location.hostname
+  }
+  return 'localhost'
+}
+
 let emulatorsConnected = false
 if (useEmulators && !emulatorsConnected) {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
-  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  const host = emulatorHostname()
+  connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true })
+  connectFirestoreEmulator(db, host, 8080)
   emulatorsConnected = true
 }
 

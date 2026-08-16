@@ -4563,8 +4563,26 @@ input[type='range'].wb-range::-moz-range-thumb {
   text-underline-offset: 2px;
 }
 
-.wb-auth__hint {
-  margin: 0;
+.wb-auth__banner {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+}
+
+.wb-auth__divider {
+  margin: 18px 0 12px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--wb-text-subtle, #94a3b8);
+}
   font-size: 0.8rem;
   color: var(--wb-text-subtle);
   text-align: center;
