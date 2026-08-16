@@ -177,6 +177,7 @@ export default function Auth() {
   }, [])
 
   if (!envReady) {
+    const hosted = typeof window !== 'undefined' && /\.vercel\.app$/i.test(window.location.hostname)
     return (
       <div className="wb-auth">
         <div className="wb-auth__card">
@@ -184,12 +185,22 @@ export default function Auth() {
             <span className="wb-auth__mark" aria-hidden>L</span>
             <h1 className="wb-auth__title">Class Launchpad</h1>
           </div>
-          <p className="wb-auth__error">
-            Missing Firebase config. Add <code>VITE_FIREBASE_API_KEY</code>,{' '}
-            <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> to{' '}
-            <code>.env.local</code> (see Firebase Console → Project settings → Your apps), then restart{' '}
-            <code>npm run dev</code>. For local emulators set <code>VITE_USE_FIREBASE_EMULATORS=true</code>.
-          </p>
+          {hosted ? (
+            <p className="wb-auth__error">
+              This Vercel preview was built without Firebase keys. In Vercel → Project → Settings →
+              Environment Variables, add <code>VITE_FIREBASE_API_KEY</code>,{' '}
+              <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> for{' '}
+              <strong>Preview</strong> (same values as Production), then <strong>Redeploy</strong>.
+              GitHub login on vercel.com is only Vercel’s preview gate — it is not Class Launchpad sign-in.
+            </p>
+          ) : (
+            <p className="wb-auth__error">
+              Missing Firebase config. Add <code>VITE_FIREBASE_API_KEY</code>,{' '}
+              <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> to{' '}
+              <code>.env.local</code> (see Firebase Console → Project settings → Your apps), then restart{' '}
+              <code>npm run dev</code>. For local emulators set <code>VITE_USE_FIREBASE_EMULATORS=true</code>.
+            </p>
+          )}
         </div>
       </div>
     )
