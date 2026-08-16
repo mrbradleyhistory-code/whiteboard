@@ -10,7 +10,7 @@ import {
   signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
-import { auth, firebaseConfigured, useEmulators } from '../firebaseClient'
+import { allowEmailSignIn, auth, firebaseConfigured, useEmulators } from '../firebaseClient'
 import {
   popupErrorShouldFallback,
   preferRedirectSignIn,
@@ -206,16 +206,18 @@ export default function Auth() {
           </div>
         </div>
 
-        <p className="wb-auth__banner">
-          Cursor’s built-in browser cannot finish Google’s SSO popup. Sign in with email here — no popup.
-        </p>
+        {allowEmailSignIn && (
+          <>
+            <p className="wb-auth__banner">
+              Temporary: Cursor’s built-in browser cannot finish Google’s SSO popup. Use email here while we troubleshoot, then we can turn this off.
+            </p>
 
-        <div className="wb-auth__actions">
-          <p className="wb-auth__hint" style={{ margin: 0 }}>
-            {useEmulators
-              ? 'Emulator mode: email/password talks to the Auth emulator on this machine.'
-              : 'Email/password works inside Cursor. Enable that provider in Firebase if you have not already.'}
-          </p>
+            <div className="wb-auth__actions">
+              <p className="wb-auth__hint" style={{ margin: 0 }}>
+                {useEmulators
+                  ? 'Emulator mode: email/password talks to the Auth emulator on this machine.'
+                  : 'First time: Create account. After that, Sign in with email.'}
+              </p>
           <input
             className="wb-hub-input"
             type="email"
@@ -262,14 +264,16 @@ export default function Auth() {
               Email a password reset
             </button>
           </div>
-        </div>
+            </div>
 
-        <p className="wb-auth__divider">or Google</p>
+            <p className="wb-auth__divider">or Google</p>
+          </>
+        )}
 
         <div className="wb-auth__actions">
           <button
             type="button"
-            className="wb-auth__google-btn wb-auth__google-btn--secondary"
+            className={`wb-auth__google-btn${allowEmailSignIn ? ' wb-auth__google-btn--secondary' : ''}`}
             onClick={useThisWindow ? signInGoogleRedirect : signInGooglePopup}
             disabled={signingIn || finishingRedirect || useEmulators}
             title={useEmulators ? 'Google sign-in needs a real Firebase project (not emulators)' : undefined}
@@ -315,7 +319,10 @@ export default function Auth() {
         <details className="wb-auth__details">
           <summary>Setup checklist</summary>
           <ol>
-            <li>Enable <strong>Email/Password</strong> (required to log in from Cursor’s browser) and <strong>Google</strong> in Firebase Console → Authentication → Sign-in method.</li>
+            {allowEmailSignIn && (
+              <li>Temporary email sign-in: enable <strong>Email/Password</strong> in Firebase Console. Hide later with <code>VITE_ALLOW_EMAIL_SIGNIN=false</code>.</li>
+            )}
+            <li>Enable <strong>Google</strong> in Firebase Console → Authentication → Sign-in method.</li>
             <li>Authorized domains includes <code>{typeof window !== 'undefined' ? window.location.hostname : 'localhost'}</code>.</li>
             <li>For Google-in-this-window, add <code>{handlerUri}</code> as an OAuth authorized redirect URI.</li>
             <li>Copy the web app config into <code>.env.local</code> as <code>VITE_FIREBASE_*</code> vars.</li>

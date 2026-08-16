@@ -6,6 +6,10 @@ const firebaseAuthHost = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'classhub-
 
 export const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
 
+/** Temporary Cursor-browser workaround. Set VITE_ALLOW_EMAIL_SIGNIN=false to hide it. */
+export const allowEmailSignIn =
+  useEmulators || import.meta.env.VITE_ALLOW_EMAIL_SIGNIN !== 'false'
+
 /**
  * Same-origin authDomain so Google redirect can finish in Cursor’s webview.
  * Vite/Vercel proxy /__/auth → {project}.firebaseapp.com/__/auth.
