@@ -58,6 +58,7 @@ export default function SeatingRoomCanvas({
   onMoveFurniture,
   onToggleSeatAt,
   onToggleFurnitureCell,
+  onPlaceFurniture,
   onDuplicateSeat,
   onDuplicateFurniture,
   onDeleteSeat,
@@ -238,6 +239,13 @@ export default function SeatingRoomCanvas({
   const handleCanvasPointer = (e) => {
     if (!designMode) return
     if (e.shiftKey || modClick(e)) return
+    const furnitureTool = placeTool && placeTool !== 'seat'
+    if (furnitureTool) {
+      if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
+      const { row, col } = clientToCell(e.clientX, e.clientY)
+      onPlaceFurniture?.(placeTool, row, col)
+      return
+    }
     if (e.target.closest('.wb-room__seat') && !editShapeId) return
     if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
     const { row, col } = clientToCell(e.clientX, e.clientY)
@@ -392,6 +400,7 @@ export default function SeatingRoomCanvas({
                 onPointerDown={canEdit ? (e) => {
                   if (handleModDelete(e, () => onDeleteSeat?.(seat.key))) return
                   if (handleShiftCopy(e, () => onDuplicateSeat?.(seat.key))) return
+                  if (placeTool && placeTool !== 'seat') return
                   startDrag(e, {
                     kind: 'seat',
                     id: seat.id || seat.key,
@@ -406,6 +415,7 @@ export default function SeatingRoomCanvas({
                     onToggleFurnitureCell?.(editShapeId, seat.row, seat.col)
                     return
                   }
+                  if (placeTool && placeTool !== 'seat') return
                   if (designMode && !e.shiftKey && !modClick(e)) {
                     onSelect?.(seat.id || seat.key)
                     return
