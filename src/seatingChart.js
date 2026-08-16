@@ -201,12 +201,14 @@ export function furnitureCells(item) {
 export function normalizeFurnitureItem(raw) {
   if (!raw || typeof raw !== 'object') return null
   const type = Object.values(FURNITURE_TYPES).includes(raw.type) ? raw.type : FURNITURE_TYPES.RECT
-  const row = Number(raw.row)
-  const col = Number(raw.col)
-  if (!Number.isFinite(row) || !Number.isFinite(col)) return null
   const w = Math.max(1, Math.min(12, Number(raw.w) || 1))
   const h = Math.max(1, Math.min(12, Number(raw.h) || 1))
-  const cells = normalizeCellList(raw.cells, Math.max(0, row), Math.max(0, col), w, h, type)
+  const rawRow = Number(raw.row)
+  const rawCol = Number(raw.col)
+  const fallbackRow = Number.isFinite(rawRow) ? Math.max(0, rawRow) : 0
+  const fallbackCol = Number.isFinite(rawCol) ? Math.max(0, rawCol) : 0
+  const cells = normalizeCellList(raw.cells, fallbackRow, fallbackCol, w, h, type)
+  if (!cells.length) return null
   const bounds = boundsFromCells(cells)
   return {
     id: raw.id || newItemId('furn'),
@@ -629,16 +631,19 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
   const h = size.h || preset.h
   const fitted = clampItem(chart, row, col, w, h)
   const cells = size.cells || defaultCellsForType(preset.type, fitted.row, fitted.col, fitted.w, fitted.h)
-  // Keep cells inside canvas
-  const clipped = cells.filter(c => c.row >= 0 && c.col >= 0 && c.row < (chart.rows || 12) && c.col < (chart.cols || 14))
+  const rows = chart.rows || 12
+  const cols = chart.cols || 14
+  const clipped = cells.filter(c => c.row >= 0 && c.col >= 0 && c.row < rows && c.col < cols)
   const item = normalizeFurnitureItem({
     id: newItemId('furn'),
     type: preset.type,
     label: size.label || preset.label,
+    ...fitted,
     cells: clipped.length ? clipped : defaultCellsForType(preset.type, fitted.row, fitted.col, fitted.w, fitted.h),
     outline: false,
     color: size.color || defaultColorForType(preset.type),
   })
+  if (!item) return chart
   const footprint = new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
   let nextChart = {
     ...chart,

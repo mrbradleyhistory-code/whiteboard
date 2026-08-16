@@ -216,18 +216,16 @@ export default function SeatingChartEditor({
     onChange(next)
   }
 
-  const placeFurniture = (type) => {
-    let base = chart.layout === 'grid' ? switchLayoutType(chart, 'custom') : chart
-    // Prefer front-center for promethean; otherwise near top-left empty-ish area
-    const row = type === FURNITURE_TYPES.PROMETHEAN ? 0 : 1
-    const col = type === FURNITURE_TYPES.PROMETHEAN ? Math.max(0, Math.floor((base.cols - 4) / 2)) : 1
+  const placeFurnitureAt = useCallback((type, row, col) => {
+    const current = chartRef.current
+    const base = current.layout === 'grid' ? switchLayoutType(current, 'custom') : current
     const next = addFurniture(base, type, row, col)
     const added = getFurniture(next).slice(-1)[0]
+    if (!added) return
     onChange(next)
-    setSelectedId(added?.id || null)
-    setPlaceTool(null)
+    setSelectedId(added.id)
     setDesignMode(true)
-  }
+  }, [onChange])
 
   const handleMoveSeat = useCallback((key, row, col) => {
     onChange(moveSeat(chartRef.current, key, row, col))
@@ -511,7 +509,7 @@ export default function SeatingChartEditor({
           <p className="wb-hub-hint" style={{ margin: 0 }}>
             {editShapeId
               ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
-              : 'Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection. U-table opens toward the front.'}
+              : 'Pick Desk or a furniture tool, then click the grid to place. Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection. U-table opens toward the front.'}
           </p>
           <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
             <HubButton
@@ -526,12 +524,13 @@ export default function SeatingChartEditor({
             {FURNITURE_PRESETS.map(p => (
               <HubButton
                 key={p.type}
+                className={placeTool === p.type && !editShapeId ? 'wb-hub-btn--warn' : ''}
                 onClick={() => {
                   setEditShapeId(null)
-                  placeFurniture(p.type)
+                  setPlaceTool(t => (t === p.type ? null : p.type))
                 }}
               >
-                + {p.label}
+                {placeTool === p.type && !editShapeId ? `${p.label} on` : p.label}
               </HubButton>
             ))}
           </div>
@@ -643,6 +642,7 @@ export default function SeatingChartEditor({
         onMoveFurniture={handleMoveFurniture}
         onToggleSeatAt={handleToggleSeatAt}
         onToggleFurnitureCell={handleToggleFurnitureCell}
+        onPlaceFurniture={placeFurnitureAt}
         onDuplicateSeat={handleDuplicateSeat}
         onDuplicateFurniture={handleDuplicateFurniture}
         onDeleteSeat={handleDeleteSeat}
