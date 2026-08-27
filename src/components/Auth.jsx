@@ -1,131 +1,59 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   createUserWithEmailAndPassword,
-  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
-import { allowEmailSignIn, auth, firebaseConfigured, useEmulators } from '../firebaseClient'
-import {
-  popupErrorShouldFallback,
-  preferRedirectSignIn,
-  rememberPreferRedirect,
-} from '../googleAuth'
+import { auth, firebaseConfigured, useEmulators } from '../firebaseClient'
 
 const googleProvider = new GoogleAuthProvider()
 
-function friendlyAuthError(err, { intent } = {}) {
-  const message = err?.message || (typeof err === 'string' ? err : '')
-  const code = err?.code || ''
-  if (!message && !code) return 'Sign-in failed. Please try again.'
-  if (code === 'auth/operation-not-allowed' && intent === 'email') {
-    return 'Enable Email/Password in Firebase Console → Authentication → Sign-in method. That is the sign-in that works inside Cursor’s built-in browser.'
-  }
-  if (code === 'auth/too-many-requests' || /too-many-requests/i.test(message)) {
-    return 'Firebase paused sign-in after too many tries (usually from the Google popup failing). Wait 15–30 minutes, then click Create account once if you do not have an email login yet.'
-  }
-  if (code === 'auth/email-already-in-use') {
-    return 'That email already has an account. If you previously used Google, click Email a password reset, set a password from the email, then Sign in with email.'
-  }
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-    return 'Email or password is incorrect. First time: Create account. If this Gmail already used Google, Email a password reset instead.'
-  }
-  if (code === 'auth/weak-password') return 'Use a password with at least 6 characters.'
-  if (code === 'auth/invalid-email') return 'Enter a valid email address.'
-  if (/popup-blocked/i.test(message)) {
-    return 'This browser blocked the Google popup. Sign in with email below, or use “Sign in with Google in this window”.'
-  }
+function friendlyAuthError(message) {
+  if (!message) return 'Sign-in failed. Please try again.'
   if (/popup-closed-by-user|cancelled-popup-request/i.test(message)) {
-    return 'Google’s popup cannot finish in Cursor’s built-in browser. Sign in with email, or use “in this window” after adding the OAuth redirect URI.'
+    return 'Sign-in popup was closed before completing.'
   }
   if (/unauthorized-domain/i.test(message)) {
     return 'Add this site’s domain under Firebase Console → Authentication → Settings → Authorized domains.'
   }
   if (/operation-not-allowed/i.test(message)) {
-    return 'Enable the Google (and Email/Password) providers in Firebase Console → Authentication → Sign-in method.'
+    return 'Enable the Google provider in Firebase Console → Authentication → Sign-in method.'
   }
   if (/invalid-api-key/i.test(message)) {
     return 'Invalid Firebase API key. Check VITE_FIREBASE_* values in .env.local.'
-  }
-  if (/redirect_uri_mismatch/i.test(message)) {
-    return `Add ${typeof window !== 'undefined' ? window.location.origin : ''}/__/auth/handler as an authorized redirect URI on the Google Cloud OAuth client.`
   }
   return message
 }
 
 export default function Auth() {
   const [signingIn, setSigningIn] = useState(false)
-  const [finishingRedirect, setFinishingRedirect] = useState(() => {
-    try {
-      return Object.keys(sessionStorage).some(k => k.includes('pendingRedirect'))
-    } catch {
-      return false
-    }
-  })
   const [authError, setAuthError] = useState('')
-  const [info, setInfo] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [useThisWindow, setUseThisWindow] = useState(() => preferRedirectSignIn())
-  const [email, setEmail] = useState(useEmulators ? 'teacher@example.com' : '')
-  const [password, setPassword] = useState(useEmulators ? 'Password123!' : '')
+  const [email, setEmail] = useState('teacher@example.com')
+  const [password, setPassword] = useState('Password123!')
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'
   const envReady = firebaseConfigured || useEmulators
-  const handlerUri = `${origin}/__/auth/handler`
 
   const finishGoogle = useCallback(async (fn) => {
     setSigningIn(true)
     setAuthError('')
-    setInfo('')
     try {
       await fn()
     } catch (err) {
-      setAuthError(friendlyAuthError(err))
+      setAuthError(friendlyAuthError(err?.message || String(err)))
       setSigningIn(false)
     }
   }, [])
 
-  const signInGoogleRedirect = useCallback(() => {
-    rememberPreferRedirect()
-    setUseThisWindow(true)
-    return finishGoogle(() => signInWithRedirect(auth, googleProvider))
-  }, [finishGoogle])
+  const signInGooglePopup = () => finishGoogle(() => signInWithPopup(auth, googleProvider))
+  const signInGoogleRedirect = () => finishGoogle(() => signInWithRedirect(auth, googleProvider))
 
-  const signInGooglePopup = useCallback(() => {
-    if (useThisWindow) return signInGoogleRedirect()
-    return finishGoogle(async () => {
-      try {
-        await signInWithPopup(auth, googleProvider)
-      } catch (err) {
-        if (popupErrorShouldFallback(err)) {
-          rememberPreferRedirect()
-          setUseThisWindow(true)
-          await signInWithRedirect(auth, googleProvider)
-          return
-        }
-        throw err
-      }
-    })
-  }, [finishGoogle, signInGoogleRedirect, useThisWindow])
-
-  const copyPageUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setAuthError(`Copy this URL into Chrome or Safari: ${window.location.href}`)
-    }
-  }
-
-  const signInEmail = async (mode) => {
+  const signInDevEmail = async (mode) => {
     setSigningIn(true)
     setAuthError('')
-    setInfo('')
     try {
       if (mode === 'register') {
         await createUserWithEmailAndPassword(auth, email.trim(), password)
@@ -133,41 +61,23 @@ export default function Auth() {
         await signInWithEmailAndPassword(auth, email.trim(), password)
       }
     } catch (err) {
+      // If user already exists, fall back to sign-in on register attempt.
       if (mode === 'register' && /email-already-in-use/i.test(err?.code || err?.message || '')) {
         try {
           await signInWithEmailAndPassword(auth, email.trim(), password)
           return
         } catch (err2) {
-          const code2 = err2?.code || ''
-          if (code2 === 'auth/invalid-credential' || code2 === 'auth/wrong-password') {
-            setAuthError('That email already exists (often from Google). Use Email a password reset, then Sign in with email.')
-          } else {
-            setAuthError(friendlyAuthError(err2, { intent: 'email' }))
-          }
+          setAuthError(friendlyAuthError(err2?.message || String(err2)))
           setSigningIn(false)
           return
         }
       }
-      setAuthError(friendlyAuthError(err, { intent: 'email' }))
+      setAuthError(friendlyAuthError(err?.message || String(err)))
       setSigningIn(false)
     }
   }
 
-  const sendReset = async () => {
-    if (!email.trim()) {
-      setAuthError('Enter your email first, then send a reset link.')
-      return
-    }
-    setAuthError('')
-    setInfo('')
-    try {
-      await sendPasswordResetEmail(auth, email.trim())
-      setInfo('Password reset email sent. Open the link, set a password, then sign in here (in this browser).')
-    } catch (err) {
-      setAuthError(friendlyAuthError(err, { intent: 'email' }))
-    }
-  }
-
+  // Keep signingIn true until auth state flips; clear if still anonymous after a bit.
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) setSigningIn(false)
@@ -175,20 +85,7 @@ export default function Auth() {
     return unsub
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    getRedirectResult(auth)
-      .catch((err) => {
-        if (!cancelled) setAuthError(friendlyAuthError(err))
-      })
-      .finally(() => {
-        if (!cancelled) setFinishingRedirect(false)
-      })
-    return () => { cancelled = true }
-  }, [])
-
   if (!envReady) {
-    const hosted = typeof window !== 'undefined' && /\.vercel\.app$/i.test(window.location.hostname)
     return (
       <div className="wb-auth">
         <div className="wb-auth__card">
@@ -196,22 +93,12 @@ export default function Auth() {
             <span className="wb-auth__mark" aria-hidden>L</span>
             <h1 className="wb-auth__title">Class Launchpad</h1>
           </div>
-          {hosted ? (
-            <p className="wb-auth__error">
-              This Vercel preview was built without Firebase keys. In Vercel → Project → Settings →
-              Environment Variables, add <code>VITE_FIREBASE_API_KEY</code>,{' '}
-              <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> for{' '}
-              <strong>Preview</strong> (same values as Production), then <strong>Redeploy</strong>.
-              GitHub login on vercel.com is only Vercel’s preview gate — it is not Class Launchpad sign-in.
-            </p>
-          ) : (
-            <p className="wb-auth__error">
-              Missing Firebase config. Add <code>VITE_FIREBASE_API_KEY</code>,{' '}
-              <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> to{' '}
-              <code>.env.local</code> (see Firebase Console → Project settings → Your apps), then restart{' '}
-              <code>npm run dev</code>. For local emulators set <code>VITE_USE_FIREBASE_EMULATORS=true</code>.
-            </p>
-          )}
+          <p className="wb-auth__error">
+            Missing Firebase config. Add <code>VITE_FIREBASE_API_KEY</code>,{' '}
+            <code>VITE_FIREBASE_PROJECT_ID</code>, and <code>VITE_FIREBASE_APP_ID</code> to{' '}
+            <code>.env.local</code> (see Firebase Console → Project settings → Your apps), then restart{' '}
+            <code>npm run dev</code>. For local emulators set <code>VITE_USE_FIREBASE_EMULATORS=true</code>.
+          </p>
         </div>
       </div>
     )
@@ -228,107 +115,72 @@ export default function Auth() {
           </div>
         </div>
 
-        {allowEmailSignIn && (
-          <>
-            <p className="wb-auth__banner">
-              Temporary: Cursor’s built-in browser cannot finish Google’s SSO popup. Use email here while we troubleshoot, then we can turn this off.
-            </p>
-
-            <div className="wb-auth__actions">
-              <p className="wb-auth__hint" style={{ margin: 0 }}>
-                {useEmulators
-                  ? 'Emulator mode: email/password talks to the Auth emulator on this machine.'
-                  : 'First time: click Create account (not Sign in). If Firebase says too many requests, wait 15–30 minutes and try once.'}
-              </p>
-          <input
-            className="wb-hub-input"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            aria-label="Email"
-            autoComplete="username"
-            style={{ width: '100%' }}
-          />
-          <input
-            className="wb-hub-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            aria-label="Password"
-            autoComplete="current-password"
-            style={{ width: '100%' }}
-          />
-          <button
-            type="button"
-            className="wb-auth__google-btn"
-            onClick={() => signInEmail('register')}
-            disabled={signingIn || !email.trim() || !password}
-          >
-            {signingIn ? 'Working…' : 'Create account'}
-          </button>
-          <button
-            type="button"
-            className="wb-auth__google-btn wb-auth__google-btn--secondary"
-            onClick={() => signInEmail('login')}
-            disabled={signingIn || !email.trim() || !password}
-          >
-            {signingIn ? 'Signing in…' : 'Sign in with email'}
-          </button>
-          <button
-            type="button"
-            className="wb-auth__link-btn"
-            onClick={sendReset}
-            disabled={signingIn || !email.trim()}
-          >
-            Email a password reset
-          </button>
-            </div>
-
-            <p className="wb-auth__divider">or Google</p>
-          </>
-        )}
-
         <div className="wb-auth__actions">
           <button
             type="button"
-            className={`wb-auth__google-btn${allowEmailSignIn ? ' wb-auth__google-btn--secondary' : ''}`}
-            onClick={useThisWindow ? signInGoogleRedirect : signInGooglePopup}
-            disabled={signingIn || finishingRedirect || useEmulators}
+            className="wb-auth__google-btn"
+            onClick={signInGooglePopup}
+            disabled={signingIn || useEmulators}
             title={useEmulators ? 'Google sign-in needs a real Firebase project (not emulators)' : undefined}
           >
             <GoogleIcon />
-            {finishingRedirect
-              ? 'Returning from Google…'
-              : signingIn
-                ? 'Signing in…'
-                : (useThisWindow ? 'Sign in with Google in this window' : 'Sign in with Google')}
+            {signingIn ? 'Signing in…' : 'Sign in with Google'}
           </button>
-          {!useThisWindow && (
+          {!useEmulators && (
             <button
               type="button"
               className="wb-auth__link-btn"
               onClick={signInGoogleRedirect}
-              disabled={signingIn || finishingRedirect || useEmulators}
+              disabled={signingIn}
             >
-              Try Google in this window
+              Try redirect sign-in instead
             </button>
           )}
-          <p className="wb-auth__hint">
-            Google in Cursor needs a same-window redirect. Add <code>{handlerUri}</code> as an authorized
-            redirect URI on the Google Cloud OAuth client if that flow errors.
-          </p>
-          <div className="wb-auth__copy-row">
-            <code className="wb-auth__url">{origin}</code>
-            <button type="button" className="wb-auth__link-btn" onClick={copyPageUrl}>
-              {copied ? 'Copied' : 'Copy URL'}
-            </button>
-          </div>
         </div>
 
+        {useEmulators && (
+          <div className="wb-auth__actions" style={{ marginTop: 12 }}>
+            <p className="wb-auth__hint">
+              Emulator mode: use email/password (Auth emulator). Google OAuth needs a real Firebase project.
+            </p>
+            <input
+              className="wb-hub-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              aria-label="Dev email"
+              style={{ width: '100%' }}
+            />
+            <input
+              className="wb-hub-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              aria-label="Dev password"
+              style={{ width: '100%' }}
+            />
+            <button
+              type="button"
+              className="wb-auth__google-btn"
+              onClick={() => signInDevEmail('login')}
+              disabled={signingIn}
+            >
+              {signingIn ? 'Signing in…' : 'Dev sign in'}
+            </button>
+            <button
+              type="button"
+              className="wb-auth__link-btn"
+              onClick={() => signInDevEmail('register')}
+              disabled={signingIn}
+            >
+              Create emulator account
+            </button>
+          </div>
+        )}
+
         {signingIn && <p className="wb-auth__status">Signing in…</p>}
-        {info && <p className="wb-auth__status">{info}</p>}
 
         {authError && (
           <div className="wb-auth__alert" role="alert">
@@ -339,12 +191,8 @@ export default function Auth() {
         <details className="wb-auth__details">
           <summary>Setup checklist</summary>
           <ol>
-            {allowEmailSignIn && (
-              <li>Temporary email sign-in: enable <strong>Email/Password</strong> in Firebase Console. Hide later with <code>VITE_ALLOW_EMAIL_SIGNIN=false</code>.</li>
-            )}
-            <li>Enable <strong>Google</strong> in Firebase Console → Authentication → Sign-in method.</li>
-            <li>Authorized domains includes <code>{typeof window !== 'undefined' ? window.location.hostname : 'localhost'}</code>.</li>
-            <li>For Google-in-this-window, add <code>{handlerUri}</code> as an OAuth authorized redirect URI.</li>
+            <li>Create a Firebase project and enable <strong>Google</strong> (and optionally Email/Password for emulators).</li>
+            <li>Firebase Console → Authentication → Settings → Authorized domains includes <code>{typeof window !== 'undefined' ? window.location.hostname : 'localhost'}</code>.</li>
             <li>Copy the web app config into <code>.env.local</code> as <code>VITE_FIREBASE_*</code> vars.</li>
             <li>Deploy <code>firestore.rules</code> (or use <code>npm run emulators</code> locally).</li>
             <li>Origin: <code>{origin}</code></li>

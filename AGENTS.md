@@ -19,7 +19,7 @@ Vite + React 18 (JSX, no TypeScript) classroom toolkit (whiteboards, lessons, fl
 - **Phone / other devices cannot reach this cloud VM’s localhost.** Use the Vercel deploy for remote use, or a public tunnel.
 
 ### Auth notes
-- Production sign-in: **Google** (popup in Chrome; same-window redirect in Cursor via `/__/auth` proxy). **Temporary email/password** is on while troubleshooting Cursor’s browser (`VITE_ALLOW_EMAIL_SIGNIN` defaults on; set `false` to hide). Emulator mode uses email against the Auth emulator (`localhost`, not `127.0.0.1`).
+- Production sign-in: **Google** via Firebase Auth (`signInWithPopup` / redirect fallback).
 - Emulator mode shows an email/password **Dev sign in** form (Auth emulator). Google OAuth does not work against the Auth emulator.
 - Enable Google provider + add authorized domains (`localhost`, your Vercel host) in Firebase Console for real projects. Deploy `firestore.rules`.
 
