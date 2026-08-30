@@ -610,19 +610,57 @@ function translateFurnitureCells(chart, item, targetRow, targetCol) {
   }
 }
 
+export function furnitureOverlapsOthers(chart, item, { skipId = null } = {}) {
+  if (!item || item.outline) return false
+  const keys = new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
+  for (const other of getFurniture(chart)) {
+    if (other.id === skipId || other.id === item.id || other.outline) continue
+    if (furnitureCells(other).some(c => keys.has(seatKey(c.row, c.col)))) return true
+  }
+  return false
+}
+
+function applyFurnitureCells(chart, id, cells, { dRow = 0, dCol = 0 } = {}) {
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item) return chart
+  const nextItem = normalizeFurnitureItem({ ...item, cells })
+  if (!nextItem) return chart
+  if (!item.outline && furnitureOverlapsOthers(chart, nextItem, { skipId: id })) return chart
+
+  let next = updateFurniture(chart, id, { cells: nextItem.cells })
+  if (item.outline && (dRow || dCol)) {
+    const rows = next.rows || 12
+    const cols = next.cols || 14
+    const defs = getSeatDefs(next).map(s => {
+      if (s.tableId !== id) return s
+      const row = Math.max(0, Math.min(rows - 1, s.row + dRow))
+      const col = Math.max(0, Math.min(cols - 1, s.col + dCol))
+      return seatDef(row, col, { ...s, id: s.id })
+    })
+    return setSeatDefs(next, defs)
+  }
+  if (item.outline) return next
+  next = removeInteriorOrphanSeatsForFurniture(next, nextItem)
+  const footprint = new Set(furnitureCells(nextItem).map(c => seatKey(c.row, c.col)))
+  return setSeatDefs(next, getSeatDefs(next).filter(s => !footprint.has(s.key)))
+}
+
 /** Preview furniture drag so the canvas matches moveFurniture commit. */
 export function furnitureDragOrigin(chart, id, targetRow, targetCol) {
   const item = getFurniture(chart).find(f => f.id === id)
-  if (!item) return { row: 0, col: 0, dRow: 0, dCol: 0 }
-  return translateFurnitureCells(chart, item, targetRow, targetCol)
+  if (!item) return { row: 0, col: 0, dRow: 0, dCol: 0, ok: false }
+  const origin = translateFurnitureCells(chart, item, targetRow, targetCol)
+  const nextItem = normalizeFurnitureItem({ ...item, cells: origin.cells })
+  const ok = !!nextItem && (item.outline || !furnitureOverlapsOthers(chart, nextItem, { skipId: id }))
+  return { ...origin, ok }
 }
 
 export function moveFurniture(chart, id, nextRow, nextCol) {
   const item = getFurniture(chart).find(f => f.id === id)
   if (!item) return chart
-  const { cells, dRow, dCol } = translateFurnitureCells(chart, item, nextRow, nextCol)
-  if (!dRow && !dCol) return chart
-  return updateFurniture(chart, id, { cells })
+  const origin = translateFurnitureCells(chart, item, nextRow, nextCol)
+  if (!origin.dRow && !origin.dCol) return chart
+  return applyFurnitureCells(chart, id, origin.cells, { dRow: origin.dRow, dCol: origin.dCol })
 }
 
 export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
@@ -644,6 +682,7 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
     color: size.color || defaultColorForType(preset.type),
   })
   if (!item) return chart
+  if (furnitureOverlapsOthers(chart, item)) return chart
   const footprint = new Set(furnitureCells(item).map(c => seatKey(c.row, c.col)))
   let nextChart = {
     ...chart,
@@ -653,6 +692,39 @@ export function addFurniture(chart, type, row = 0, col = 0, size = {}) {
   nextChart = removeInteriorOrphanSeatsForFurniture(nextChart, item)
   const seatDefs = getSeatDefs(nextChart).filter(s => !footprint.has(s.key))
   return setSeatDefs(nextChart, seatDefs)
+}
+
+/** Rotate furniture 90° clockwise, keeping it on the canvas. */
+export function rotateFurniture(chart, id) {
+  const item = getFurniture(chart).find(f => f.id === id)
+  if (!item || item.outline) return chart
+  const b = boundsFromCells(furnitureCells(item))
+  const rotated = furnitureCells(item).map(c => ({
+    row: b.row + (c.col - b.col),
+    col: b.col + (b.h - 1 - (c.row - b.row)),
+  }))
+  return applyFurnitureCells(chart, id, shiftCellsOntoCanvas(rotated, chart))
+}
+
+/** Fill every empty cell with a desk; keeps furniture in place. */
+export function fillEmptyCellsWithDesks(chart) {
+  const occupied = occupiedCellKeys(chart)
+  const defs = [...getSeatDefs(chart)]
+  const rows = chart.rows || 5
+  const cols = chart.cols || 6
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const key = seatKey(row, col)
+      if (occupied.has(key)) continue
+      defs.push(seatDef(row, col))
+    }
+  }
+  return setSeatDefs({ ...chart, layout: 'custom' }, defs)
+}
+
+/** Remove desks only; furniture stays. */
+export function clearDesks(chart) {
+  return setSeatDefs(chart, [])
 }
 
 /** Set color on furniture; also retints linked table seats. */
@@ -929,11 +1001,13 @@ export function normalizeSeatingChart(raw, studentIds = null) {
 
   const furniture = (Array.isArray(raw?.furniture) ? raw.furniture : [])
     .map(normalizeFurnitureItem)
-    .filter(f => f && f.row < rows && f.col < cols)
+    .filter(Boolean)
     .map(f => {
-      const fitted = clampItem({ rows, cols }, f.row, f.col, f.w, f.h)
-      return { ...f, ...fitted }
+      const cells = furnitureCells(f).filter(c => c.row >= 0 && c.col >= 0 && c.row < rows && c.col < cols)
+      if (!cells.length) return null
+      return normalizeFurnitureItem({ ...f, cells })
     })
+    .filter(Boolean)
 
   const keys = new Set(seatDefs.map(s => s.key))
   const assignments = {}
@@ -1196,15 +1270,12 @@ export const SEATING_CHART_NAME_PRESETS = [
 
 /**
  * Full room wipe: empty desks/furniture/assignments.
- * Keeps canvas size; custom rooms stay custom, grids stay grids.
+ * Keeps canvas size and switches to an empty custom room.
  */
 export function wipeSeatingChart(chart) {
   const rows = Math.max(1, chart?.rows || 5)
   const cols = Math.max(1, chart?.cols || 6)
-  if (chart?.layout === 'custom') {
-    return createCustomSeatingChart(rows, cols)
-  }
-  return createDefaultSeatingChart(rows, cols, 'grid')
+  return createCustomSeatingChart(rows, cols)
 }
 
 /** Insert or replace a named snapshot in the saved list. */

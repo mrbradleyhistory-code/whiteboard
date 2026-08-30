@@ -13,8 +13,6 @@ import {
 
 const CELL = 56
 
-const DESIGN_SHORTCUTS = 'Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection'
-
 function modClick(e) {
   return e.ctrlKey || e.metaKey
 }
@@ -33,17 +31,21 @@ function furnitureClass(type, outline) {
   return outline ? `${base} wb-room__item--outline` : base
 }
 
-function furnitureTooltip(item) {
+function furnitureTooltip(item, designMode) {
   const name = item.label || furnitureLabel(item.type)
-  const cells = furnitureCells(item).length
-  if (item.outline) return `${name} outline · ${cells} cells`
-  return `${name} · ${cells} cells · Shift+click copy · Ctrl+click delete`
+  if (!designMode) return `${name}`
+  if (item.outline) return `${name} outline · drag to move seats with it`
+  return `${name} · drag to move · Shift+click copy · Ctrl+click delete`
 }
 
 function seatTooltip(seat, designMode, atTable) {
   if (!designMode) return undefined
   const kind = atTable ? 'Table seat' : 'Desk'
-  return `${kind} (${seat.row}, ${seat.col}) · Shift+click copy · Ctrl+click delete`
+  return `${kind} · drag to move · Shift+click copy · Ctrl+click delete`
+}
+
+function isFurnitureTarget(target) {
+  return !!target?.closest?.('.wb-room__furniture-cell, .wb-room__furniture-hit')
 }
 
 /**
@@ -67,7 +69,7 @@ export default function SeatingRoomCanvas({
   onSeatDrop,
   onDragOverSeat,
   studentName,
-  placeTool = null,
+  placeTool = 'select',
   editShapeId = null,
 }) {
   const wrapRef = useRef(null)
@@ -88,6 +90,8 @@ export default function SeatingRoomCanvas({
   const furniture = getFurniture(chart)
   const width = chart.cols * CELL
   const height = chart.rows * CELL
+  const placingFurniture = designMode && placeTool && placeTool !== 'select' && placeTool !== 'seat' && !editShapeId
+  const placingDesk = designMode && placeTool === 'seat' && !editShapeId
 
   const clientToCell = useCallback((clientX, clientY) => {
     const el = wrapRef.current
@@ -129,6 +133,7 @@ export default function SeatingRoomCanvas({
       col: origin.col,
       dRow: origin.dRow,
       dCol: origin.dCol,
+      ok: origin.ok,
     })
   }, [clientToCell])
 
@@ -152,7 +157,7 @@ export default function SeatingRoomCanvas({
       if (pos.ok) onMoveSeatRef.current?.(drag.key, pos.row, pos.col)
     } else {
       const origin = furnitureDragOrigin(currentChart, drag.id, targetRow, targetCol)
-      if (origin.dRow || origin.dCol) {
+      if (origin.ok && (origin.dRow || origin.dCol)) {
         onMoveFurnitureRef.current?.(drag.id, origin.row, origin.col)
       }
     }
@@ -206,13 +211,8 @@ export default function SeatingRoomCanvas({
         col: payload.col,
         dRow: 0,
         dCol: 0,
+        ok: true,
       })
-    }
-
-    try {
-      e.currentTarget.setPointerCapture?.(e.pointerId)
-    } catch {
-      // ignore capture failures
     }
 
     window.addEventListener('pointermove', windowHandlersRef.current.move)
@@ -239,22 +239,22 @@ export default function SeatingRoomCanvas({
   const handleCanvasPointer = (e) => {
     if (!designMode) return
     if (e.shiftKey || modClick(e)) return
-    const furnitureTool = placeTool && placeTool !== 'seat'
-    if (furnitureTool) {
-      if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
-      const { row, col } = clientToCell(e.clientX, e.clientY)
-      onPlaceFurniture?.(placeTool, row, col)
-      return
-    }
+    if (isFurnitureTarget(e.target) && !editShapeId) return
     if (e.target.closest('.wb-room__seat') && !editShapeId) return
-    if (e.target.closest('.wb-room__furniture-cell') && !editShapeId) return
     const { row, col } = clientToCell(e.clientX, e.clientY)
     if (editShapeId) {
       onToggleFurnitureCell?.(editShapeId, row, col)
       return
     }
-    if (placeTool === 'seat') onToggleSeatAt?.(row, col)
-    else if (!e.target.closest('.wb-room__furniture-cell, .wb-room__seat')) onSelect?.(null)
+    if (placingFurniture) {
+      onPlaceFurniture?.(placeTool, row, col)
+      return
+    }
+    if (placingDesk) {
+      onToggleSeatAt?.(row, col)
+      return
+    }
+    onSelect?.(null)
   }
 
   const posStyle = (row, col, w = 1, h = 1, preview) => {
@@ -270,17 +270,21 @@ export default function SeatingRoomCanvas({
 
   const previewDelta = (item) => {
     if (!(dragPreview?.id === item.id && dragPreview.kind === 'furniture')) {
-      return { dRow: 0, dCol: 0 }
+      return { dRow: 0, dCol: 0, ok: true }
     }
-    return { dRow: dragPreview.dRow ?? 0, dCol: dragPreview.dCol ?? 0 }
+    return {
+      dRow: dragPreview.dRow ?? 0,
+      dCol: dragPreview.dCol ?? 0,
+      ok: dragPreview.ok !== false,
+    }
   }
 
   const renderFurnitureItem = (item) => {
     const cells = furnitureCells(item)
-    const { dRow, dCol } = previewDelta(item)
+    const { dRow, dCol, ok } = previewDelta(item)
     const selected = selectedId === item.id
     const editing = editShapeId === item.id
-    const canEdit = designMode && !item.outline && !editShapeId
+    const canMove = designMode && !editShapeId
     const fClass = furnitureClass(item.type, item.outline)
     const colorStyle = seatingColorStyle(item.color, { outline: !!item.outline })
     const cellClass = [
@@ -291,9 +295,11 @@ export default function SeatingRoomCanvas({
       selected ? 'wb-room__poly--selected' : '',
       item.outline ? 'wb-room__poly--outline' : '',
       editing ? 'wb-room__poly--editing' : '',
+      !ok ? 'wb-room__poly--blocked' : '',
+      canMove ? 'wb-room__furniture-cell--movable' : '',
     ].filter(Boolean).join(' ')
 
-    const onFurniturePointerDown = canEdit ? (e) => {
+    const onFurniturePointerDown = canMove ? (e) => {
       if (handleModDelete(e, () => onDeleteFurniture?.(item.id))) return
       if (handleShiftCopy(e, () => onDuplicateFurniture?.(item.id))) return
       startDrag(e, {
@@ -306,6 +312,17 @@ export default function SeatingRoomCanvas({
 
     return (
       <Fragment key={item.id}>
+        <div
+          className={`wb-room__furniture-hit${selected ? ' wb-room__furniture-hit--selected' : ''}${canMove ? ' wb-room__furniture-hit--movable' : ''}`}
+          data-furniture-id={item.id}
+          style={{
+            left: (item.col + dCol) * CELL,
+            top: (item.row + dRow) * CELL,
+            width: Math.max(CELL, item.w * CELL),
+            height: Math.max(CELL, item.h * CELL),
+          }}
+          onPointerDown={onFurniturePointerDown}
+        />
         {cells.map(cell => (
           <div
             key={`${item.id}-${cell.row}-${cell.col}`}
@@ -329,11 +346,11 @@ export default function SeatingRoomCanvas({
               setHoverTip({
                 x: e.clientX + 12,
                 y: e.clientY + 12,
-                text: furnitureTooltip(item),
+                text: furnitureTooltip(item, designMode),
               })
             }}
             onMouseLeave={() => setHoverTip(null)}
-            title={designMode ? furnitureTooltip(item) : undefined}
+            title={designMode ? furnitureTooltip(item, designMode) : undefined}
           />
         ))}
         <div
@@ -341,7 +358,7 @@ export default function SeatingRoomCanvas({
           style={{
             left: (item.col + dCol) * CELL + 4,
             top: (item.row + dRow) * CELL + 4,
-            zIndex: selected ? 5 : 4,
+            zIndex: selected ? 6 : 4,
           }}
         >
           {item.outline ? `${item.label || furnitureLabel(item.type)} (outline)` : (item.label || furnitureLabel(item.type))}
@@ -350,14 +367,15 @@ export default function SeatingRoomCanvas({
     )
   }
 
+  const canvasMode = editShapeId
+    ? 'paint'
+    : placingFurniture || placingDesk
+      ? 'place'
+      : 'select'
+
   return (
     <div className="wb-room">
       <div className="wb-room__front">↑ Front of room</div>
-      {designMode && !editShapeId && (
-        <p className="wb-room__shortcuts" title={DESIGN_SHORTCUTS}>
-          {DESIGN_SHORTCUTS}
-        </p>
-      )}
       {hoverTip && designMode && (
         <div className="wb-room__tooltip" style={{ left: hoverTip.x, top: hoverTip.y }} role="tooltip">
           {hoverTip.text}
@@ -365,7 +383,7 @@ export default function SeatingRoomCanvas({
       )}
       <div className="wb-room__scroll" ref={wrapRef}>
         <div
-          className={`wb-room__canvas${designMode ? ' wb-room__canvas--design' : ''}${editShapeId ? ' wb-room__canvas--paint' : ''}`}
+          className={`wb-room__canvas wb-room__canvas--${canvasMode}${designMode ? ' wb-room__canvas--design' : ''}${editShapeId ? ' wb-room__canvas--paint' : ''}`}
           style={{ width, height, backgroundSize: `${CELL}px ${CELL}px` }}
           onPointerDown={handleCanvasPointer}
           role="presentation"
@@ -394,13 +412,13 @@ export default function SeatingRoomCanvas({
               <button
                 key={seat.key}
                 type="button"
-                className={`wb-room__seat${studentId ? ' wb-room__seat--filled' : ''}${designMode ? ' wb-room__seat--design' : ''}${selected ? ' wb-room__seat--selected' : ''}${preview ? ' wb-room__seat--dragging' : ''}${atTable ? ' wb-room__seat--table' : ''}${colorId ? ' wb-room__seat--tinted' : ''}`}
+                className={`wb-room__seat${studentId ? ' wb-room__seat--filled' : ''}${designMode ? ' wb-room__seat--design' : ''}${selected ? ' wb-room__seat--selected' : ''}${preview ? ' wb-room__seat--dragging' : ''}${preview && preview.ok === false ? ' wb-room__seat--blocked' : ''}${atTable ? ' wb-room__seat--table' : ''}${colorId ? ' wb-room__seat--tinted' : ''}`}
                 style={seatStyle}
                 title={tip}
                 onPointerDown={canEdit ? (e) => {
+                  e.stopPropagation()
                   if (handleModDelete(e, () => onDeleteSeat?.(seat.key))) return
                   if (handleShiftCopy(e, () => onDuplicateSeat?.(seat.key))) return
-                  if (placeTool && placeTool !== 'seat') return
                   startDrag(e, {
                     kind: 'seat',
                     id: seat.id || seat.key,
@@ -415,7 +433,6 @@ export default function SeatingRoomCanvas({
                     onToggleFurnitureCell?.(editShapeId, seat.row, seat.col)
                     return
                   }
-                  if (placeTool && placeTool !== 'seat') return
                   if (designMode && !e.shiftKey && !modClick(e)) {
                     onSelect?.(seat.id || seat.key)
                     return

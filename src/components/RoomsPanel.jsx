@@ -4,7 +4,8 @@ import {
   saveClassData,
 } from '../localClassData'
 import {
-  createDefaultSeatingChart,
+  createCustomSeatingChart,
+  getFurniture,
   listSeats,
   stripAssignments,
   upsertRoomLayout,
@@ -44,7 +45,7 @@ export default function RoomsPanel({ userId }) {
     persist(prev => {
       const { list, entry } = upsertRoomLayout(prev.roomLayouts || [], {
         name: `Room ${(prev.roomLayouts?.length || 0) + 1}`,
-        layout: createDefaultSeatingChart(),
+        layout: createCustomSeatingChart(10, 12),
       })
       setActiveRoomId(entry.id)
       return { ...prev, roomLayouts: list }
@@ -88,7 +89,7 @@ export default function RoomsPanel({ userId }) {
   }
 
   return (
-    <HubPanel title="Rooms" description="Design physical room layouts once, then reuse them for any class.">
+    <HubPanel title="Rooms" lead="Design desks and furniture once, then reuse the room in any class.">
       <HubToolbar>
         <HubButton variant="primary" onClick={addRoom}>New room</HubButton>
       </HubToolbar>
@@ -96,7 +97,7 @@ export default function RoomsPanel({ userId }) {
       {!data.roomLayouts?.length ? (
         <HubEmpty
           title="No rooms yet"
-          description="Create a room layout for your classroom, then assign it to classes under Class tools."
+          description="Create a room, place desks and furniture, then assign it to classes under Class tools."
         />
       ) : (
         <div className="wb-rooms">
@@ -112,7 +113,7 @@ export default function RoomsPanel({ userId }) {
                   </span>
                   <span className="wb-hub-saved-list__meta">
                     {room.layout.rows}×{room.layout.cols} · {seats} desks
-                    {room.layout.layout === 'custom' ? ' · custom' : ''}
+                    {getFurniture(room.layout).length ? ` · ${getFurniture(room.layout).length} furniture` : ''}
                   </span>
                   <HubButton variant={isActive ? 'primary' : undefined} onClick={() => setActiveRoomId(room.id)}>
                     {isActive ? 'Editing' : 'Edit'}
@@ -142,10 +143,7 @@ export default function RoomsPanel({ userId }) {
                 onChange={layout => updateRoomLayout(activeRoom.id, layout)}
                 hidePresetLibrary
                 hideAssignments
-                onWipe={() => {
-                  if (!confirm('Wipe this room? Desks and furniture will be removed.')) return
-                  updateRoomLayout(activeRoom.id, wipeSeatingChart(activeRoom.layout))
-                }}
+                onWipe={() => updateRoomLayout(activeRoom.id, wipeSeatingChart(activeRoom.layout))}
               />
             </div>
           )}

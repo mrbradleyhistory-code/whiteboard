@@ -3,7 +3,8 @@ import { createRng } from '../grouping'
 import {
   addFurniture,
   addSeatAt,
-  applyGridLayout,
+  clearDesks,
+  fillEmptyCellsWithDesks,
   autoFillRemainingSeating,
   autoFillSeating,
   assignedCount,
@@ -23,13 +24,13 @@ import {
   removeSeat,
   resizeCanvas,
   resizeFurniture,
+  rotateFurniture,
   seatKey,
   SEATING_CHART_NAME_PRESETS,
   SEATING_COLOR_PALETTE,
   setFurnitureColor,
   setSeatColor,
   studentAtSeat,
-  switchLayoutType,
   toggleFurnitureCell,
   unassignedStudents,
   wipeSeatingChart,
@@ -72,23 +73,19 @@ export default function SeatingChartEditor({
 }) {
   const [layoutRows, setLayoutRows] = useState(chart.rows)
   const [layoutCols, setLayoutCols] = useState(chart.cols)
-  const [designMode, setDesignMode] = useState(false)
-  const [placeTool, setPlaceTool] = useState('seat')
+  const [placeTool, setPlaceTool] = useState('select')
   const [selectedId, setSelectedId] = useState(null)
   const [editShapeId, setEditShapeId] = useState(null)
   const [seed, setSeed] = useState('')
   const [fillError, setFillError] = useState('')
+  const [toolHint, setToolHint] = useState('')
   const [dragStudentId, setDragStudentId] = useState(null)
   const [pickStudentId, setPickStudentId] = useState(null)
   const [saveName, setSaveName] = useState('')
   const chartRef = useRef(chart)
   chartRef.current = chart
 
-  useEffect(() => {
-    if (layoutLocked && designMode) setDesignMode(false)
-  }, [layoutLocked, designMode])
-
-  const effectiveDesignMode = layoutLocked ? false : designMode
+  const effectiveDesignMode = !layoutLocked
 
   const activeEntry = savedCharts.find(e => e.id === activeChartId) || null
 
@@ -101,7 +98,6 @@ export default function SeatingChartEditor({
     if (activeEntry?.name) setSaveName(activeEntry.name)
   }, [activeEntry?.id, activeEntry?.name])
 
-  const isCustom = chart.layout === 'custom'
   const seats = listSeats(chart)
   const furniture = getFurniture(chart)
   const seatKeys = new Set(seats.map(s => s.key))
@@ -115,15 +111,9 @@ export default function SeatingChartEditor({
   const studentName = (id) => students.find(s => s.id === id)?.name || id
 
   const applyCanvasSize = () => {
-    onChange(isCustom ? resizeCanvas(chart, layoutRows, layoutCols) : applyGridLayout(chart, layoutRows, layoutCols))
+    onChange(resizeCanvas(chart, layoutRows, layoutCols))
     setFillError('')
-    setSelectedId(null)
-  }
-
-  const setLayout = (layout) => {
-    setDesignMode(layout === 'custom')
-    onChange(switchLayoutType(chart, layout))
-    setFillError('')
+    setToolHint('')
     setSelectedId(null)
   }
 
@@ -145,7 +135,6 @@ export default function SeatingChartEditor({
     setSelectedId(null)
     setEditShapeId(null)
     setPickStudentId(null)
-    setDesignMode(false)
   }
 
   const handleWipe = () => {
@@ -218,13 +207,16 @@ export default function SeatingChartEditor({
 
   const placeFurnitureAt = useCallback((type, row, col) => {
     const current = chartRef.current
-    const base = current.layout === 'grid' ? switchLayoutType(current, 'custom') : current
-    const next = addFurniture(base, type, row, col)
-    const added = getFurniture(next).slice(-1)[0]
-    if (!added) return
+    const before = new Set(getFurniture(current).map(f => f.id))
+    const next = addFurniture(current, type, row, col)
+    const added = getFurniture(next).find(f => !before.has(f.id))
+    if (!added) {
+      setToolHint('That spot is blocked. Click an empty area of the grid.')
+      return
+    }
+    setToolHint('')
     onChange(next)
     setSelectedId(added.id)
-    setDesignMode(true)
   }, [onChange])
 
   const handleMoveSeat = useCallback((key, row, col) => {
@@ -247,14 +239,22 @@ export default function SeatingChartEditor({
 
   const handleDuplicateFurniture = useCallback((id) => {
     const { chart: next, newId } = duplicateFurniture(chartRef.current, id)
-    if (!newId) return
+    if (!newId) {
+      setToolHint('No free space nearby to duplicate that item.')
+      return
+    }
+    setToolHint('')
     onChange(next)
     setSelectedId(newId)
   }, [onChange])
 
   const handleDuplicateSeat = useCallback((key) => {
     const { chart: next, newId } = duplicateSeat(chartRef.current, key)
-    if (!newId) return
+    if (!newId) {
+      setToolHint('No free cell nearby to duplicate that desk.')
+      return
+    }
+    setToolHint('')
     onChange(next)
     setSelectedId(newId)
   }, [onChange])
@@ -318,6 +318,20 @@ export default function SeatingChartEditor({
     FURNITURE_TYPES.POLYGON,
   ])
 
+  const chooseTool = (tool) => {
+    setEditShapeId(null)
+    setPlaceTool(tool)
+    setToolHint('')
+  }
+
+  const toolStatus = editShapeId
+    ? 'Click grid cells to add or remove them from this shape.'
+    : placeTool === 'seat'
+      ? 'Click empty cells to add desks, or click a desk to remove it. Drag anything to move it.'
+      : placeTool && placeTool !== 'select'
+        ? `Click the grid to place a ${FURNITURE_PRESETS.find(p => p.type === placeTool)?.label || 'item'}. Drag existing items to move them.`
+        : 'Drag desks and furniture to move them. Click an item to edit it.'
+
   return (
     <div className="wb-seating">
       {!hidePresetLibrary && (
@@ -338,7 +352,7 @@ export default function SeatingChartEditor({
             {onNewChart && (
               <HubButton onClick={handleNewChart}>New chart</HubButton>
             )}
-            {!layoutLocked && (
+            {!layoutLocked && !hidePresetLibrary && (
               <HubButton variant="danger" onClick={handleWipe}>Wipe room</HubButton>
             )}
           </div>
@@ -412,8 +426,8 @@ export default function SeatingChartEditor({
                         setFillError('')
                         setSelectedId(null)
                         setEditShapeId(null)
+                        setPlaceTool('select')
                         setPickStudentId(null)
-                        setDesignMode(entry.chart.layout === 'custom')
                       }}
                     >
                       {isActive ? 'Loaded' : 'Load'}
@@ -434,8 +448,7 @@ export default function SeatingChartEditor({
 
       {!layoutLocked && (
       <p className="wb-hub-hint">
-        Design your room on a snappable grid: drag desks and furniture, paint custom polygons (U-tables),
-        then convert shapes to seats — the table outline stays so the seating chart stays readable.
+        Build the physical room here. Use Select to rearrange, then Desk or furniture tools to stamp items onto the grid.
       </p>
       )}
 
@@ -447,103 +460,90 @@ export default function SeatingChartEditor({
       )}
 
       {!layoutLocked && (
-      <>
-      <div className="wb-hub-radio-row">
-        <label>
-          <input type="radio" checked={!isCustom} onChange={() => setLayout('grid')} />
-          Rectangle grid
-        </label>
-        <label>
-          <input
-            type="radio"
-            checked={isCustom}
-            onChange={() => { if (!isCustom) setLayout('custom') }}
-          />
-          Custom room
-        </label>
-      </div>
-
-      <div className="wb-hub-toolbar" style={{ marginBottom: 14 }}>
-        <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
-          Canvas rows
-          <input
-            type="number"
-            min={1}
-            max={24}
-            className="wb-hub-input"
-            style={{ width: 56, minHeight: 44, padding: '8px 10px' }}
-            value={layoutRows}
-            onChange={e => setLayoutRows(parseInt(e.target.value, 10) || 1)}
-          />
-        </label>
-        <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
-          Canvas columns
-          <input
-            type="number"
-            min={1}
-            max={24}
-            className="wb-hub-input"
-            style={{ width: 56, minHeight: 44, padding: '8px 10px' }}
-            value={layoutCols}
-            onChange={e => setLayoutCols(parseInt(e.target.value, 10) || 1)}
-          />
-        </label>
-        <HubButton onClick={applyCanvasSize}>
-          {isCustom ? 'Apply canvas size' : 'Apply grid'}
-        </HubButton>
-        <HubButton
-          className={effectiveDesignMode ? 'wb-hub-btn--warn' : ''}
-          onClick={() => {
-            setDesignMode(m => !m)
-            setSelectedId(null)
-            setEditShapeId(null)
-            setPlaceTool('seat')
-          }}
-        >
-          {effectiveDesignMode ? 'Done designing' : 'Design room'}
-        </HubButton>
-      </div>
-
-      {effectiveDesignMode && (
         <div className="wb-room-palette">
-          <p className="wb-hub-hint" style={{ margin: 0 }}>
-            {editShapeId
-              ? 'Edit shape: click cells to add/remove them from the polygon. Click “Done editing shape” when finished.'
-              : 'Pick Desk or a furniture tool, then click the grid to place. Drag to move · Shift+click duplicate · Ctrl+click delete · Delete key removes selection. U-table opens toward the front.'}
-          </p>
-          <div className="wb-hub-toolbar" style={{ marginBottom: 0 }}>
+          <div className="wb-room-palette__tools" role="toolbar" aria-label="Room tools">
+            <button
+              type="button"
+              className={`wb-room-tool${placeTool === 'select' && !editShapeId ? ' wb-room-tool--active' : ''}`}
+              aria-pressed={placeTool === 'select' && !editShapeId}
+              onClick={() => chooseTool('select')}
+            >
+              Select
+            </button>
+            <button
+              type="button"
+              className={`wb-room-tool${placeTool === 'seat' && !editShapeId ? ' wb-room-tool--active' : ''}`}
+              aria-pressed={placeTool === 'seat' && !editShapeId}
+              onClick={() => chooseTool('seat')}
+            >
+              Desk
+            </button>
+            <span className="wb-room-palette__rule" aria-hidden="true" />
+            {FURNITURE_PRESETS.map(p => (
+              <button
+                key={p.type}
+                type="button"
+                className={`wb-room-tool${placeTool === p.type && !editShapeId ? ' wb-room-tool--active' : ''}`}
+                aria-pressed={placeTool === p.type && !editShapeId}
+                onClick={() => chooseTool(p.type)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <p className="wb-room-palette__status">{toolStatus}</p>
+          {toolHint && <p className="wb-room-palette__hint" role="status">{toolHint}</p>}
+
+          <div className="wb-room-palette__size">
+            <label className="wb-room-palette__field">
+              Rows
+              <input
+                type="number"
+                min={1}
+                max={24}
+                className="wb-hub-input"
+                value={layoutRows}
+                onChange={e => setLayoutRows(parseInt(e.target.value, 10) || 1)}
+              />
+            </label>
+            <label className="wb-room-palette__field">
+              Columns
+              <input
+                type="number"
+                min={1}
+                max={24}
+                className="wb-hub-input"
+                value={layoutCols}
+                onChange={e => setLayoutCols(parseInt(e.target.value, 10) || 1)}
+              />
+            </label>
+            <HubButton onClick={applyCanvasSize}>Apply size</HubButton>
+            <HubButton onClick={() => { onChange(fillEmptyCellsWithDesks(chart)); setToolHint('') }}>
+              Fill empty with desks
+            </HubButton>
             <HubButton
-              className={placeTool === 'seat' && !editShapeId ? 'wb-hub-btn--warn' : ''}
               onClick={() => {
-                setEditShapeId(null)
-                setPlaceTool(t => (t === 'seat' ? null : 'seat'))
+                if (seatCount && !confirm('Remove all desks? Furniture stays in place.')) return
+                onChange(clearDesks(chart))
+                setSelectedId(null)
               }}
             >
-              {placeTool === 'seat' && !editShapeId ? 'Desk tool on' : 'Desk tool'}
+              Clear desks
             </HubButton>
-            {FURNITURE_PRESETS.map(p => (
-              <HubButton
-                key={p.type}
-                className={placeTool === p.type && !editShapeId ? 'wb-hub-btn--warn' : ''}
-                onClick={() => {
-                  setEditShapeId(null)
-                  setPlaceTool(t => (t === p.type ? null : p.type))
-                }}
-              >
-                {placeTool === p.type && !editShapeId ? `${p.label} on` : p.label}
-              </HubButton>
-            ))}
+            <HubButton variant="danger" onClick={handleWipe}>
+              Wipe room
+            </HubButton>
           </div>
 
           {(selectedFurniture || selectedSeat) && (
             <div className="wb-room-inspector">
               {selectedFurniture && (
                 <>
-                  <strong>
+                  <strong className="wb-room-inspector__title">
                     {selectedFurniture.label}
                     {selectedFurniture.outline ? ' (outline)' : ''}
                   </strong>
-                  <div className="wb-room-colors" role="group" aria-label="Table color">
+                  <div className="wb-room-colors" role="group" aria-label="Color">
                     <span className="wb-room-colors__label">Color</span>
                     {SEATING_COLOR_PALETTE.map(c => (
                       <button
@@ -559,26 +559,24 @@ export default function SeatingChartEditor({
                   </div>
                   {!selectedFurniture.outline && selectedFurniture.type !== FURNITURE_TYPES.POLYGON && (
                     <>
-                      <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
+                      <label className="wb-room-palette__field">
                         W
                         <input
                           type="number"
                           min={1}
                           max={12}
                           className="wb-hub-input"
-                          style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
                           value={selectedFurniture.w}
                           onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, parseInt(e.target.value, 10) || 1, selectedFurniture.h))}
                         />
                       </label>
-                      <label className="wb-hub-radio-row" style={{ marginBottom: 0 }}>
+                      <label className="wb-room-palette__field">
                         H
                         <input
                           type="number"
                           min={1}
                           max={12}
                           className="wb-hub-input"
-                          style={{ width: 52, minHeight: 40, padding: '6px 8px' }}
                           value={selectedFurniture.h}
                           onChange={e => onChange(resizeFurniture(chart, selectedFurniture.id, selectedFurniture.w, parseInt(e.target.value, 10) || 1))}
                         />
@@ -586,14 +584,27 @@ export default function SeatingChartEditor({
                     </>
                   )}
                   {!selectedFurniture.outline && (
+                    <HubButton onClick={() => {
+                      const next = rotateFurniture(chart, selectedFurniture.id)
+                      if (next === chart) setToolHint('Cannot rotate there — move it first or make the canvas larger.')
+                      else {
+                        setToolHint('')
+                        onChange(next)
+                      }
+                    }}>
+                      Rotate
+                    </HubButton>
+                  )}
+                  <HubButton onClick={() => handleDuplicateFurniture(selectedFurniture.id)}>Duplicate</HubButton>
+                  {!selectedFurniture.outline && (
                     <HubButton
                       className={editShapeId === selectedFurniture.id ? 'wb-hub-btn--warn' : ''}
                       onClick={() => {
-                        setPlaceTool(null)
+                        setPlaceTool('select')
                         setEditShapeId(id => (id === selectedFurniture.id ? null : selectedFurniture.id))
                       }}
                     >
-                      {editShapeId === selectedFurniture.id ? 'Done editing shape' : 'Edit shape cells'}
+                      {editShapeId === selectedFurniture.id ? 'Done editing shape' : 'Edit shape'}
                     </HubButton>
                   )}
                   {!selectedFurniture.outline && shapeTypesConvertible.has(selectedFurniture.type) && (
@@ -605,7 +616,7 @@ export default function SeatingChartEditor({
               )}
               {selectedSeat && !selectedFurniture && (
                 <>
-                  <strong>Desk at {selectedSeat.row},{selectedSeat.col}</strong>
+                  <strong className="wb-room-inspector__title">Desk</strong>
                   <div className="wb-room-colors" role="group" aria-label="Desk color">
                     <span className="wb-room-colors__label">Color</span>
                     {SEATING_COLOR_PALETTE.map(c => (
@@ -620,14 +631,13 @@ export default function SeatingChartEditor({
                       />
                     ))}
                   </div>
+                  <HubButton onClick={() => handleDuplicateSeat(selectedSeat.key)}>Duplicate</HubButton>
                 </>
               )}
               <HubButton variant="danger" onClick={deleteSelected}>Delete</HubButton>
             </div>
           )}
         </div>
-      )}
-      </>
       )}
 
       <SeatingRoomCanvas
@@ -651,14 +661,14 @@ export default function SeatingChartEditor({
         onSeatDrop={handleSeatDrop}
         onDragOverSeat={handleDragOver}
         studentName={studentName}
-        placeTool={effectiveDesignMode && !editShapeId ? placeTool : null}
+        placeTool={effectiveDesignMode && !editShapeId ? (placeTool || 'select') : 'select'}
         editShapeId={effectiveDesignMode ? editShapeId : null}
       />
 
       <p className="wb-hub-hint" style={{ textAlign: 'center' }}>
-        {seatCount} desks · {manualCount} placed
-        {!hideAssignments ? ` · ${unassigned.length} unassigned` : ''}
+        {seatCount} desks
         {furniture.length ? ` · ${furniture.length} furniture` : ''}
+        {!hideAssignments ? ` · ${manualCount} placed · ${unassigned.length} unassigned` : ''}
       </p>
 
       {!hideAssignments && !effectiveDesignMode && unassigned.length > 0 && (

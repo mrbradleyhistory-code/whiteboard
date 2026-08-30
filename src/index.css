@@ -4128,10 +4128,90 @@ input[type='range'].wb-range::-moz-range-thumb {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 14px;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--wb-border);
   border-radius: 12px;
   background: var(--wb-surface-muted, #f6f8fa);
+}
+
+.wb-room-palette__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.wb-room-palette__rule {
+  width: 1px;
+  height: 28px;
+  background: var(--wb-border);
+  margin: 0 4px;
+}
+
+.wb-room-tool {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--wb-border);
+  background: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--wb-text);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.wb-room-tool:hover {
+  border-color: var(--wb-border-strong, #94a3b8);
+}
+
+.wb-room-tool--active {
+  background: var(--wb-accent, #457b9d);
+  border-color: var(--wb-accent, #457b9d);
+  color: #fff;
+}
+
+.wb-room-palette__status,
+.wb-room-palette__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.wb-room-palette__status {
+  color: #475569;
+}
+
+.wb-room-palette__hint {
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.wb-room-palette__size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wb-room-palette__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.wb-room-palette__field .wb-hub-input {
+  width: 56px;
+  min-height: 40px;
+  padding: 6px 8px;
 }
 
 .wb-room-inspector {
@@ -4139,7 +4219,46 @@ input[type='range'].wb-range::-moz-range-thumb {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  padding-top: 4px;
+  padding: 10px 0 0;
+  border-top: 1px dashed var(--wb-border);
+}
+
+.wb-room-inspector__title {
+  min-width: 90px;
+}
+
+.wb-room__canvas--select {
+  cursor: default;
+}
+
+.wb-room__canvas--place {
+  cursor: crosshair;
+}
+
+.wb-room__canvas--paint {
+  cursor: cell;
+}
+
+.wb-room__furniture-hit {
+  position: absolute;
+  z-index: 1;
+  background: transparent;
+}
+
+.wb-room__furniture-hit--movable,
+.wb-room__furniture-cell--movable {
+  cursor: grab;
+}
+
+.wb-room__poly--blocked {
+  outline: 2px solid #dc2626;
+  outline-offset: 1px;
+  opacity: 0.75;
+}
+
+.wb-room__seat--blocked {
+  outline: 2px solid #dc2626;
+  outline-offset: 1px;
 }
 
 .wb-room-colors {
