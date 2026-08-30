@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { loadClassData } from '../localClassData'
 import {
-  loadClassData,
-  saveClassData,
-} from '../localClassData'
+  createRoomLayoutDoc,
+  deleteRoomLayoutDoc,
+  migrateLocalRoomLayouts,
+  updateRoomLayoutDoc,
+} from '../roomLayoutsApi'
 import {
   createCustomSeatingChart,
   getFurniture,
   listSeats,
   stripAssignments,
-  upsertRoomLayout,
   wipeSeatingChart,
 } from '../seatingChart'
 import SeatingChartEditor from './SeatingChartEditor'
@@ -20,81 +22,105 @@ import {
 } from './hubUi'
 
 export default function RoomsPanel({ userId }) {
-  const [data, setData] = useState({ roomLayouts: [], classes: [] })
+  const [roomLayouts, setRoomLayouts] = useState([])
+  const [classes, setClasses] = useState([])
   const [activeRoomId, setActiveRoomId] = useState(null)
+  const [error, setError] = useState('')
+  const [nameDraft, setNameDraft] = useState('')
+  const saveTimers = useRef({})
 
   useEffect(() => {
-    const loaded = loadClassData(userId)
-    setData(loaded)
-    if (loaded.roomLayouts?.length && !activeRoomId) {
-      setActiveRoomId(loaded.roomLayouts[0].id)
+    let cancelled = false
+    setClasses(loadClassData(userId).classes)
+    migrateLocalRoomLayouts(userId).then(({ data, error: loadError }) => {
+      if (cancelled) return
+      if (loadError) setError(loadError)
+      setRoomLayouts(data || [])
+      setActiveRoomId(prev => prev || data?.[0]?.id || null)
+    })
+    return () => {
+      cancelled = true
+      Object.values(saveTimers.current).forEach(clearTimeout)
     }
   }, [userId])
 
-  const persist = (next) => {
-    setData(prev => {
-      const resolved = typeof next === 'function' ? next(prev) : next
-      saveClassData(userId, resolved)
-      return resolved
-    })
-  }
+  const activeRoom = roomLayouts.find(r => r.id === activeRoomId) || null
 
-  const activeRoom = data.roomLayouts?.find(r => r.id === activeRoomId) || null
+  useEffect(() => {
+    setNameDraft(activeRoom?.name || '')
+  }, [activeRoom?.id, activeRoom?.name])
 
-  const addRoom = () => {
-    persist(prev => {
-      const { list, entry } = upsertRoomLayout(prev.roomLayouts || [], {
-        name: `Room ${(prev.roomLayouts?.length || 0) + 1}`,
-        layout: createCustomSeatingChart(10, 12),
+  const scheduleLayoutSave = (id, layout) => {
+    clearTimeout(saveTimers.current[id])
+    saveTimers.current[id] = setTimeout(() => {
+      updateRoomLayoutDoc(userId, id, { layout }).then(({ error: saveError }) => {
+        if (saveError) setError(saveError)
       })
-      setActiveRoomId(entry.id)
-      return { ...prev, roomLayouts: list }
-    })
+    }, 450)
   }
 
-  const removeRoom = (id) => {
-    const usedBy = data.classes.filter(c => c.roomLayoutId === id)
+  const addRoom = async () => {
+    setError('')
+    const { data, error: createError } = await createRoomLayoutDoc(userId, {
+      name: `Room ${roomLayouts.length + 1}`,
+      layout: createCustomSeatingChart(10, 12),
+    })
+    if (createError || !data) {
+      setError(createError || 'Could not create room.')
+      return
+    }
+    setRoomLayouts(prev => [data, ...prev])
+    setActiveRoomId(data.id)
+  }
+
+  const removeRoom = async (id) => {
+    const usedBy = classes.filter(c => c.roomLayoutId === id)
     if (usedBy.length) {
       window.alert(`This room is used by: ${usedBy.map(c => c.name).join(', ')}. Pick a different room for those classes first.`)
       return
     }
     if (!confirm('Delete this room layout?')) return
-    persist(prev => {
-      const list = (prev.roomLayouts || []).filter(r => r.id !== id)
-      if (activeRoomId === id) setActiveRoomId(list[0]?.id || null)
-      return { ...prev, roomLayouts: list }
+    const { error: deleteError } = await deleteRoomLayoutDoc(id)
+    if (deleteError) {
+      setError(deleteError)
+      return
+    }
+    setRoomLayouts(prev => {
+      const list = prev.filter(r => r.id !== id)
+      setActiveRoomId(current => (current === id ? (list[0]?.id || null) : current))
+      return list
     })
   }
 
   const updateRoomLayout = (id, layout) => {
-    persist(prev => ({
-      ...prev,
-      roomLayouts: (prev.roomLayouts || []).map(r => (
-        r.id === id
-          ? { ...r, layout: stripAssignments(layout), updatedAt: new Date().toISOString() }
-          : r
-      )),
-    }))
+    const stripped = stripAssignments(layout)
+    setRoomLayouts(prev => prev.map(r => (
+      r.id === id ? { ...r, layout: stripped, updatedAt: new Date().toISOString() } : r
+    )))
+    scheduleLayoutSave(id, stripped)
   }
 
-  const renameRoom = (id, name) => {
+  const commitRoomName = async (id, name) => {
     const trimmed = name.trim()
-    if (!trimmed) return
-    persist(prev => ({
-      ...prev,
-      roomLayouts: (prev.roomLayouts || []).map(r => (
-        r.id === id ? { ...r, name: trimmed, updatedAt: new Date().toISOString() } : r
-      )),
-    }))
+    if (!trimmed) {
+      setNameDraft(roomLayouts.find(r => r.id === id)?.name || '')
+      return
+    }
+    setRoomLayouts(prev => prev.map(r => (
+      r.id === id ? { ...r, name: trimmed, updatedAt: new Date().toISOString() } : r
+    )))
+    const { error: saveError } = await updateRoomLayoutDoc(userId, id, { name: trimmed })
+    if (saveError) setError(saveError)
   }
 
   return (
-    <HubPanel title="Rooms" lead="Design desks and furniture once, then reuse the room in any class.">
+    <HubPanel title="Rooms" lead="Room designs sync with your teacher account. Classes pick a room, then store seating locally.">
       <HubToolbar>
         <HubButton variant="primary" onClick={addRoom}>New room</HubButton>
       </HubToolbar>
+      {error && <p className="wb-hub-alert" role="alert">{error}</p>}
 
-      {!data.roomLayouts?.length ? (
+      {!roomLayouts.length ? (
         <HubEmpty
           title="No rooms yet"
           description="Create a room, place desks and furniture, then assign it to classes under Class tools."
@@ -102,7 +128,7 @@ export default function RoomsPanel({ userId }) {
       ) : (
         <div className="wb-rooms">
           <ul className="wb-hub-saved-list wb-rooms__list">
-            {data.roomLayouts.map(room => {
+            {roomLayouts.map(room => {
               const seats = listSeats(room.layout).length
               const isActive = room.id === activeRoomId
               return (
@@ -130,8 +156,9 @@ export default function RoomsPanel({ userId }) {
                 Room name
                 <input
                   className="wb-hub-input"
-                  value={activeRoom.name}
-                  onChange={e => renameRoom(activeRoom.id, e.target.value)}
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value)}
+                  onBlur={e => commitRoomName(activeRoom.id, e.target.value)}
                   style={{ display: 'block', maxWidth: 320, marginTop: 6 }}
                 />
               </label>

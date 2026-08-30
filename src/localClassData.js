@@ -10,14 +10,16 @@ import {
   stripAssignments,
 } from './seatingChart'
 
-const STORAGE_VERSION = 5
+const STORAGE_VERSION = 6
+export const CLASSES_JSON_KIND = 'class-launchpad-classes'
+export const CLASS_JSON_KIND = 'class-launchpad-class'
 
 export function storageKey(userId) {
   return `wb-class-data:${userId}`
 }
 
 export function emptyClassData() {
-  return { version: STORAGE_VERSION, roomLayouts: [], classes: [] }
+  return { version: STORAGE_VERSION, classes: [], roomLayouts: [] }
 }
 
 export function newClassId() {
@@ -188,6 +190,15 @@ function migrateParsed(parsed) {
   if (!parsed || !Array.isArray(parsed.classes)) return emptyClassData()
   const version = parsed.version || 1
 
+  if (version >= 6) {
+    const roomLayouts = (parsed.roomLayouts || []).map(normalizeRoomLayout)
+    return {
+      version: STORAGE_VERSION,
+      roomLayouts,
+      classes: parsed.classes.map(c => normalizeClass(c, roomLayouts)),
+    }
+  }
+
   if (version >= 5 && Array.isArray(parsed.roomLayouts)) {
     const roomLayouts = parsed.roomLayouts.map(normalizeRoomLayout)
     return {
@@ -220,23 +231,105 @@ export function loadClassData(userId) {
   }
 }
 
-/** @param {string} userId @param {object} data */
-export function saveClassData(userId, data) {
+/** Persist classes/rosters only. Room layouts live in Firestore.
+ *  Unsynced v5 roomLayouts stay on disk until migrateLocalRoomLayouts clears them.
+ */
+export function saveClassData(userId, data, { clearLocalRooms = false } = {}) {
+  let pendingRoomLayouts = []
+  if (!clearLocalRooms) {
+    try {
+      const existing = JSON.parse(localStorage.getItem(storageKey(userId)) || '{}')
+      if (Array.isArray(existing.roomLayouts) && existing.roomLayouts.length) {
+        pendingRoomLayouts = existing.roomLayouts
+      }
+    } catch {
+      pendingRoomLayouts = []
+    }
+  }
   const payload = {
     version: STORAGE_VERSION,
-    roomLayouts: (data.roomLayouts || []).map(normalizeRoomLayout),
-    classes: (data.classes || []).map(c => normalizeClass(c, data.roomLayouts || [])),
+    classes: (data.classes || []).map(c => normalizeClass(c)),
+  }
+  if (pendingRoomLayouts.length) {
+    payload.roomLayouts = pendingRoomLayouts.map(normalizeRoomLayout)
   }
   localStorage.setItem(storageKey(userId), JSON.stringify(payload))
-  return payload
+  return { ...payload, roomLayouts: data.roomLayouts || pendingRoomLayouts }
 }
 
-export function exportClassDataJson(data) {
+function slugName(name) {
+  return String(name || 'class')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40) || 'class'
+}
+
+export function classesExportFilename(className = null) {
+  const day = new Date().toISOString().slice(0, 10)
+  if (className) return `class-launchpad-${slugName(className)}-${day}.json`
+  return `class-launchpad-classes-${day}.json`
+}
+
+export function exportClassesJson(classes, { single = false } = {}) {
+  const list = (classes || []).map(c => normalizeClass(c))
   return JSON.stringify({
+    kind: single ? CLASS_JSON_KIND : CLASSES_JSON_KIND,
     version: STORAGE_VERSION,
-    roomLayouts: (data.roomLayouts || []).map(normalizeRoomLayout),
-    classes: (data.classes || []).map(c => normalizeClass(c, data.roomLayouts || [])),
+    exportedAt: new Date().toISOString(),
+    classes: list,
   }, null, 2)
+}
+
+/** @deprecated use exportClassesJson */
+export function exportClassDataJson(data) {
+  return exportClassesJson(data?.classes || [])
+}
+
+function remapClassIds(classObj) {
+  const idMap = new Map()
+  const students = (classObj.students || []).map(s => {
+    const nextId = newStudentId()
+    idMap.set(s.id, nextId)
+    return { ...s, id: nextId }
+  })
+  const remapCluster = cluster => (cluster || []).map(id => idMap.get(id) || id)
+  const remapAssignments = (assignments = {}) => {
+    const next = {}
+    for (const [key, studentId] of Object.entries(assignments)) {
+      next[key] = studentId ? (idMap.get(studentId) || studentId) : studentId
+    }
+    return next
+  }
+  return normalizeClass({
+    ...classObj,
+    id: newClassId(),
+    students,
+    constraints: {
+      neverApart: (classObj.constraints?.neverApart || []).map(remapCluster),
+      alwaysTogether: (classObj.constraints?.alwaysTogether || []).map(remapCluster),
+      neverTogether: [],
+    },
+    seatingAssignments: remapAssignments(classObj.seatingAssignments),
+    savedSeatingPresets: (classObj.savedSeatingPresets || []).map(p => ({
+      ...p,
+      id: newSeatingChartId(),
+      assignments: remapAssignments(p.assignments),
+    })),
+    savedArrangements: (classObj.savedArrangements || []).map(a => ({
+      ...a,
+      id: `arr_${crypto.randomUUID().slice(0, 8)}`,
+      groups: (a.groups || []).map(g => ({
+        ...g,
+        members: (g.members || []).map(m => ({
+          ...m,
+          id: idMap.get(m.id) || m.id,
+        })),
+      })),
+    })),
+    activeSeatingPresetId: null,
+  })
 }
 
 /**
@@ -246,13 +339,37 @@ export function exportClassDataJson(data) {
 export function importClassDataJson(text) {
   try {
     const parsed = JSON.parse(text)
-    if (!parsed || !Array.isArray(parsed.classes)) {
+    const classes = parsed?.classes
+    if (!parsed || !Array.isArray(classes)) {
       return { data: null, error: 'Invalid file: expected { classes: [...] }' }
     }
-    return { data: migrateParsed(parsed), error: null }
+    const migrated = migrateParsed(parsed)
+    return { data: migrated, error: null }
   } catch {
     return { data: null, error: 'Could not parse JSON file.' }
   }
+}
+
+export function appendImportedClasses(existingClasses, incomingClasses) {
+  const used = new Set((existingClasses || []).map(c => c.id))
+  const next = [...(existingClasses || [])]
+  for (const raw of incomingClasses || []) {
+    let entry = normalizeClass(raw)
+    if (used.has(entry.id)) entry = remapClassIds(raw)
+    used.add(entry.id)
+    next.push(entry)
+  }
+  return next
+}
+
+export function downloadJsonFile(filename, text) {
+  const blob = new Blob([text], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export function parseRosterPaste(text) {

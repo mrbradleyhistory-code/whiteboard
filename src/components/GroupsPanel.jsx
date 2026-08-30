@@ -4,19 +4,24 @@ import {
   saveClassData,
   createClass,
   createStudent,
-  exportClassDataJson,
+  exportClassesJson,
+  classesExportFilename,
   importClassDataJson,
+  appendImportedClasses,
+  downloadJsonFile,
   parseRosterPaste,
   studentNameById,
   getClassSeatingChartFromData,
 } from '../localClassData'
+import {
+  migrateLocalRoomLayouts,
+  upsertMissingRoomLayouts,
+} from '../roomLayoutsApi'
 import { createRng, generateSimpleGroups, generateJigsawGroups } from '../grouping'
 import { cloneGroups, createSavedArrangement } from '../groupArrangements'
 import GroupEditor from './GroupEditor'
 import SeatingChartEditor from './SeatingChartEditor'
 import {
-  createRoomLayout,
-  createDefaultSeatingChart,
   purgeStudentFromClassSeating,
   upsertSeatingPreset,
   presetToChart,
@@ -52,7 +57,7 @@ function CollapsibleSection({ title, summary, open, onToggle, children }) {
 }
 
 export default function GroupsPanel({ userId }) {
-  const [data, setData] = useState({ classes: [] })
+  const [data, setData] = useState({ classes: [], roomLayouts: [] })
   const [expandedClassId, setExpandedClassId] = useState(null)
   const [rosterPaste, setRosterPaste] = useState('')
   const [neverApartSelected, setNeverApartSelected] = useState([])
@@ -65,14 +70,18 @@ export default function GroupsPanel({ userId }) {
   const [seed, setSeed] = useState('')
   const [editableGroups, setEditableGroups] = useState(null)
   const [genError, setGenError] = useState('')
+  const [ioError, setIoError] = useState('')
   const [sectionOpen, setSectionOpen] = useState({})
 
   useEffect(() => {
     const loaded = loadClassData(userId)
-    setData(loaded)
+    setData(prev => ({ ...prev, classes: loaded.classes }))
     if (loaded.classes.length && !expandedClassId) {
       setExpandedClassId(loaded.classes[0].id)
     }
+    migrateLocalRoomLayouts(userId).then(({ data: roomLayouts }) => {
+      setData(prev => ({ ...prev, roomLayouts: roomLayouts || [] }))
+    })
   }, [userId])
 
   const persist = (next) => {
@@ -118,13 +127,9 @@ export default function GroupsPanel({ userId }) {
 
   const addClass = () => {
     persist(prev => {
-      let roomLayouts = [...(prev.roomLayouts || [])]
-      if (!roomLayouts.length) {
-        roomLayouts.push(createRoomLayout('Default room', createDefaultSeatingChart()))
-      }
-      const c = createClass(`Class ${prev.classes.length + 1}`, roomLayouts[0].id)
+      const c = createClass(`Class ${prev.classes.length + 1}`, prev.roomLayouts?.[0]?.id || null)
       setExpandedClassId(c.id)
-      return { ...prev, roomLayouts, classes: [...prev.classes, c] }
+      return { ...prev, classes: [...prev.classes, c] }
     })
   }
 
@@ -283,30 +288,68 @@ export default function GroupsPanel({ userId }) {
     })
   }
 
-  const handleExport = () => {
-    const blob = new Blob([exportClassDataJson(data)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'class-tools.json'
-    a.click()
-    URL.revokeObjectURL(url)
+  const handleExportAll = () => {
+    setIoError('')
+    downloadJsonFile(classesExportFilename(), exportClassesJson(data.classes))
   }
 
-  const handleImport = (e) => {
+  const handleExportClass = (classObj) => {
+    setIoError('')
+    downloadJsonFile(
+      classesExportFilename(classObj.name),
+      exportClassesJson([classObj], { single: true }),
+    )
+  }
+
+  const applyImportedClasses = async (imported, { replace }) => {
+    if (imported.roomLayouts?.length) {
+      const { data: roomLayouts, error } = await upsertMissingRoomLayouts(userId, imported.roomLayouts)
+      if (error) {
+        setIoError(error)
+        return
+      }
+      setData(prev => ({ ...prev, roomLayouts }))
+    }
+    persist(prev => {
+      const classes = replace
+        ? imported.classes
+        : appendImportedClasses(prev.classes, imported.classes)
+      setExpandedClassId(classes[0]?.id || null)
+      setEditableGroups(null)
+      return { ...prev, classes }
+    })
+  }
+
+  const handleImportAll = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       const { data: imported, error } = importClassDataJson(reader.result)
       if (error) {
-        alert(error)
+        setIoError(error)
         return
       }
-      if (!confirm('Replace all local class data with imported file?')) return
-      persist(imported)
-      setExpandedClassId(imported.classes[0]?.id || null)
-      setEditableGroups(null)
+      if (!confirm(`Replace all ${data.classes.length} local class(es) with ${imported.classes.length} from this file? Room designs in your account are not replaced.`)) return
+      setIoError('')
+      await applyImportedClasses(imported, { replace: true })
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handleImportAdd = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const { data: imported, error } = importClassDataJson(reader.result)
+      if (error) {
+        setIoError(error)
+        return
+      }
+      setIoError('')
+      await applyImportedClasses(imported, { replace: false })
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -315,15 +358,19 @@ export default function GroupsPanel({ userId }) {
   return (
     <HubPanel
       title="Class tools"
-      lead="Rosters, grouping, and seating charts stay in this browser only. Export JSON to back up or move devices."
+      lead="Rosters and classes stay in this browser. Export JSON to back up or move devices. Room designs sync with your account."
     >
       <HubToolbar>
-        <HubButton onClick={handleExport}>Export JSON</HubButton>
-        <HubFileButton accept=".json,application/json" onChange={handleImport}>
-          Import JSON
+        <HubButton onClick={handleExportAll}>Export all classes</HubButton>
+        <HubFileButton accept=".json,application/json" onChange={handleImportAll}>
+          Import all classes
+        </HubFileButton>
+        <HubFileButton accept=".json,application/json" onChange={handleImportAdd}>
+          Add classes from JSON
         </HubFileButton>
         <HubButton variant="primary" onClick={addClass}>+ Add class</HubButton>
       </HubToolbar>
+      {ioError && <p className="wb-hub-alert" role="alert">{ioError}</p>}
 
       {data.classes.map(c => {
         const expanded = expandedClassId === c.id
@@ -352,6 +399,7 @@ export default function GroupsPanel({ userId }) {
               onChange={e => updateClass(c.id, { name: e.target.value })}
               aria-label="Class name"
             />
+            <HubButton onClick={() => handleExportClass(c)}>Export class</HubButton>
             <HubButton variant="danger" onClick={() => removeClass(c.id)}>Delete class</HubButton>
           </div>
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listBoards } from '../boardsApi'
 import { loadClassData, getClassSeatingChartFromData } from '../localClassData'
+import { migrateLocalRoomLayouts } from '../roomLayoutsApi'
 import { LESSON_THEMES } from '../lessonThemes'
 import { folderDragHandleProps } from '../folderDrag'
 import {
@@ -355,11 +356,12 @@ export default function LessonLauncherPanel({ userId, session, onOpenBoard }) {
     beginRun(lesson)
   }
 
-  const startRunning = (lesson, classId) => {
-    const data = loadClassData(userId)
-    const classObj = classId ? data.classes.find(c => c.id === classId) : null
+  const startRunning = async (lesson, classId) => {
+    const local = loadClassData(userId)
+    const { data: roomLayouts } = await migrateLocalRoomLayouts(userId)
+    const classObj = classId ? local.classes.find(c => c.id === classId) : null
     const activeClass = classObj
-      ? { ...classObj, seatingChart: getClassSeatingChartFromData(data, classObj) }
+      ? { ...classObj, seatingChart: getClassSeatingChartFromData({ ...local, roomLayouts: roomLayouts || [] }, classObj) }
       : null
     setRunningSession({ lesson, activeClass })
     setRunSetupLesson(null)

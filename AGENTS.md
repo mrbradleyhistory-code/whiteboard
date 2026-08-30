@@ -1,6 +1,6 @@
 # Class Launchpad — agent notes
 
-Vite + React 18 (JSX, no TypeScript) classroom toolkit (whiteboards, lessons, flashcards, class grouping/seating, timers, name picker). Pure frontend SPA. Persistence/auth is **Firebase** (Auth + Firestore). Class/roster/seating/grouping data stays in browser **localStorage** (`wb-class-data:<userId>`). Legacy Supabase SQL under `supabase/` is historical only.
+Vite + React 18 (JSX, no TypeScript) classroom toolkit (whiteboards, lessons, flashcards, class grouping/seating, timers, name picker). Pure frontend SPA. Persistence/auth is **Firebase** (Auth + Firestore). Class/roster/seating-assignment data stays in browser **localStorage** (`wb-class-data:<userId>`). Legacy Supabase SQL under `supabase/` is historical only.
 
 ## Cursor Cloud specific instructions
 
@@ -23,16 +23,18 @@ Vite + React 18 (JSX, no TypeScript) classroom toolkit (whiteboards, lessons, fl
 - Emulator mode shows an email/password **Dev sign in** form (Auth emulator). Google OAuth does not work against the Auth emulator.
 - Enable Google provider + add authorized domains (`localhost`, your Vercel host) in Firebase Console for real projects. Deploy `firestore.rules`.
 
-### Data model (Firestore)
+### Data model (Firestore — follows the Google account)
 - `boards/{id}` — `user_id`, `name`, `pages`, legacy `strokes`/`stickies`/`text_boxes`/`images`, timestamps
 - `flashcard_decks/{id}` — `user_id`, `name`, `cards`, timestamps
+- `room_layouts/{id}` — `user_id`, `name`, `layout` (desks/furniture, no student assignments), timestamps
 - `user_settings/{userId}` — timer presets + lesson launcher fields (doc id = uid)
 - Watch Firestore’s **1MB document limit** if boards embed large base64 images.
 
 ### Gotchas
 - Connect emulators only once (guarded in `src/firebaseClient.js`). Hot reload can warn if the module reinits; a full refresh is fine.
-- `listBoards` sorts `updated_at` client-side to avoid a composite index requirement.
+- `listBoards` / `listRoomLayouts` sort `updated_at` client-side to avoid a composite index requirement.
+- Local `wb-class-data` v5 `roomLayouts` migrate into `room_layouts` on sign-in (ids preserved for `class.roomLayoutId`).
 
-### Class tools localStorage (`wb-class-data:<userId>`, v5)
-- **Rooms** hub tab: shared `roomLayouts[]` (physical desk/furniture layout, no student assignments).
-- **Classes** tab seating: each class picks a `roomLayoutId` and stores `seatingAssignments` + named `savedSeatingPresets` (assignments only). Design the room under Rooms; assign students under Classes.
+### Class tools localStorage (`wb-class-data:<userId>`, v6)
+- **Classes** tab: rosters, grouping constraints, seating assignments, and seating presets. JSON export/import: one class or all classes in a single file. Room designs are not stored here.
+- **Rooms** tab: physical desk/furniture layouts live in Firestore. Each class picks a `roomLayoutId` and stores `seatingAssignments` + named `savedSeatingPresets` (assignments only). Design the room under Rooms; assign students under Classes.

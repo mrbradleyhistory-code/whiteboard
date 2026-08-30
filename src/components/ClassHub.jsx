@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { signOut } from 'firebase/auth'
 import { auth } from '../firebaseClient'
+import { migrateLocalRoomLayouts } from '../roomLayoutsApi'
 import BoardsPanel from './BoardsPanel'
 import FlashcardsPanel from './FlashcardsPanel'
 import GroupsPanel from './GroupsPanel'
@@ -31,6 +32,10 @@ export default function ClassHub({ session, onOpenBoard }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef(null)
   const userId = session.user.id
+
+  useEffect(() => {
+    migrateLocalRoomLayouts(userId)
+  }, [userId])
 
   const signOutUser = async () => { await signOut(auth) }
   const { name, email, avatarUrl } = userDisplayInfo(session.user)

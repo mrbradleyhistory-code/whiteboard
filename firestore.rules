@@ -19,6 +19,11 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.user_id == request.auth.uid;
     }
 
+    match /room_layouts/{roomId} {
+      allow read, update, delete: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.user_id == request.auth.uid;
+    }
+
     match /user_settings/{userId} {
       allow read, write: if isOwner(userId);
     }

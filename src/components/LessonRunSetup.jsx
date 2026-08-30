@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadClassData, getClassSeatingChartFromData } from '../localClassData'
+import { migrateLocalRoomLayouts } from '../roomLayoutsApi'
 import { lessonThemeClass } from '../lessonThemes'
 import { HubButton } from './hubUi'
 
@@ -11,12 +12,14 @@ export default function LessonRunSetup({ userId, lesson, defaultClassId, onStart
   useEffect(() => {
     const data = loadClassData(userId)
     setClasses(data.classes)
-    setRoomLayouts(data.roomLayouts || [])
     const list = data.classes
     const preferred = defaultClassId && list.some(c => c.id === defaultClassId)
       ? defaultClassId
       : (list[0]?.id || '')
     setClassId(preferred)
+    migrateLocalRoomLayouts(userId).then(({ data: layouts }) => {
+      setRoomLayouts(layouts || [])
+    })
   }, [userId, defaultClassId])
 
   const hasSeating = (c) => {

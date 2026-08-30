@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadClassData } from '../localClassData'
+import { migrateLocalRoomLayouts } from '../roomLayoutsApi'
 import { assignedCount, listSeats, presetToChart } from '../seatingChart'
 import { colors, touchBtn } from '../uiTheme'
 
@@ -12,11 +13,14 @@ export default function InjectSeatingModal({ userId, open, onClose, onInject }) 
   useEffect(() => {
     if (!open || !userId) return
     const loaded = loadClassData(userId)
-    setData(loaded)
+    setData({ classes: loaded.classes, roomLayouts: [] })
     const first = loaded.classes[0]
     setClassId(first?.id || '')
     setSavedId(first?.savedSeatingPresets?.[0]?.id || '')
     setError('')
+    migrateLocalRoomLayouts(userId).then(({ data: roomLayouts }) => {
+      setData({ classes: loaded.classes, roomLayouts: roomLayouts || [] })
+    })
   }, [open, userId])
 
   const activeClass = data.classes.find(c => c.id === classId)
