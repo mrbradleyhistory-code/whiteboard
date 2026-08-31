@@ -18,7 +18,9 @@ import {
 import {
   furnitureCaption,
   furnitureOccupiesSeat,
+  PRINT_CELL_SIZE,
   seatNameFontSize,
+  VIEW_CELL_SIZE,
 } from '../src/seatLabels.js'
 import { seatingPngFilename } from '../src/exportSeatingPng.js'
 
@@ -80,6 +82,7 @@ clipped = resizeCanvas(clipped, 6, 8)
 assert(getFurniture(clipped).length === 0, 'resize drops furniture outside the new bounds')
 
 assert(seatNameFontSize('Ada') >= seatNameFontSize('Eseoghene'), 'longer names use a smaller font')
+assert(seatNameFontSize('Ada', PRINT_CELL_SIZE) > seatNameFontSize('Ada', VIEW_CELL_SIZE), 'PNG names are larger than on-screen names')
 assert(seatingPngFilename('Period 2').includes('period-2'), 'png filename slugs the class name')
 
 let labeled = addFurniture(createCustomSeatingChart(8, 8), FURNITURE_TYPES.TABLE, 1, 1)

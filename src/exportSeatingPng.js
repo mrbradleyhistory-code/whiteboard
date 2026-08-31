@@ -111,8 +111,8 @@ export function renderSeatingChartToCanvas(chart, {
 } = {}) {
   const rows = Math.max(1, chart?.rows || 1)
   const cols = Math.max(1, chart?.cols || 1)
-  const pad = 28
-  const headerH = 52
+  const pad = 32
+  const headerH = 58
   const width = pad * 2 + cols * cellSize
   const height = pad * 2 + headerH + rows * cellSize
   const scale = 2
@@ -127,14 +127,14 @@ export function renderSeatingChartToCanvas(chart, {
   ctx.fillRect(0, 0, width, height)
 
   ctx.fillStyle = '#5c6570'
-  ctx.font = '600 14px system-ui, "Segoe UI", sans-serif'
+  ctx.font = '600 16px system-ui, "Segoe UI", sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   ctx.fillText('↑ Front of room', pad, pad + 14)
 
   ctx.fillStyle = '#1e293b'
-  ctx.font = '700 20px system-ui, "Segoe UI", sans-serif'
-  ctx.fillText(String(title || 'Seating chart'), pad, pad + 36)
+  ctx.font = '700 24px system-ui, "Segoe UI", sans-serif'
+  ctx.fillText(String(title || 'Seating chart'), pad, pad + 38)
 
   const originX = pad
   const originY = pad + headerH
@@ -203,14 +203,14 @@ export function renderSeatingChartToCanvas(chart, {
     const label = studentId ? (studentName?.(studentId) || studentId) : ''
     if (!label) continue
 
-    const maxW = box.w - 8
-    const maxH = box.h - 8
+    const maxW = box.w - 6
+    const maxH = box.h - 6
     const preferred = seatNameFontSize(label, cellSize)
     const laid = layoutName(ctx, label, maxW, maxH, preferred)
-    ctx.fillStyle = '#1e293b'
+    ctx.fillStyle = '#0f172a'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `600 ${laid.size}px system-ui, "Segoe UI", sans-serif`
+    ctx.font = `700 ${laid.size}px system-ui, "Segoe UI", sans-serif`
     const startY = box.y + box.h / 2 - ((laid.lines.length - 1) * laid.lineH) / 2
     laid.lines.forEach((line, i) => {
       ctx.fillText(line, box.x + box.w / 2, startY + i * laid.lineH)
@@ -224,7 +224,7 @@ export function renderSeatingChartToCanvas(chart, {
     const caption = furnitureCaption(item, { hasSeat })
     if (!caption) continue
     const box = cellRect(item.row, item.col)
-    ctx.font = '700 12px system-ui, "Segoe UI", sans-serif'
+    ctx.font = '700 14px system-ui, "Segoe UI", sans-serif'
     const textW = Math.min(ctx.measureText(caption).width + 12, box.w)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
     roundRect(ctx, box.x + 4, box.y + 4, textW, 20, 6)
