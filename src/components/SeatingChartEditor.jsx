@@ -6,7 +6,7 @@ import {
   clearDesks,
   fillEmptyCellsWithDesks,
   autoFillRemainingSeating,
-  autoFillSeating,
+  shuffleSeating,
   assignedCount,
   clearAllAssignments,
   cloneChart,
@@ -220,18 +220,25 @@ export default function SeatingChartEditor({
     assignToSeat(key, studentId)
   }
 
-  const runFill = (preserve) => {
-    const rng = seed.trim()
-      ? createRng(seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0))
-      : Math.random
-    const fn = preserve ? autoFillRemainingSeating : autoFillSeating
-    const { chart: next, error } = fn(students, constraints, chart, rng)
-    if (error) {
-      setFillError(error)
+  const seatingRng = () => (seed.trim()
+    ? createRng(seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0))
+    : Math.random)
+
+  const applyFill = (result) => {
+    if (result.error) {
+      setFillError(result.error)
       return
     }
     setFillError('')
-    onChange(next)
+    onChange(result.chart)
+  }
+
+  const runFillRemaining = () => {
+    applyFill(autoFillRemainingSeating(students, constraints, chart, seatingRng()))
+  }
+
+  const runShuffle = () => {
+    applyFill(shuffleSeating(students, constraints, chart, seatingRng()))
   }
 
   const placeFurnitureAt = useCallback((type, row, col) => {
@@ -684,6 +691,15 @@ export default function SeatingChartEditor({
       )}
 
       <div className="wb-room-export">
+        {!hideAssignments && !effectiveDesignMode && (
+          <HubButton
+            variant="primary"
+            onClick={runShuffle}
+            disabled={!students.length || !seatCount}
+          >
+            Shuffle seats
+          </HubButton>
+        )}
         <HubButton onClick={() => openSeatingPngWindow({
           chart,
           studentName,
@@ -755,13 +771,18 @@ export default function SeatingChartEditor({
         <>
           <div className="wb-hub-toolbar" style={{ marginBottom: 8 }}>
             <HubButton
-              variant="primary"
-              onClick={() => runFill(true)}
+              onClick={runFillRemaining}
               disabled={!unassigned.length || !seatCount}
             >
               Fill remaining seats
             </HubButton>
-            <HubButton onClick={() => runFill(false)}>Auto-fill all</HubButton>
+            <HubButton
+              variant="primary"
+              onClick={runShuffle}
+              disabled={!students.length || !seatCount}
+            >
+              Shuffle seats
+            </HubButton>
             <HubButton onClick={() => { setFillError(''); onChange(clearAllAssignments(chart)); setPickStudentId(null) }}>
               Clear assignments
             </HubButton>
@@ -777,7 +798,7 @@ export default function SeatingChartEditor({
             </label>
           </div>
           <p className="wb-hub-hint">
-            Place students manually first, then use Fill remaining to seat everyone else using your never-together and keep-together rules.
+            Shuffle reseats everyone. Always-together students stay as close as possible; never-together students sit as far apart as the room allows.
           </p>
           {fillError && <p className="wb-hub-alert">{fillError}</p>}
         </>

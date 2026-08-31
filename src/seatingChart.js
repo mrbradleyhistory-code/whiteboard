@@ -1226,6 +1226,19 @@ function runAutoFill(students, constraints, chart, rng, { preserveExisting = fal
   return { chart: { ...chart, assignments }, error: null }
 }
 
+function scoreFullChart(chart, constraints) {
+  const assignments = chart?.assignments || {}
+  const seatMap = buildSeatMap(chart)
+  let score = 0
+  for (const [key, studentId] of Object.entries(assignments)) {
+    if (!studentId) continue
+    const seat = seatMap.get(key)
+    if (!seat) continue
+    score += scoreSeatPlacement(studentId, seat, assignments, chart, constraints)
+  }
+  return score
+}
+
 /** Fill every seat from scratch. */
 export function autoFillSeating(students, constraints, chart, rng = Math.random) {
   if (students.length > listSeats(chart).length) {
@@ -1235,6 +1248,25 @@ export function autoFillSeating(students, constraints, chart, rng = Math.random)
     }
   }
   return runAutoFill(students, constraints, chart, rng, { preserveExisting: false })
+}
+
+/** Reseat everyone randomly, keeping always-together close and never-together far. */
+export function shuffleSeating(students, constraints, chart, rng = Math.random, { attempts = 8 } = {}) {
+  const first = autoFillSeating(students, constraints, chart, rng)
+  if (!first.chart) return first
+  let best = first
+  let bestScore = scoreFullChart(first.chart, constraints)
+  const extra = Math.max(0, attempts - 1)
+  for (let i = 0; i < extra; i++) {
+    const out = autoFillSeating(students, constraints, chart, rng)
+    if (!out.chart) continue
+    const score = scoreFullChart(out.chart, constraints)
+    if (score > bestScore) {
+      bestScore = score
+      best = out
+    }
+  }
+  return best
 }
 
 /** Keep manual placements; fill only empty desks for remaining students. */

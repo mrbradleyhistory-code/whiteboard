@@ -1,6 +1,7 @@
 import {
   FURNITURE_TYPES,
   addFurniture,
+  assignedCount,
   canvasResizeClipsItems,
   clearDesks,
   convertFurnitureToSeats,
@@ -13,8 +14,11 @@ import {
   listSeats,
   moveFurniture,
   rotateFurniture,
+  seatDistance,
+  shuffleSeating,
   wipeSeatingChart,
 } from '../src/seatingChart.js'
+import { createRng } from '../src/grouping.js'
 import {
   furnitureCaption,
   furnitureOccupiesSeat,
@@ -95,5 +99,38 @@ assert(outline.outline, 'convert to seats leaves an outline')
 assert(furnitureOccupiesSeat(outline, occupied), 'outline cells now have seats')
 assert(furnitureCaption(outline, { hasSeat: true }) == null, 'outline caption hides when seats cover it')
 assert(furnitureCaption(outline, { hasSeat: false }) === 'Table (outline)', 'empty outline still labels in the designer')
+
+function seatOf(chart, studentId) {
+  const key = Object.entries(chart.assignments || {}).find(([, id]) => id === studentId)?.[0]
+  return listSeats(chart).find(s => s.key === key) || null
+}
+
+const roster = [
+  { id: 'stu_a', name: 'Ada' },
+  { id: 'stu_b', name: 'Bea' },
+  { id: 'stu_c', name: 'Cara' },
+  { id: 'stu_d', name: 'Dan' },
+]
+const shuffleGrid = createDefaultSeatingChart(2, 4)
+const shuffled = shuffleSeating(
+  roster,
+  { alwaysTogether: [['stu_a', 'stu_b']], neverApart: [['stu_c', 'stu_d']] },
+  shuffleGrid,
+  createRng(7),
+)
+assert(!shuffled.error, shuffled.error || 'shuffle ok')
+assert(assignedCount(shuffled.chart) === 4, 'shuffle seats everyone')
+const ada = seatOf(shuffled.chart, 'stu_a')
+const bea = seatOf(shuffled.chart, 'stu_b')
+const cara = seatOf(shuffled.chart, 'stu_c')
+const dan = seatOf(shuffled.chart, 'stu_d')
+assert(ada && bea && cara && dan, 'every student has a seat')
+assert(seatDistance(ada, bea) === 1, `always-together should sit adjacent, got ${seatDistance(ada, bea)}`)
+assert(seatDistance(cara, dan) >= 2, `never-together should not sit adjacent, got ${seatDistance(cara, dan)}`)
+
+const again = shuffleSeating(roster, { alwaysTogether: [], neverApart: [] }, shuffled.chart, createRng(99))
+assert(!again.error, again.error || 'second shuffle ok')
+const sameSeats = roster.every(s => seatOf(shuffled.chart, s.id)?.key === seatOf(again.chart, s.id)?.key)
+assert(!sameSeats, 'a new shuffle should change at least one seat')
 
 console.log('seating-qa: all assertions passed')

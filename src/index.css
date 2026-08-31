@@ -3842,6 +3842,8 @@ input[type='range'].wb-range::-moz-range-thumb {
 .wb-room-export {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0 0 8px;
 }
 
