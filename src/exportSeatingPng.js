@@ -62,10 +62,24 @@ function wrapLines(ctx, text, maxWidth, { splitWords = false } = {}) {
 }
 
 function layoutName(ctx, name, maxWidth, maxHeight, preferredSize) {
+  const text = String(name || '').trim()
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) {
+    let size = preferredSize
+    while (size >= 8) {
+      ctx.font = `600 ${size}px system-ui, "Segoe UI", sans-serif`
+      if (ctx.measureText(text).width <= maxWidth) {
+        return { lines: [text], size, lineH: size * 1.15 }
+      }
+      size -= 1
+    }
+    ctx.font = '600 8px system-ui, "Segoe UI", sans-serif'
+    return { lines: [text], size: 8, lineH: 9.2 }
+  }
   let size = preferredSize
   while (size >= 10) {
     ctx.font = `600 ${size}px system-ui, "Segoe UI", sans-serif`
-    const lines = wrapLines(ctx, name, maxWidth, { splitWords: false })
+    const lines = wrapLines(ctx, text, maxWidth, { splitWords: false })
     const lineH = size * 1.15
     const tooWide = lines.some(line => ctx.measureText(line).width > maxWidth + 0.5)
     const tooTall = lines.length * lineH > maxHeight
@@ -73,7 +87,7 @@ function layoutName(ctx, name, maxWidth, maxHeight, preferredSize) {
     size -= 1
   }
   ctx.font = '600 10px system-ui, "Segoe UI", sans-serif'
-  return { lines: wrapLines(ctx, name, maxWidth, { splitWords: true }), size: 10, lineH: 11.5 }
+  return { lines: wrapLines(ctx, text, maxWidth, { splitWords: true }), size: 10, lineH: 11.5 }
 }
 
 function slugName(name) {
