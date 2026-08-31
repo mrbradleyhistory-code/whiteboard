@@ -375,7 +375,7 @@ export default function SeatingRoomCanvas({
 
   return (
     <div className="wb-room">
-      <div className="wb-room__front">↑ Front of room</div>
+      <div className="wb-room__front">↑ Front of room · {chart.rows} × {chart.cols}</div>
       {hoverTip && designMode && (
         <div className="wb-room__tooltip" style={{ left: hoverTip.x, top: hoverTip.y }} role="tooltip">
           {hoverTip.text}

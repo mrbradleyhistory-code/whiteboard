@@ -22,6 +22,7 @@ import {
   placeStudent,
   removeFurniture,
   removeSeat,
+  clampCanvasSize,
   resizeCanvas,
   resizeFurniture,
   rotateFurniture,
@@ -83,6 +84,8 @@ export default function SeatingChartEditor({
   const [pickStudentId, setPickStudentId] = useState(null)
   const [saveName, setSaveName] = useState('')
   const chartRef = useRef(chart)
+  const sizeTimer = useRef(null)
+  const layoutSizeRef = useRef({ rows: chart.rows, cols: chart.cols })
   chartRef.current = chart
 
   const effectiveDesignMode = !layoutLocked
@@ -92,6 +95,7 @@ export default function SeatingChartEditor({
   useEffect(() => {
     setLayoutRows(chart.rows)
     setLayoutCols(chart.cols)
+    layoutSizeRef.current = { rows: chart.rows, cols: chart.cols }
   }, [chart.rows, chart.cols])
 
   useEffect(() => {
@@ -110,12 +114,34 @@ export default function SeatingChartEditor({
 
   const studentName = (id) => students.find(s => s.id === id)?.name || id
 
-  const applyCanvasSize = () => {
-    onChange(resizeCanvas(chart, layoutRows, layoutCols))
+  const commitCanvasSize = useCallback((rows, cols) => {
+    clearTimeout(sizeTimer.current)
+    const nextRows = clampCanvasSize(rows, chartRef.current.rows)
+    const nextCols = clampCanvasSize(cols, chartRef.current.cols)
+    layoutSizeRef.current = { rows: nextRows, cols: nextCols }
+    setLayoutRows(nextRows)
+    setLayoutCols(nextCols)
+    const current = chartRef.current
+    if (current.rows === nextRows && current.cols === nextCols) return
+    onChange(resizeCanvas(current, nextRows, nextCols))
     setFillError('')
     setToolHint('')
     setSelectedId(null)
+  }, [onChange])
+
+  const queueCanvasSize = (patch) => {
+    const nextRows = patch.rows != null ? patch.rows : layoutSizeRef.current.rows
+    const nextCols = patch.cols != null ? patch.cols : layoutSizeRef.current.cols
+    layoutSizeRef.current = { rows: nextRows, cols: nextCols }
+    setLayoutRows(nextRows)
+    setLayoutCols(nextCols)
+    clearTimeout(sizeTimer.current)
+    sizeTimer.current = setTimeout(() => {
+      commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)
+    }, 280)
   }
+
+  useEffect(() => () => clearTimeout(sizeTimer.current), [])
 
   const handleSave = (asNew = false) => {
     const name = saveName.trim()
@@ -503,7 +529,14 @@ export default function SeatingChartEditor({
                 max={24}
                 className="wb-hub-input"
                 value={layoutRows}
-                onChange={e => setLayoutRows(parseInt(e.target.value, 10) || 1)}
+                onChange={e => queueCanvasSize({ rows: parseInt(e.target.value, 10) || 1 })}
+                onBlur={() => commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)
+                  }
+                }}
               />
             </label>
             <label className="wb-room-palette__field">
@@ -514,10 +547,17 @@ export default function SeatingChartEditor({
                 max={24}
                 className="wb-hub-input"
                 value={layoutCols}
-                onChange={e => setLayoutCols(parseInt(e.target.value, 10) || 1)}
+                onChange={e => queueCanvasSize({ cols: parseInt(e.target.value, 10) || 1 })}
+                onBlur={() => commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)
+                  }
+                }}
               />
             </label>
-            <HubButton onClick={applyCanvasSize}>Apply size</HubButton>
+            <HubButton onClick={() => commitCanvasSize(layoutSizeRef.current.rows, layoutSizeRef.current.cols)}>Apply size</HubButton>
             <HubButton onClick={() => { onChange(fillEmptyCellsWithDesks(chart)); setToolHint('') }}>
               Fill empty with desks
             </HubButton>
@@ -666,9 +706,10 @@ export default function SeatingChartEditor({
       />
 
       <p className="wb-hub-hint" style={{ textAlign: 'center' }}>
-        {seatCount} desks
+        {chart.rows}×{chart.cols} room · {seatCount} desks
         {furniture.length ? ` · ${furniture.length} furniture` : ''}
         {!hideAssignments ? ` · ${manualCount} placed · ${unassigned.length} unassigned` : ''}
+        {effectiveDesignMode ? ' · scroll the grid to see the full room' : ''}
       </p>
 
       {!hideAssignments && !effectiveDesignMode && unassigned.length > 0 && (

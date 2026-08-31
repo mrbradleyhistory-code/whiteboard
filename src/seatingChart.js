@@ -403,9 +403,30 @@ export function applyGridLayout(chart, rows, cols) {
   }
 }
 
+export function clampCanvasSize(value, fallback = 1) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return Math.max(1, Math.min(24, fallback))
+  return Math.max(1, Math.min(24, Math.round(n)))
+}
+
+/** True if shrinking to rows×cols would drop desks or furniture. */
+export function canvasResizeClipsItems(chart, rows, cols) {
+  const nextRows = clampCanvasSize(rows)
+  const nextCols = clampCanvasSize(cols)
+  const seatOut = getSeatDefs(chart).some(s => (
+    s.row >= nextRows || s.col >= nextCols
+    || s.row + (s.h || 1) - 1 >= nextRows
+    || s.col + (s.w || 1) - 1 >= nextCols
+  ))
+  if (seatOut) return true
+  return getFurniture(chart).some(f => (
+    furnitureCells(f).some(c => c.row >= nextRows || c.col >= nextCols)
+  ))
+}
+
 export function resizeCanvas(chart, rows, cols) {
-  const nextRows = Math.max(1, Math.min(24, rows))
-  const nextCols = Math.max(1, Math.min(24, cols))
+  const nextRows = clampCanvasSize(rows, chart.rows || 1)
+  const nextCols = clampCanvasSize(cols, chart.cols || 1)
   const seatDefs = getSeatDefs(chart)
     .filter(s => s.row < nextRows && s.col < nextCols)
     .map(s => {

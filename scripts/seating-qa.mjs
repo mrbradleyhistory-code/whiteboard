@@ -1,11 +1,13 @@
 import {
   FURNITURE_TYPES,
   addFurniture,
+  canvasResizeClipsItems,
   clearDesks,
   createCustomSeatingChart,
   createDefaultSeatingChart,
   fillEmptyCellsWithDesks,
   furnitureCells,
+  resizeCanvas,
   getFurniture,
   listSeats,
   moveFurniture,
@@ -59,5 +61,15 @@ assert(listSeats(cleared).length === 0, 'clear desks removes seats')
 const wiped = wipeSeatingChart(createDefaultSeatingChart(5, 6))
 assert(listSeats(wiped).length === 0, 'wipe empties a grid room instead of refilling desks')
 assert(getFurniture(wiped).length === 0, 'wipe removes furniture')
+
+const grown = resizeCanvas(createCustomSeatingChart(10, 12), 16, 18)
+assert(grown.rows === 16 && grown.cols === 18, 'resizeCanvas grows the room')
+const shrunk = resizeCanvas(grown, 6, 8)
+assert(shrunk.rows === 6 && shrunk.cols === 8, 'resizeCanvas shrinks the room')
+
+let clipped = addFurniture(createCustomSeatingChart(10, 12), FURNITURE_TYPES.TABLE, 8, 10)
+assert(canvasResizeClipsItems(clipped, 6, 8), 'table outside 6×8 is clipped')
+clipped = resizeCanvas(clipped, 6, 8)
+assert(getFurniture(clipped).length === 0, 'resize drops furniture outside the new bounds')
 
 console.log('seating-qa: all assertions passed')
