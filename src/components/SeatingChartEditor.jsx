@@ -38,6 +38,8 @@ import {
 } from '../seatingChart'
 import { HubButton } from './hubUi'
 import SeatingRoomCanvas from './SeatingRoomCanvas'
+import { openSeatingPngWindow } from '../exportSeatingPng'
+import { DESIGN_CELL_SIZE, VIEW_CELL_SIZE } from '../seatLabels'
 
 function formatChartWhen(iso) {
   if (!iso) return ''
@@ -69,6 +71,7 @@ export default function SeatingChartEditor({
   layoutLocked = false,
   hidePresetLibrary = false,
   hideAssignments = false,
+  exportTitle = 'Seating chart',
   libraryTitle = 'Seating charts for this class',
   libraryHint = 'Save multiple layouts (solo, group work, testing) and switch between them.',
 }) {
@@ -680,9 +683,20 @@ export default function SeatingChartEditor({
         </div>
       )}
 
+      <div className="wb-room-export">
+        <HubButton onClick={() => openSeatingPngWindow({
+          chart,
+          studentName,
+          title: exportTitle,
+        })}>
+          Export PNG
+        </HubButton>
+      </div>
+
       <SeatingRoomCanvas
         chart={chart}
         designMode={effectiveDesignMode}
+        cellSize={effectiveDesignMode ? DESIGN_CELL_SIZE : VIEW_CELL_SIZE}
         selectedId={selectedId}
         onSelect={(id) => {
           setSelectedId(id)

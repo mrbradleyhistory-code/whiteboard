@@ -170,6 +170,7 @@ export default function RoomsPanel({ userId }) {
                 onChange={layout => updateRoomLayout(activeRoom.id, layout)}
                 hidePresetLibrary
                 hideAssignments
+                exportTitle={activeRoom.name}
                 onWipe={() => updateRoomLayout(activeRoom.id, wipeSeatingChart(activeRoom.layout))}
               />
             </div>

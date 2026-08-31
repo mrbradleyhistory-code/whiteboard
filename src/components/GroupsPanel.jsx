@@ -672,6 +672,7 @@ export default function GroupsPanel({ userId }) {
                     activeSeatingPresetId: null,
                   })}
                   onWipe={() => updateClass(c.id, { seatingAssignments: {} })}
+                  exportTitle={c.name}
                 />
               </>
             )}

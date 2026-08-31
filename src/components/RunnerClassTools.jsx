@@ -139,7 +139,11 @@ export default function RunnerClassTools({
             )}
             {tab === 'seating' && (
               <div className="wb-runner-seating-wrap">
-                <RunnerSeatingView chart={activeClass.seatingChart} students={students} />
+                <RunnerSeatingView
+                  chart={activeClass.seatingChart}
+                  students={students}
+                  title={activeClass.name || 'Seating chart'}
+                />
                 {activeClass.seatingChart && (
                   <button
                     type="button"

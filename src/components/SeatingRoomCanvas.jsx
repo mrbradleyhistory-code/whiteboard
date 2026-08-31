@@ -10,8 +10,12 @@ import {
   seatingColorStyle,
   studentAtSeat,
 } from '../seatingChart'
-
-const CELL = 56
+import {
+  DESIGN_CELL_SIZE,
+  furnitureCaption,
+  furnitureOccupiesSeat,
+  seatNameFontSize,
+} from '../seatLabels'
 
 function modClick(e) {
   return e.ctrlKey || e.metaKey
@@ -71,7 +75,9 @@ export default function SeatingRoomCanvas({
   studentName,
   placeTool = 'select',
   editShapeId = null,
+  cellSize = DESIGN_CELL_SIZE,
 }) {
+  const CELL = cellSize
   const wrapRef = useRef(null)
   const chartRef = useRef(chart)
   chartRef.current = chart
@@ -88,6 +94,7 @@ export default function SeatingRoomCanvas({
 
   const seats = listSeats(chart)
   const furniture = getFurniture(chart)
+  const seatKeySet = new Set(seats.map(s => s.key))
   const width = chart.cols * CELL
   const height = chart.rows * CELL
   const placingFurniture = designMode && placeTool && placeTool !== 'select' && placeTool !== 'seat' && !editShapeId
@@ -103,7 +110,7 @@ export default function SeatingRoomCanvas({
       col: Math.max(0, Math.min(chart.cols - 1, Math.floor(x / CELL))),
       row: Math.max(0, Math.min(chart.rows - 1, Math.floor(y / CELL))),
     }
-  }, [chart.cols, chart.rows])
+  }, [CELL, chart.cols, chart.rows])
 
   const updatePreview = useCallback((clientX, clientY) => {
     const drag = dragRef.current
@@ -353,16 +360,22 @@ export default function SeatingRoomCanvas({
             title={designMode ? furnitureTooltip(item, designMode) : undefined}
           />
         ))}
-        <div
-          className="wb-room__poly-label"
-          style={{
-            left: (item.col + dCol) * CELL + 4,
-            top: (item.row + dRow) * CELL + 4,
-            zIndex: selected ? 6 : 4,
-          }}
-        >
-          {item.outline ? `${item.label || furnitureLabel(item.type)} (outline)` : (item.label || furnitureLabel(item.type))}
-        </div>
+        {(() => {
+          const caption = furnitureCaption(item, { hasSeat: furnitureOccupiesSeat(item, seatKeySet) })
+          if (!caption) return null
+          return (
+            <div
+              className="wb-room__poly-label"
+              style={{
+                left: (item.col + dCol) * CELL + 4,
+                top: (item.row + dRow) * CELL + 4,
+                zIndex: 1,
+              }}
+            >
+              {caption}
+            </div>
+          )
+        })()}
       </Fragment>
     )
   }
@@ -452,6 +465,7 @@ export default function SeatingRoomCanvas({
                 ) : studentId ? (
                   <span
                     className="wb-seating__name"
+                    style={{ fontSize: seatNameFontSize(studentName?.(studentId) || studentId, CELL) }}
                     draggable
                     onDragStart={(ev) => {
                       ev.dataTransfer.effectAllowed = 'move'
@@ -472,4 +486,4 @@ export default function SeatingRoomCanvas({
   )
 }
 
-export { CELL as ROOM_CELL_SIZE }
+export { DESIGN_CELL_SIZE as ROOM_CELL_SIZE }

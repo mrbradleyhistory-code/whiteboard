@@ -3797,12 +3797,16 @@ input[type='range'].wb-range::-moz-range-thumb {
 .wb-seating__name {
   display: block;
   width: 100%;
-  padding: 6px 4px;
-  font-size: 13px;
+  padding: 2px 3px;
+  font-size: 12px;
   font-weight: 600;
   cursor: grab;
-  line-height: 1.2;
-  word-break: break-word;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: manual;
+  overflow: hidden;
+  max-height: 100%;
 }
 
 .wb-seating__pool {
@@ -3833,6 +3837,12 @@ input[type='range'].wb-range::-moz-range-thumb {
 /* Room designer canvas */
 .wb-room {
   margin-bottom: 14px;
+}
+
+.wb-room-export {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
 }
 
 .wb-room__front {
@@ -3986,7 +3996,7 @@ input[type='range'].wb-range::-moz-range-thumb {
 
 .wb-room__poly-label {
   position: absolute;
-  z-index: 2;
+  z-index: 1;
   pointer-events: none;
   font-size: 11px;
   font-weight: 700;
@@ -4046,7 +4056,7 @@ input[type='range'].wb-range::-moz-range-thumb {
   touch-action: none;
   font: inherit;
   color: inherit;
-  z-index: 2;
+  z-index: 3;
 }
 
 .wb-room__seat--filled {

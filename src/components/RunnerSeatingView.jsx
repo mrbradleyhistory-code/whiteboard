@@ -1,9 +1,12 @@
 import { getFurniture, getSeatDefs } from '../seatingChart'
 import { studentNameById } from '../localClassData'
+import { openSeatingPngWindow } from '../exportSeatingPng'
+import { VIEW_CELL_SIZE } from '../seatLabels'
 import SeatingRoomCanvas from './SeatingRoomCanvas'
+import { HubButton } from './hubUi'
 
 /** Read-only seating preview for the lesson runner. */
-export default function RunnerSeatingView({ chart, students }) {
+export default function RunnerSeatingView({ chart, students, title = 'Seating chart' }) {
   if (!chart) {
     return (
       <p className="wb-lesson-runner__panel-empty">
@@ -17,13 +20,21 @@ export default function RunnerSeatingView({ chart, students }) {
     return <p className="wb-lesson-runner__panel-empty">This chart has no desks yet.</p>
   }
 
+  const studentName = (id) => studentNameById(students, id)
+
   return (
     <div className="wb-runner-seating">
+      <div className="wb-room-export">
+        <HubButton onClick={() => openSeatingPngWindow({ chart, studentName, title })}>
+          Export PNG
+        </HubButton>
+      </div>
       <SeatingRoomCanvas
         chart={chart}
         designMode={false}
+        cellSize={VIEW_CELL_SIZE}
         selectedId={null}
-        studentName={(id) => studentNameById(students, id)}
+        studentName={studentName}
         onSeatClick={() => {}}
       />
     </div>

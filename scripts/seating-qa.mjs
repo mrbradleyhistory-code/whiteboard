@@ -3,6 +3,7 @@ import {
   addFurniture,
   canvasResizeClipsItems,
   clearDesks,
+  convertFurnitureToSeats,
   createCustomSeatingChart,
   createDefaultSeatingChart,
   fillEmptyCellsWithDesks,
@@ -14,6 +15,12 @@ import {
   rotateFurniture,
   wipeSeatingChart,
 } from '../src/seatingChart.js'
+import {
+  furnitureCaption,
+  furnitureOccupiesSeat,
+  seatNameFontSize,
+} from '../src/seatLabels.js'
+import { seatingPngFilename } from '../src/exportSeatingPng.js'
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg)
@@ -71,5 +78,19 @@ let clipped = addFurniture(createCustomSeatingChart(10, 12), FURNITURE_TYPES.TAB
 assert(canvasResizeClipsItems(clipped, 6, 8), 'table outside 6×8 is clipped')
 clipped = resizeCanvas(clipped, 6, 8)
 assert(getFurniture(clipped).length === 0, 'resize drops furniture outside the new bounds')
+
+assert(seatNameFontSize('Ada') >= seatNameFontSize('Eseoghene'), 'longer names use a smaller font')
+assert(seatingPngFilename('Period 2').includes('period-2'), 'png filename slugs the class name')
+
+let labeled = addFurniture(createCustomSeatingChart(8, 8), FURNITURE_TYPES.TABLE, 1, 1)
+const tableItem = getFurniture(labeled)[0]
+assert(furnitureCaption(tableItem, { hasSeat: false }) === 'Table', 'solid table keeps its caption')
+labeled = convertFurnitureToSeats(labeled, tableItem.id)
+const outline = getFurniture(labeled).find(f => f.id === tableItem.id)
+const occupied = new Set(listSeats(labeled).map(s => s.key))
+assert(outline.outline, 'convert to seats leaves an outline')
+assert(furnitureOccupiesSeat(outline, occupied), 'outline cells now have seats')
+assert(furnitureCaption(outline, { hasSeat: true }) == null, 'outline caption hides when seats cover it')
+assert(furnitureCaption(outline, { hasSeat: false }) === 'Table (outline)', 'empty outline still labels in the designer')
 
 console.log('seating-qa: all assertions passed')

@@ -103,20 +103,6 @@ export function buildSeatingStickies(saved, students, viewport) {
         textAlign: 'center',
       })
     }
-    if (item.outline) {
-      stickies.push({
-        id: uid(),
-        x: gridX + item.col * (seatW + gap) / zoom,
-        y: gridY + item.row * (seatH + gap) / zoom,
-        text: `${item.label || item.type} outline`,
-        color: '#ffffff',
-        width: Math.round(seatW / zoom),
-        height: Math.round(Math.max(28, seatH * 0.55) / zoom),
-        fontSize: Math.max(11, Math.round(12 / zoom)),
-        bold: true,
-        ...stickyDefaults,
-      })
-    }
   }
 
   for (const seat of seats) {
