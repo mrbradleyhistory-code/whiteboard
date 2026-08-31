@@ -5,7 +5,7 @@ export const DESIGN_CELL_SIZE = 56
 /** Grid cell size when assigning / viewing names. */
 export const VIEW_CELL_SIZE = 78
 /** Grid cell size for PNG / print export. */
-export const PRINT_CELL_SIZE = 96
+export const PRINT_CELL_SIZE = 108
 
 export function seatNameFontSize(name, cellSize = VIEW_CELL_SIZE) {
   const len = String(name || '').replace(/\s+/g, '').length

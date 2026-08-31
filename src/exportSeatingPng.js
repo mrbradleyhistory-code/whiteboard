@@ -40,13 +40,13 @@ function splitLongWord(ctx, word, maxWidth) {
   return lines
 }
 
-function wrapLines(ctx, text, maxWidth) {
+function wrapLines(ctx, text, maxWidth, { splitWords = false } = {}) {
   const words = String(text || '').trim().split(/\s+/).filter(Boolean)
   if (!words.length) return ['']
   const lines = []
   let current = ''
   for (const word of words) {
-    const pieces = splitLongWord(ctx, word, maxWidth)
+    const pieces = splitWords ? splitLongWord(ctx, word, maxWidth) : [word]
     for (const piece of pieces) {
       const trial = current ? `${current} ${piece}` : piece
       if (current && ctx.measureText(trial).width > maxWidth) {
@@ -65,15 +65,15 @@ function layoutName(ctx, name, maxWidth, maxHeight, preferredSize) {
   let size = preferredSize
   while (size >= 10) {
     ctx.font = `600 ${size}px system-ui, "Segoe UI", sans-serif`
-    const lines = wrapLines(ctx, name, maxWidth)
+    const lines = wrapLines(ctx, name, maxWidth, { splitWords: false })
     const lineH = size * 1.15
-    const fits = lines.length * lineH <= maxHeight
-      && lines.every(line => ctx.measureText(line).width <= maxWidth + 0.5)
-    if (fits) return { lines, size, lineH }
+    const tooWide = lines.some(line => ctx.measureText(line).width > maxWidth + 0.5)
+    const tooTall = lines.length * lineH > maxHeight
+    if (!tooWide && !tooTall) return { lines, size, lineH }
     size -= 1
   }
   ctx.font = '600 10px system-ui, "Segoe UI", sans-serif'
-  return { lines: wrapLines(ctx, name, maxWidth), size: 10, lineH: 11.5 }
+  return { lines: wrapLines(ctx, name, maxWidth, { splitWords: true }), size: 10, lineH: 11.5 }
 }
 
 function slugName(name) {
