@@ -1928,10 +1928,10 @@ export default function Whiteboard({
                         onChange={e => setStickies(prev => prev.map(x => x.id===s.id?{...x,text:e.target.value}:x))}
                         onBlur={() => { setEditingStickyId(null); scheduleSave() }}
                         onKeyDown={e => handleFormatKey(e, 'sticky', s.id)}
-                        style={{ flex:1, border:'none', background:'transparent', resize:'none', fontSize:sf, outline:'none', cursor:'text', ...fmtStyle, textAlign: s.textAlign || 'left' }} />
+                        style={{ flex:1, minHeight:0, border:'none', background:'transparent', resize:'none', fontSize:sf, lineHeight:1.35, outline:'none', cursor:'text', ...fmtStyle, textAlign: s.textAlign || 'left' }} />
                     : <div onDoubleClick={() => { setEditingStickyId(s.id); setSelectedOverlay({ type: 'sticky', id: s.id }) }}
                         onTouchEnd={e => handleEditTouchEnd(e, 'sticky', s.id)}
-                        style={{ flex:1, fontSize:sf, wordBreak:'break-word', ...fmtStyle, textAlign: s.textAlign || 'left' }}>
+                        style={{ flex:1, minHeight:0, overflow:'hidden', fontSize:sf, lineHeight:1.35, overflowWrap:'break-word', wordBreak:'normal', ...fmtStyle, textAlign: s.textAlign || 'left' }}>
                         {(s.listStyle === 'bullet' || s.listStyle === 'numbered')
                           ? s.text.split('\n').map((line, i) => (
                               <div key={i} style={{ display:'flex', gap:4 }}>

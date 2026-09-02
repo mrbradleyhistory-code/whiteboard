@@ -30,7 +30,7 @@ export function buildSeatingStickies(saved, students, viewport) {
   const byId = new Map(students.map(s => [s.id, s.name]))
   const seats = listSeats(chart)
   const furniture = getFurniture(chart)
-  const { centerX, centerY, zoom = 1 } = viewport
+  const { centerX, centerY } = viewport
 
   const seatW = 148
   const seatH = 58
@@ -44,10 +44,10 @@ export function buildSeatingStickies(saved, students, viewport) {
   const totalW = gridW + pad * 2
   const totalH = frontH + titleH + gridH + pad
 
-  const originX = (centerX - totalW / 2) / zoom
-  const originY = (centerY - totalH / 2) / zoom
-  const gridX = originX + pad / zoom
-  const gridY = originY + (frontH + titleH) / zoom
+  const originX = centerX - totalW / 2
+  const originY = centerY - totalH / 2
+  const gridX = originX + pad
+  const gridY = originY + frontH + titleH
 
   const stickies = []
   let colorIdx = 0
@@ -58,9 +58,9 @@ export function buildSeatingStickies(saved, students, viewport) {
     y: originY,
     text: '↑ Front of room',
     color: '#eef1f4',
-    width: Math.round(gridW / zoom),
-    height: Math.round(frontH / zoom),
-    fontSize: Math.max(12, Math.round(14 / zoom)),
+    width: Math.round(gridW),
+    height: Math.round(frontH),
+    fontSize: 14,
     bold: true,
     ...stickyDefaults,
   })
@@ -68,12 +68,12 @@ export function buildSeatingStickies(saved, students, viewport) {
   stickies.push({
     id: uid(),
     x: gridX,
-    y: originY + frontH / zoom,
+    y: originY + frontH,
     text: name || 'Seating chart',
     color: '#ffffff',
-    width: Math.round(gridW / zoom),
-    height: Math.round(titleH / zoom),
-    fontSize: Math.max(14, Math.round(18 / zoom)),
+    width: Math.round(gridW),
+    height: Math.round(titleH),
+    fontSize: 18,
     bold: true,
     ...stickyDefaults,
   })
@@ -85,8 +85,8 @@ export function buildSeatingStickies(saved, students, viewport) {
       : (tint?.fill || FURNITURE_COLORS[item.type] || FURNITURE_COLORS.rect)
     const cells = furnitureCells(item)
     for (const cell of cells) {
-      const x = gridX + cell.col * (seatW + gap) / zoom
-      const y = gridY + cell.row * (seatH + gap) / zoom
+      const x = gridX + cell.col * (seatW + gap)
+      const y = gridY + cell.row * (seatH + gap)
       stickies.push({
         id: uid(),
         x,
@@ -95,9 +95,9 @@ export function buildSeatingStickies(saved, students, viewport) {
           ? ''
           : (cell.row === item.row && cell.col === item.col ? (item.label || item.type) : ''),
         color,
-        width: Math.round(seatW / zoom),
-        height: Math.round(seatH / zoom),
-        fontSize: Math.max(11, Math.round(12 / zoom)),
+        width: Math.round(seatW),
+        height: Math.round(seatH),
+        fontSize: 12,
         bold: true,
         ...stickyDefaults,
         textAlign: 'center',
@@ -108,8 +108,8 @@ export function buildSeatingStickies(saved, students, viewport) {
   for (const seat of seats) {
     const studentId = chart.assignments?.[seat.key]
     const label = studentId ? (byId.get(studentId) || 'Unknown') : '—'
-    const x = gridX + seat.col * (seatW + gap) / zoom
-    const y = gridY + seat.row * (seatH + gap) / zoom
+    const x = gridX + seat.col * (seatW + gap)
+    const y = gridY + seat.row * (seatH + gap)
     const tableFurn = seat.tableId ? furniture.find(f => f.id === seat.tableId) : null
     const seatTint = seat.color
       ? resolveSeatingColor(seat.color)
@@ -123,9 +123,9 @@ export function buildSeatingStickies(saved, students, viewport) {
       color: studentId
         ? SEAT_COLORS[colorIdx++ % SEAT_COLORS.length]
         : (seatTint?.soft || (seat.tableId ? '#f0fff4' : '#f6f8fa')),
-      width: Math.round(seatW / zoom),
-      height: Math.round(seatH / zoom),
-      fontSize: Math.max(13, Math.round(15 / zoom)),
+      width: Math.round(seatW),
+      height: Math.round(seatH),
+      fontSize: 15,
       bold: !!studentId,
       ...stickyDefaults,
     })
