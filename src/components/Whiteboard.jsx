@@ -8,6 +8,7 @@ import {
   pageToSnapshot,
   mergeActivePage,
   boardUpdatePayload,
+  appendStickiesToPage,
 } from '../boardPages'
 import Toolbar from './Toolbar'
 import BoardPanel from './BoardPanel'
@@ -264,7 +265,11 @@ export default function Whiteboard({
   const [editingPageNameValue, setEditingPageNameValue] = useState('')
   zoomRef.current = zoom
   drawSettingsRef.current = { tool, color, width, highlight, highlightColor }
-  pagesRef.current = pages
+  const activePageIdRef = useRef(null)
+  activePageIdRef.current = activePageId
+  const handleInjectGroupsRef = useRef(() => {})
+  const handleInjectSeatingRef = useRef(() => {})
+  const lastInjectRequestIdRef = useRef(null)
 
   useEffect(() => {
     try { localStorage.setItem(PAGES_BAR_COLLAPSED_KEY, pagesBarCollapsed ? '1' : '0') } catch (_) {}
@@ -369,9 +374,11 @@ export default function Whiteboard({
 
   // scheduleSave also pushes to undo history immediately (before the debounce)
   const scheduleSave = useCallback((overrides = {}) => {
-    if (!activeBoard || !activePageId) return
+    if (!activeBoard) return
+    const pageId = activePageIdRef.current
+    if (!pageId) return
     const snap = getCanvasSnap(overrides)
-    const merged = mergeActivePage(pagesRef.current, activePageId, snap)
+    const merged = mergeActivePage(pagesRef.current, pageId, snap)
     pagesRef.current = merged
     setPages(merged)
     historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1)
@@ -379,8 +386,8 @@ export default function Whiteboard({
     if (historyRef.current.length > 50) historyRef.current.shift()
     else historyIndexRef.current++
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => persistPages(merged, activePageId), 800)
-  }, [activeBoard, activePageId, getCanvasSnap, persistPages])
+    saveTimer.current = setTimeout(() => persistPages(merged, pageId), 800)
+  }, [activeBoard, getCanvasSnap, persistPages])
 
   const renamePage = useCallback((pageId, rawName) => {
     const name = rawName.trim()
@@ -565,28 +572,33 @@ export default function Whiteboard({
   }, [goToAdjacentPage])
 
   const handleInjectGroups = useCallback((groups) => {
+    const pageId = activePageIdRef.current
+    if (!pageId) return
     const viewport = viewportCenterFromScroll(scrollRef.current, zoomRef.current)
     const newStickies = buildGroupStickies(groups, viewport)
-    setStickies(prev => {
-      const n = [...prev, ...newStickies]
-      scheduleSave({ stickies: n })
-      return n
-    })
+    const mergedPages = appendStickiesToPage(pagesRef.current, pageId, newStickies)
+    const nextStickies = mergedPages.find(p => p.id === pageId)?.stickies || newStickies
+    setStickies(nextStickies)
+    scheduleSave({ stickies: nextStickies })
     setNotification(`Placed ${groups.length} groups on board`)
     setTimeout(() => setNotification(''), 2500)
   }, [scheduleSave])
 
   const handleInjectSeating = useCallback(({ name, chart, students }) => {
+    const pageId = activePageIdRef.current
+    if (!pageId) return
     const viewport = viewportCenterFromScroll(scrollRef.current, zoomRef.current)
     const newStickies = buildSeatingStickies({ name, chart }, students, viewport)
-    setStickies(prev => {
-      const n = [...prev, ...newStickies]
-      scheduleSave({ stickies: n })
-      return n
-    })
+    const mergedPages = appendStickiesToPage(pagesRef.current, pageId, newStickies)
+    const nextStickies = mergedPages.find(p => p.id === pageId)?.stickies || newStickies
+    setStickies(nextStickies)
+    scheduleSave({ stickies: nextStickies })
     setNotification(`Placed seating chart "${name}" on board`)
     setTimeout(() => setNotification(''), 2500)
   }, [scheduleSave])
+
+  handleInjectGroupsRef.current = handleInjectGroups
+  handleInjectSeatingRef.current = handleInjectSeating
 
   useEffect(() => {
     if (!activeBoard) return
@@ -595,32 +607,36 @@ export default function Whiteboard({
     if (!pending) return
     requestAnimationFrame(() => {
       if (pending.type === 'groups' && pending.groups?.length) {
-        handleInjectGroups(pending.groups)
+        handleInjectGroupsRef.current(pending.groups)
       } else if (pending.type === 'seating' && pending.chart) {
-        handleInjectSeating({
+        handleInjectSeatingRef.current({
           name: pending.name || 'Seating',
           chart: pending.chart,
           students: pending.students || [],
         })
       }
     })
-  }, [activeBoard, handleInjectGroups, handleInjectSeating, injectRequest])
+  }, [activeBoard, injectRequest])
 
   useEffect(() => {
     if (!activeBoard || !injectRequest) return
+    const requestId = injectRequest.id
+    if (lastInjectRequestIdRef.current === requestId) return
+    lastInjectRequestIdRef.current = requestId
+    const req = injectRequest
     requestAnimationFrame(() => {
-      if (injectRequest.type === 'groups' && injectRequest.groups?.length) {
-        handleInjectGroups(injectRequest.groups)
-      } else if (injectRequest.type === 'seating' && injectRequest.chart) {
-        handleInjectSeating({
-          name: injectRequest.name || 'Seating',
-          chart: injectRequest.chart,
-          students: injectRequest.students || [],
+      if (req.type === 'groups' && req.groups?.length) {
+        handleInjectGroupsRef.current(req.groups)
+      } else if (req.type === 'seating' && req.chart) {
+        handleInjectSeatingRef.current({
+          name: req.name || 'Seating',
+          chart: req.chart,
+          students: req.students || [],
         })
       }
       onInjectRequestHandled?.()
     })
-  }, [activeBoard, injectRequest, handleInjectGroups, handleInjectSeating, onInjectRequestHandled])
+  }, [activeBoard, injectRequest, onInjectRequestHandled])
 
   useEffect(() => {
     const onKeyDown = (e) => {

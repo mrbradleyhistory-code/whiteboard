@@ -58,17 +58,32 @@ export function mergeActivePage(pages, activePageId, snap) {
   )
 }
 
-/** Dual-write active page to legacy columns for older clients. Shapes live only in pages JSON. */
-export function boardUpdatePayload(pages, activePageId, includePages = true) {
-  const active = pages.find(p => p.id === activePageId) || pages[0]
+/**
+ * Dual-write page 1 to legacy columns for older clients.
+ * Must NOT copy the active page — saving groups on page 2 used to overwrite
+ * the root `stickies` field, which then showed up again on page 1.
+ * Shapes live only in pages JSON.
+ */
+export function boardUpdatePayload(pages, _activePageId, includePages = true) {
+  const legacy = pages[0]
   const payload = {
-    strokes: active?.strokes || [],
-    stickies: active?.stickies || [],
-    text_boxes: active?.text_boxes || [],
-    images: active?.images || [],
+    strokes: legacy?.strokes || [],
+    stickies: legacy?.stickies || [],
+    text_boxes: legacy?.text_boxes || [],
+    images: legacy?.images || [],
   }
   if (includePages) payload.pages = pages
   return payload
+}
+
+/** Append stickies to one page; every other page is left untouched. */
+export function appendStickiesToPage(pages, pageId, newStickies) {
+  if (!pageId || !newStickies?.length) return pages
+  return pages.map(p => (
+    p.id === pageId
+      ? { ...p, stickies: [...(p.stickies || []), ...newStickies] }
+      : p
+  ))
 }
 
 export function isMissingPagesColumnError(message) {
