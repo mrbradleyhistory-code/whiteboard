@@ -29,6 +29,12 @@ import WhiteboardTimer from './WhiteboardTimer'
 import InjectGroupsModal from './InjectGroupsModal'
 import InjectSeatingModal from './InjectSeatingModal'
 import { buildPagesFromPngFiles } from '../importPngPages'
+import {
+  isBlankBoardText,
+  clearedBoardText,
+  placeholderForType,
+  hitBoardOverlay,
+} from '../boardObjectChrome'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -37,9 +43,8 @@ const CANVAS_HEIGHT = 4800
 const STICKY_COLORS = ['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd']
 const ZOOM_MIN = 0.05
 const ZOOM_MAX = 3
-const DOUBLE_TAP_MS = 350
-const DOUBLE_TAP_PX = 32
 const TOUCH_DRAG_THRESHOLD = 10
+const OVERLAY_PLACEHOLDER_STYLE = { color: '#94a3b8', fontStyle: 'italic', fontWeight: 400 }
 /** Ink is always painted above board objects; Move mode uses pointer-events:none on ink so items stay grabbable. */
 const Z_BOARD_IMAGES = 1
 const Z_BOARD_OVERLAYS = 2
@@ -73,7 +78,32 @@ const pointerXY = (e) => {
 const isTouchPointer = (e) => e.type.startsWith('touch')
 
 const shouldIgnoreOverlayPointer = (target) =>
-  target.closest('textarea, button, input')
+  target.closest('textarea, button, input, [data-overlay-chrome]')
+
+function OverlayPlainOrList({ type, item }) {
+  if (isBlankBoardText(item.text)) {
+    return <span style={OVERLAY_PLACEHOLDER_STYLE}>{placeholderForType(type)}</span>
+  }
+  const align = item.textAlign || (type === 'shape' ? 'center' : 'left')
+  if (item.listStyle === 'bullet' || item.listStyle === 'numbered') {
+    return item.text.split('\n').map((line, i) => (
+      <div
+        key={i}
+        style={{
+          display: 'flex',
+          gap: 4,
+          justifyContent: type === 'shape'
+            ? (align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start')
+            : undefined,
+        }}
+      >
+        <span style={{ flexShrink: 0 }}>{item.listStyle === 'bullet' ? '•' : `${i + 1}.`}</span>
+        <span>{line}</span>
+      </div>
+    ))
+  }
+  return <span style={{ whiteSpace: 'pre-wrap' }}>{item.text}</span>
+}
 
 const getOverlayCanvasPoint = (canvas, clientX, clientY, zoom) => {
   const r = canvas.getBoundingClientRect()
@@ -206,7 +236,8 @@ export default function Whiteboard({
   const touchGestureRef = useRef({ active: false, lastDist: 0, lastMidX: 0, lastMidY: 0 })
   const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0, pointerId: null })
   const touchDragPendingRef = useRef(null)
-  const lastTapRef = useRef({ time: 0, x: 0, y: 0, type: null, id: null })
+  const overlayClickMovedRef = useRef(false)
+  const overlayPointerStartRef = useRef(null)
   const cancelDragResizeRef = useRef(() => {})
   const activePointerIdRef = useRef(null)
   const drawRafRef = useRef(null)
@@ -753,9 +784,11 @@ export default function Whiteboard({
     if (e.button === 1 || middlePanRef.current.active) return
     if (tool === 'shape') {
       if (!canvasRef.current) return
+      const pt = canvasPos(e.clientX, e.clientY, canvasRef.current)
+      const hit = hitBoardOverlay(pt.x, pt.y, { textBoxes, stickies, shapes })
+      if (hit) return
       e.currentTarget.setPointerCapture(e.pointerId)
       activePointerIdRef.current = e.pointerId
-      const pt = canvasPos(e.clientX, e.clientY, canvasRef.current)
       shapeDragRef.current = { startX: pt.x, startY: pt.y, pointerId: e.pointerId }
       setShapePreview({
         x: pt.x, y: pt.y, w: 0, h: 0,
@@ -872,6 +905,43 @@ export default function Whiteboard({
     finishCanvasPointer(e)
   }
 
+  const beginObjectEdit = (type, id) => {
+    if (type === 'sticky') {
+      setStickies(prev => prev.map(s => s.id === id ? { ...s, text: clearedBoardText(s.text) } : s))
+      setEditingStickyId(id)
+      setEditingTextId(null)
+      setEditingShapeId(null)
+      setSelectedOverlay({ type: 'sticky', id })
+      return
+    }
+    if (type === 'shape') {
+      setShapes(prev => prev.map(s => s.id === id ? { ...s, text: clearedBoardText(s.text) } : s))
+      setEditingShapeId(id)
+      setEditingStickyId(null)
+      setEditingTextId(null)
+      setSelectedOverlay({ type: 'shape', id })
+      return
+    }
+    if (type === 'text') {
+      const displayEl = document.getElementById(`textbox_${id}`)
+      const measured = displayEl?.offsetHeight
+      setTextBoxes(prev => prev.map(x => x.id === id
+        ? { ...x, text: clearedBoardText(x.text), ...(measured ? { height: measured } : {}) }
+        : x))
+      setEditingTextId(id)
+      setEditingStickyId(null)
+      setEditingShapeId(null)
+      setSelectedOverlay({ type: 'text', id })
+    }
+  }
+
+  const onOverlayActivate = (e, type, id) => {
+    e.stopPropagation()
+    if (e.target.closest?.('[data-overlay-chrome]')) return
+    if (overlayClickMovedRef.current) return
+    beginObjectEdit(type, id)
+  }
+
   const handleCanvasClick = (e) => {
     if (drewThisGestureRef.current) {
       drewThisGestureRef.current = false
@@ -883,14 +953,28 @@ export default function Whiteboard({
     const z = zoomRef.current
     const x = (e.clientX - r.left) / z, y = (e.clientY - r.top) / z
 
+    if (tool === 'text' || tool === 'sticky' || tool === 'shape') {
+      const hit = hitBoardOverlay(x, y, { textBoxes, stickies, shapes })
+      if (hit) {
+        beginObjectEdit(hit.type, hit.id)
+        return
+      }
+    }
+
     if (tool === 'text') {
-      const nb = { id: uid(), x, y, text: 'Text here', fontSize, color: textColor, fontFamily, width: 200, height: 60, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
+      const nb = { id: uid(), x, y, text: '', fontSize, color: textColor, fontFamily, width: 200, height: 60, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
       const n = [...textBoxes, nb]
-      setTextBoxes(n); setEditingTextId(nb.id); scheduleSave({ textBoxes: n })
+      setTextBoxes(n)
+      setEditingTextId(nb.id)
+      setSelectedOverlay({ type: 'text', id: nb.id })
+      scheduleSave({ textBoxes: n })
     } else if (tool === 'sticky') {
-      const ns = { id: uid(), x, y, text: 'Note...', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 180, height: 120, fontSize: 16, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
+      const ns = { id: uid(), x, y, text: '', color: STICKY_COLORS[stickies.length % STICKY_COLORS.length], width: 180, height: 120, fontSize: 16, bold: pendingBold, italic: pendingItalic, underline: pendingUnderline, textAlign, listStyle }
       const n = [...stickies, ns]
-      setStickies(n); setEditingStickyId(ns.id); scheduleSave({ stickies: n })
+      setStickies(n)
+      setEditingStickyId(ns.id)
+      setSelectedOverlay({ type: 'sticky', id: ns.id })
+      scheduleSave({ stickies: n })
     }
   }
 
@@ -921,45 +1005,17 @@ export default function Whiteboard({
   }, [dragging, scheduleSave])
   cancelDragResizeRef.current = cancelDragResize
 
-  const beginTextEdit = (id, displayEl) => {
-    const measured = displayEl?.offsetHeight
-    if (measured) {
-      setTextBoxes(prev => prev.map(x => x.id === id ? { ...x, height: measured } : x))
-    }
-    setEditingTextId(id)
-    setSelectedOverlay({ type: 'text', id })
-  }
-
-  const handleEditTouchEnd = useCallback((e, type, id) => {
+  const handleEditTouchEnd = (e, type, id) => {
     if (touchGestureRef.current.active || e.touches.length > 0) return
     const pending = touchDragPendingRef.current
     if (pending?.id === id && pending.moved) return
     if (dragging || resizeRef.current) return
-
-    const { clientX, clientY } = pointerXY(e)
-    const last = lastTapRef.current
-    const now = Date.now()
-    if (last.type === type && last.id === id &&
-        now - last.time < DOUBLE_TAP_MS &&
-        Math.hypot(clientX - last.x, clientY - last.y) < DOUBLE_TAP_PX) {
-      if (type === 'sticky') {
-        setEditingStickyId(id)
-        setSelectedOverlay({ type: 'sticky', id })
-      } else if (type === 'shape') {
-        setEditingShapeId(id)
-        setSelectedOverlay({ type: 'shape', id })
-      } else {
-        beginTextEdit(id, document.getElementById(`textbox_${id}`))
-      }
-      lastTapRef.current = { time: 0, x: 0, y: 0, type: null, id: null }
-      touchDragPendingRef.current = null
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
-    lastTapRef.current = { time: now, x: clientX, y: clientY, type, id }
-    if (pending?.id === id) touchDragPendingRef.current = null
-  }, [])
+    if (overlayClickMovedRef.current) return
+    beginObjectEdit(type, id)
+    touchDragPendingRef.current = null
+    e.preventDefault()
+    e.stopPropagation()
+  }
 
   // --- Drag ---
   const queueDragPosition = useCallback((type, id, x, y) => {
@@ -997,6 +1053,9 @@ export default function Whiteboard({
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
     if (shouldIgnoreOverlayPointer(e.target)) return
     e.stopPropagation()
+    overlayClickMovedRef.current = false
+    const startPt = pointerXY(e)
+    overlayPointerStartRef.current = { x: startPt.clientX, y: startPt.clientY }
     if (type === 'sticky' || type === 'text' || type === 'image' || type === 'shape') setSelectedOverlay({ type, id })
     const items = type === 'sticky' ? stickies : type === 'text' ? textBoxes : type === 'shape' ? shapes : images
     const item = items.find(i => i.id === id)
@@ -1075,20 +1134,18 @@ export default function Whiteboard({
   const overlaySelected = (type, id) =>
     selectedOverlay?.type === type && selectedOverlay?.id === id
 
-  const showStickyDelete = (id) =>
-    (tool === 'select' && (overlaySelected('sticky', id) || editingStickyId === id)) ||
-    (tool === 'sticky' && (overlaySelected('sticky', id) || editingStickyId === id))
+  const overlayChromeVisible = (type, id) => {
+    if (overlaySelected(type, id)) return true
+    if (type === 'sticky') return editingStickyId === id
+    if (type === 'text') return editingTextId === id
+    if (type === 'shape') return editingShapeId === id
+    return false
+  }
 
-  const showTextDelete = (id) =>
-    (tool === 'select' && (overlaySelected('text', id) || editingTextId === id)) ||
-    (tool === 'text' && (overlaySelected('text', id) || editingTextId === id))
-
-  const showImageControls = (id) =>
-    tool === 'select' && overlaySelected('image', id)
-
-  const showShapeControls = (id) =>
-    (tool === 'select' && (overlaySelected('shape', id) || editingShapeId === id)) ||
-    (tool === 'shape' && (overlaySelected('shape', id) || editingShapeId === id))
+  const showStickyDelete = (id) => overlayChromeVisible('sticky', id)
+  const showTextDelete = (id) => overlayChromeVisible('text', id)
+  const showImageControls = (id) => overlaySelected('image', id)
+  const showShapeControls = (id) => overlayChromeVisible('shape', id)
 
   const clearOverlaySelection = () => setSelectedOverlay(null)
 
@@ -1104,6 +1161,7 @@ export default function Whiteboard({
       : type === 'shape' ? (item.height || 120)
       : type === 'sticky' ? (item.height || 110) : (item.height || 60)
     const startFontSize = type !== 'image' ? (item.fontSize || (type === 'sticky' ? 13 : type === 'shape' ? 16 : 18)) : null
+    overlayClickMovedRef.current = true
     resizeRef.current = { type, id: item.id, startX: clientX, startY: clientY, startW, startH, startFontSize }
     if (isTouchPointer(e)) e.preventDefault()
   }
@@ -1114,6 +1172,7 @@ export default function Whiteboard({
       const { clientX, clientY } = pointerXY(e)
       if (Math.hypot(clientX - pending.startX, clientY - pending.startY) < TOUCH_DRAG_THRESHOLD) return
       pending.moved = true
+      overlayClickMovedRef.current = true
       const canvas = canvasRef.current
       if (!canvas) return
       const pt = getOverlayCanvasPoint(canvas, clientX, clientY, zoomRef.current)
@@ -1130,6 +1189,12 @@ export default function Whiteboard({
     if (drag?.pointerId != null && e.pointerId != null && drag.pointerId !== e.pointerId) return
     if (e.cancelable && (isTouchPointer(e) || e.pointerType === 'touch' || e.pointerType === 'pen')) e.preventDefault()
     const { clientX, clientY } = pointerXY(e)
+    const start = overlayPointerStartRef.current
+    if (start && !overlayClickMovedRef.current) {
+      if (Math.hypot(clientX - start.x, clientY - start.y) >= TOUCH_DRAG_THRESHOLD) {
+        overlayClickMovedRef.current = true
+      }
+    }
     const z = zoomRef.current
     if (resizeRef.current) {
       const { type, id, startX, startY, startW, startH, startFontSize } = resizeRef.current
@@ -1813,11 +1878,11 @@ export default function Whiteboard({
                 onPointerDown={tool === 'select' ? e => onDragStart(e,'image',img.id) : undefined}>
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none', pointerEvents:'none' }} draggable={false} alt="" />
                 {showImageControls(img.id) && (
-                  <button type="button" onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}); clearOverlaySelection() }}
+                  <button type="button" data-overlay-chrome onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}); clearOverlaySelection() }}
                     style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
                 )}
                 {showImageControls(img.id) && (
-                  <div onPointerDown={e => onResizeStart(e, img)}
+                  <div data-overlay-chrome onPointerDown={e => onResizeStart(e, img)}
                     style={canvasResizeHandle} role="presentation" />
                 )}
               </div>
@@ -1855,11 +1920,13 @@ export default function Whiteboard({
                     position:'absolute', left:sh.x, top:sh.y, width:sh.width, height:sh.height,
                     pointerEvents:'auto', cursor: tool==='select' ? 'move' : tool==='shape' ? 'copy' : 'default',
                     display:'flex', flexDirection:'column',
+                    boxShadow: overlayChromeVisible('shape', sh.id) ? `0 0 0 2px ${colors.accent}` : undefined,
+                    borderRadius: 4,
                     zIndex: dragging?.type === 'shape' && dragging?.id === sh.id ? Z_BOARD_DRAG_ITEM : undefined,
                   }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'shape',sh.id) : undefined}
-                  onClick={tool === 'shape' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'shape', id: sh.id }) } : undefined}>
+                  onClick={e => onOverlayActivate(e, 'shape', sh.id)}>
                   <ShapeGraphic
                     kind={sh.kind}
                     fillColor={sh.fillColor}
@@ -1873,7 +1940,7 @@ export default function Whiteboard({
                     padding:'8px 10px',
                   }}>
                     {editingShapeId === sh.id
-                      ? <textarea autoFocus value={sh.text}
+                      ? <textarea autoFocus value={sh.text} placeholder={placeholderForType('shape')}
                           onChange={e => setShapes(prev => prev.map(x => x.id===sh.id ? {...x, text:e.target.value} : x))}
                           onBlur={() => { setEditingShapeId(null); scheduleSave() }}
                           onKeyDown={e => handleFormatKey(e, 'shape', sh.id)}
@@ -1884,29 +1951,22 @@ export default function Whiteboard({
                             lineHeight:1.35, ...fmtStyle,
                           }} />
                       : <div
-                          onDoubleClick={() => { setEditingShapeId(sh.id); setSelectedOverlay({ type: 'shape', id: sh.id }) }}
                           onTouchEnd={e => handleEditTouchEnd(e, 'shape', sh.id)}
                           style={{
                             width:'100%', maxHeight:'100%', overflow:'hidden',
                             fontSize:sf, color:tc, fontFamily:ff, wordBreak:'break-word',
                             textAlign: sh.textAlign || 'center', lineHeight:1.35, ...fmtStyle,
                           }}>
-                          {(sh.listStyle === 'bullet' || sh.listStyle === 'numbered')
-                            ? sh.text.split('\n').map((line, i) => (
-                                <div key={i} style={{ display:'flex', gap:4, justifyContent: sh.textAlign === 'right' ? 'flex-end' : sh.textAlign === 'center' ? 'center' : 'flex-start' }}>
-                                  <span style={{ flexShrink:0 }}>{sh.listStyle === 'bullet' ? '•' : `${i+1}.`}</span>
-                                  <span>{line}</span>
-                                </div>
-                              ))
-                            : <span style={{ whiteSpace:'pre-wrap' }}>{sh.text}</span>}
+                          <OverlayPlainOrList type="shape" item={sh} />
                         </div>}
                   </div>
                   {showShapeControls(sh.id) && (
-                    <button type="button" onClick={() => { const n=shapes.filter(x=>x.id!==sh.id); setShapes(n); scheduleSave({shapes:n}); clearOverlaySelection(); setEditingShapeId(null) }}
+                    <button type="button" data-overlay-chrome
+                      onClick={() => { const n=shapes.filter(x=>x.id!==sh.id); setShapes(n); scheduleSave({shapes:n}); clearOverlaySelection(); setEditingShapeId(null) }}
                       style={{ ...canvasControlDelete, top: -14, right: -14, zIndex: 2 }} aria-label="Remove shape">✕</button>
                   )}
                   {showShapeControls(sh.id) && (
-                    <div onMouseDown={e => onResizeStart(e, sh, 'shape')} onTouchStart={e => onResizeStart(e, sh, 'shape')}
+                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, sh, 'shape')} onTouchStart={e => onResizeStart(e, sh, 'shape')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
@@ -1917,42 +1977,47 @@ export default function Whiteboard({
               const sw = s.width || 160
               const sh = s.height || 110
               const sf = s.fontSize || 13
+              const stickyActive = overlayChromeVisible('sticky', s.id)
               const fmtStyle = { fontWeight: s.bold?700:400, fontStyle: s.italic?'italic':'normal', textDecoration: s.underline?'underline':'none' }
               return (
-                <div key={s.id} style={{ position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8, padding:'10px 10px 32px 10px', boxShadow:'0 3px 12px rgba(0,0,0,0.15)', cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none', display:'flex', flexDirection:'column', zIndex: dragging?.type === 'sticky' && dragging?.id === s.id ? Z_BOARD_DRAG_ITEM : undefined }}
+                <div key={s.id} style={{
+                  position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8,
+                  padding: stickyActive ? '10px 10px 32px 10px' : '10px',
+                  boxShadow: stickyActive
+                    ? `0 0 0 2px ${colors.accent}, 0 3px 12px rgba(0,0,0,0.15)`
+                    : '0 3px 12px rgba(0,0,0,0.15)',
+                  cursor: tool==='select'?'move':'default', pointerEvents:'auto', userSelect:'none',
+                  display:'flex', flexDirection:'column',
+                  zIndex: dragging?.type === 'sticky' && dragging?.id === s.id ? Z_BOARD_DRAG_ITEM : undefined,
+                }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'sticky',s.id) : undefined}
-                  onClick={tool === 'sticky' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'sticky', id: s.id }) } : undefined}>
+                  onClick={e => onOverlayActivate(e, 'sticky', s.id)}>
                   {editingStickyId === s.id
-                    ? <textarea autoFocus value={s.text}
+                    ? <textarea autoFocus value={s.text} placeholder={placeholderForType('sticky')}
                         onChange={e => setStickies(prev => prev.map(x => x.id===s.id?{...x,text:e.target.value}:x))}
                         onBlur={() => { setEditingStickyId(null); scheduleSave() }}
                         onKeyDown={e => handleFormatKey(e, 'sticky', s.id)}
                         style={{ flex:1, minHeight:0, border:'none', background:'transparent', resize:'none', fontSize:sf, lineHeight:1.35, outline:'none', cursor:'text', ...fmtStyle, textAlign: s.textAlign || 'left' }} />
-                    : <div onDoubleClick={() => { setEditingStickyId(s.id); setSelectedOverlay({ type: 'sticky', id: s.id }) }}
-                        onTouchEnd={e => handleEditTouchEnd(e, 'sticky', s.id)}
+                    : <div onTouchEnd={e => handleEditTouchEnd(e, 'sticky', s.id)}
                         style={{ flex:1, minHeight:0, overflow:'hidden', fontSize:sf, lineHeight:1.35, overflowWrap:'break-word', wordBreak:'normal', ...fmtStyle, textAlign: s.textAlign || 'left' }}>
-                        {(s.listStyle === 'bullet' || s.listStyle === 'numbered')
-                          ? s.text.split('\n').map((line, i) => (
-                              <div key={i} style={{ display:'flex', gap:4 }}>
-                                <span style={{ flexShrink:0 }}>{s.listStyle === 'bullet' ? '•' : `${i+1}.`}</span>
-                                <span>{line}</span>
-                              </div>
-                            ))
-                          : <span style={{ whiteSpace:'pre-wrap' }}>{s.text}</span>}
+                        <OverlayPlainOrList type="sticky" item={s} />
                       </div>}
                   {showStickyDelete(s.id) && (
-                    <button type="button" onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}); clearOverlaySelection() }}
+                    <button type="button" data-overlay-chrome
+                      onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}); clearOverlaySelection() }}
                       style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove note">✕</button>
                   )}
-                  <div style={{ position:'absolute', bottom:8, left:10, display:'flex', gap:6 }}>
-                    {['#f6e05e','#90cdf4','#9ae6b4','#feb2b2','#e9d8fd'].map(c => (
-                      <button type="button" key={c} onClick={() => setStickies(prev => prev.map(x => x.id===s.id?{...x,color:c}:x))}
-                        style={{ width:22, height:22, borderRadius:'50%', background:c, border: s.color===c?'3px solid #333':'2px solid #fff', padding:0, boxShadow:'0 1px 3px rgba(0,0,0,0.2)', touchAction:'manipulation' }} aria-label="Note color" />
-                    ))}
-                  </div>
-                  {tool === 'select' && (
-                    <div onMouseDown={e => onResizeStart(e, s, 'sticky')} onTouchStart={e => onResizeStart(e, s, 'sticky')}
+                  {stickyActive && (
+                    <div data-overlay-chrome style={{ position:'absolute', bottom:8, left:10, display:'flex', gap:6, zIndex: 3 }}>
+                      {STICKY_COLORS.map(c => (
+                        <button type="button" key={c} onClick={() => setStickies(prev => prev.map(x => x.id===s.id?{...x,color:c}:x))}
+                          style={{ width:22, height:22, borderRadius:'50%', background:c, border: s.color===c?'3px solid #333':'2px solid #fff', padding:0, boxShadow:'0 1px 3px rgba(0,0,0,0.2)', touchAction:'manipulation' }} aria-label="Note color" />
+                      ))}
+                    </div>
+                  )}
+                  {stickyActive && (
+                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, s, 'sticky')} onTouchStart={e => onResizeStart(e, s, 'sticky')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
@@ -1978,12 +2043,18 @@ export default function Whiteboard({
               }
               return (
                 <div key={t.id} id={`textbox_${t.id}`}
-                  style={{ position:'absolute', left:t.x, top:t.y, width:tw, minHeight:th, pointerEvents:'auto', cursor: tool==='select'?'move':'text', zIndex: dragging?.type === 'text' && dragging?.id === t.id ? Z_BOARD_DRAG_ITEM : undefined }}
+                  style={{
+                    position:'absolute', left:t.x, top:t.y, width:tw, minHeight:th, pointerEvents:'auto',
+                    cursor: tool==='select'?'move':'text',
+                    outline: overlayChromeVisible('text', t.id) && editingTextId !== t.id ? `2px solid ${colors.accent}` : undefined,
+                    borderRadius: 4,
+                    zIndex: dragging?.type === 'text' && dragging?.id === t.id ? Z_BOARD_DRAG_ITEM : undefined,
+                  }}
                   onMouseDown={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
                   onTouchStart={tool==='select' ? e => onDragStart(e,'text',t.id) : undefined}
-                  onClick={tool === 'text' ? (e) => { e.stopPropagation(); setSelectedOverlay({ type: 'text', id: t.id }) } : undefined}>
+                  onClick={e => onOverlayActivate(e, 'text', t.id)}>
                   {editingTextId === t.id
-                    ? <textarea autoFocus value={t.text}
+                    ? <textarea autoFocus value={t.text} placeholder={placeholderForType('text')}
                         onChange={e => setTextBoxes(prev => prev.map(x => x.id===t.id?{...x,text:e.target.value}:x))}
                         onBlur={(e) => {
                           const newH = Math.max(60, e.target.scrollHeight)
@@ -2003,24 +2074,17 @@ export default function Whiteboard({
                           overflow: 'auto',
                         }} />
                     : <div
-                        onDoubleClick={(e) => beginTextEdit(t.id, e.currentTarget)}
                         onTouchEnd={e => handleEditTouchEnd(e, 'text', t.id)}
                         style={{ ...textBoxStyle, wordBreak:'break-word', userSelect:'none' }}>
-                        {(t.listStyle === 'bullet' || t.listStyle === 'numbered')
-                          ? t.text.split('\n').map((line, i) => (
-                              <div key={i} style={{ display:'flex', gap:4 }}>
-                                <span style={{ flexShrink:0 }}>{t.listStyle === 'bullet' ? '•' : `${i+1}.`}</span>
-                                <span>{line}</span>
-                              </div>
-                            ))
-                          : <span style={{ whiteSpace:'pre-wrap' }}>{t.text}</span>}
+                        <OverlayPlainOrList type="text" item={t} />
                       </div>}
                   {showTextDelete(t.id) && (
-                    <button type="button" onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}); clearOverlaySelection() }}
+                    <button type="button" data-overlay-chrome
+                      onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}); clearOverlaySelection() }}
                       style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
                   )}
-                  {tool === 'select' && (
-                    <div onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
+                  {overlayChromeVisible('text', t.id) && (
+                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>

@@ -26,7 +26,7 @@ export const sizes = {
   touchMin: 48,
   touchComfort: 56,
   colorSwatch: 36,
-  resizeHandle: 40,
+  resizeHandle: 16,
   deleteControl: 36,
   pageTabMinHeight: 48,
 }
@@ -89,16 +89,16 @@ export const canvasControlDelete = {
 
 export const canvasResizeHandle = {
   position: 'absolute',
-  bottom: -12,
-  right: -12,
+  bottom: -6,
+  right: -6,
   width: sizes.resizeHandle,
   height: sizes.resizeHandle,
   background: colors.accent,
-  border: '3px solid #fff',
-  borderRadius: 8,
+  border: '2px solid #fff',
+  borderRadius: 4,
   cursor: 'nwse-resize',
   pointerEvents: 'auto',
-  zIndex: 1,
+  zIndex: 2,
   touchAction: 'none',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
 }
