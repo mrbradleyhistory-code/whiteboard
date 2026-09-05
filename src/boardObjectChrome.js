@@ -55,3 +55,52 @@ export function hitBoardOverlay(x, y, { textBoxes = [], stickies = [], shapes = 
   }
   return null
 }
+
+export const PLACE_DEFAULTS = {
+  text: { width: 200, height: 60 },
+  sticky: { width: 180, height: 120 },
+  shape: { width: 160, height: 120 },
+}
+
+/** Click (not drag) if both axes stay under this canvas-pixel size. */
+export const PLACE_CLICK_MAX = 24
+
+export function isInkTool(tool) {
+  return tool === 'draw' || tool === 'erase'
+}
+
+export function canMoveOverlays(tool) {
+  return tool === 'select' || tool === 'text' || tool === 'sticky' || tool === 'shape'
+}
+
+export function isPlaceTool(tool) {
+  return tool === 'text' || tool === 'sticky' || tool === 'shape'
+}
+
+export function rectFromPlaceDrag(startX, startY, endX, endY, type) {
+  const def = PLACE_DEFAULTS[type] || PLACE_DEFAULTS.text
+  const w = Math.abs(endX - startX)
+  const h = Math.abs(endY - startY)
+  if (w < PLACE_CLICK_MAX && h < PLACE_CLICK_MAX) {
+    if (type === 'shape') {
+      return {
+        x: startX - def.width / 2,
+        y: startY - def.height / 2,
+        width: def.width,
+        height: def.height,
+        usedDefault: true,
+      }
+    }
+    return { x: startX, y: startY, width: def.width, height: def.height, usedDefault: true }
+  }
+  const minW = type === 'text' ? 80 : type === 'sticky' ? 100 : 48
+  const minH = type === 'text' ? 30 : type === 'sticky' ? 60 : 48
+  return {
+    x: Math.min(startX, endX),
+    y: Math.min(startY, endY),
+    width: Math.max(w, minW),
+    height: Math.max(h, minH),
+    usedDefault: false,
+  }
+}
+

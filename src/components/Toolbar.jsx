@@ -439,7 +439,7 @@ export default function Toolbar({
   formatHint,
 }) {
   const [openMenu, setOpenMenu] = useState(null)
-  const [flyoutOpen, setFlyoutOpen] = useState(true)
+  const [flyoutOpen, setFlyoutOpen] = useState(false)
   const mode = panelMode(tool, editingTextId, editingStickyId, editingShapeId)
   const hasFlyout = mode != null
   const isTextMode = mode === 'text'

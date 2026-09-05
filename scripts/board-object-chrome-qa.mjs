@@ -1,12 +1,17 @@
 import {
+  canMoveOverlays,
   clearedBoardText,
   displayBoardText,
   hitBoardOverlay,
   isBlankBoardText,
+  isInkTool,
+  isPlaceTool,
   overlayHitBox,
   placeholderForType,
+  rectFromPlaceDrag,
   PLACEHOLDER_STICKY,
   PLACEHOLDER_TEXT,
+  PLACE_CLICK_MAX,
 } from '../src/boardObjectChrome.js'
 
 function assert(cond, msg) {
@@ -42,5 +47,21 @@ assert(
   hitBoardOverlay(110, 90, { stickies: [sticky], shapes: [underSticky] })?.type === 'sticky',
   'sticky sits above shape at the same point',
 )
+
+assert(isInkTool('draw') && isInkTool('erase') && !isInkTool('select'), 'ink tools')
+assert(canMoveOverlays('select') && canMoveOverlays('text') && !canMoveOverlays('draw'), 'move overlays off ink')
+assert(isPlaceTool('sticky') && !isPlaceTool('select'), 'place tools')
+
+const clickText = rectFromPlaceDrag(40, 50, 42, 51, 'text')
+assert(clickText.usedDefault && clickText.width === 200 && clickText.x === 40, 'text click uses default size at click point')
+
+const dragSticky = rectFromPlaceDrag(10, 20, 210, 180, 'sticky')
+assert(!dragSticky.usedDefault && dragSticky.width === 200 && dragSticky.height === 160, 'sticky drag uses the rectangle')
+assert(dragSticky.x === 10 && dragSticky.y === 20, 'sticky drag origin is min corner')
+
+const clickShape = rectFromPlaceDrag(100, 100, 100, 100, 'shape')
+assert(clickShape.usedDefault && clickShape.width === 160, 'shape click uses default size')
+assert(clickShape.x === 100 - 80 && clickShape.y === 100 - 60, 'shape click is centered')
+assert(PLACE_CLICK_MAX === 24, 'click vs drag threshold')
 
 console.log('board-object-chrome-qa: all assertions passed')
