@@ -73,6 +73,8 @@ export function iconOnlyBtn(overrides = {}) {
 
 export const canvasControlDelete = {
   position: 'absolute',
+  top: -40,
+  right: -8,
   width: sizes.deleteControl,
   height: sizes.deleteControl,
   borderRadius: '50%',
@@ -85,6 +87,7 @@ export const canvasControlDelete = {
   pointerEvents: 'auto',
   touchAction: 'manipulation',
   boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+  zIndex: 3,
 }
 
 export const canvasResizeHandle = {

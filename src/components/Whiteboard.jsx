@@ -2413,7 +2413,7 @@ export default function Whiteboard({
                 <img src={img.url} style={{ width:img.w, height:img.h, display:'block', userSelect:'none', pointerEvents:'none' }} draggable={false} alt="" />
                 {showImageControls(img.id) && (
                   <button type="button" data-overlay-chrome onClick={() => { const n=images.filter(i=>i.id!==img.id); setImages(n); scheduleSave({images:n}); clearOverlaySelection() }}
-                    style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove image">✕</button>
+                    style={{ ...canvasControlDelete }} aria-label="Remove image">✕</button>
                 )}
                 {showObjectHandles('image', img.id) && (
                   <ResizeHandles size={sizes.resizeHandle} onHandleDown={(e, handle) => onResizeStart(e, img, 'image', handle)} />
@@ -2520,7 +2520,7 @@ export default function Whiteboard({
                   {showShapeControls(sh.id) && (
                     <button type="button" data-overlay-chrome
                       onClick={() => { const n=shapes.filter(x=>x.id!==sh.id); setShapes(n); scheduleSave({shapes:n}); clearOverlaySelection(); setEditingShapeId(null) }}
-                      style={{ ...canvasControlDelete, top: -14, right: -14, zIndex: 2 }} aria-label="Remove shape">✕</button>
+                      style={{ ...canvasControlDelete, zIndex: 2 }} aria-label="Remove shape">✕</button>
                   )}
                   {showObjectHandles('shape', sh.id) && (
                     <ResizeHandles size={sizes.resizeHandle} onHandleDown={(e, handle) => onResizeStart(e, sh, 'shape', handle)} />
@@ -2539,6 +2539,7 @@ export default function Whiteboard({
                 <div key={s.id} style={{
                   position:'absolute', left:s.x, top:s.y, width:sw, height:sh, background:s.color, borderRadius:8,
                   padding: stickyActive ? '10px 10px 32px 10px' : '10px',
+                  boxSizing: 'border-box',
                   boxShadow: stickyActive
                     ? `0 0 0 2px ${colors.accent}, 0 3px 12px rgba(0,0,0,0.15)`
                     : '0 3px 12px rgba(0,0,0,0.15)',
@@ -2565,7 +2566,7 @@ export default function Whiteboard({
                   {showStickyDelete(s.id) && (
                     <button type="button" data-overlay-chrome
                       onClick={() => { const n=stickies.filter(x=>x.id!==s.id); setStickies(n); scheduleSave({stickies:n}); clearOverlaySelection() }}
-                      style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove note">✕</button>
+                      style={{ ...canvasControlDelete }} aria-label="Remove note">✕</button>
                   )}
                   {stickyActive && selectedOverlays.length <= 1 && (
                     <div data-overlay-chrome style={{ position:'absolute', bottom:8, left:10, display:'flex', gap:6, zIndex: 3 }}>
@@ -2642,7 +2643,7 @@ export default function Whiteboard({
                   {showTextDelete(t.id) && (
                     <button type="button" data-overlay-chrome
                       onClick={() => { const n=textBoxes.filter(x=>x.id!==t.id); setTextBoxes(n); scheduleSave({textBoxes:n}); clearOverlaySelection() }}
-                      style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
+                      style={{ ...canvasControlDelete }} aria-label="Remove text">✕</button>
                   )}
                   {showObjectHandles('text', t.id) && (
                     <ResizeHandles size={sizes.resizeHandle} onHandleDown={(e, handle) => onResizeStart(e, t, 'text', handle)} />
@@ -2662,7 +2663,7 @@ export default function Whiteboard({
               }}>
                 <button type="button" data-overlay-chrome
                   onClick={(e) => { e.stopPropagation(); deleteSelectedOverlays() }}
-                  style={{ ...canvasControlDelete, top: -14, right: -14, pointerEvents: 'auto' }}
+                  style={{ ...canvasControlDelete, pointerEvents: 'auto' }}
                   aria-label="Remove selected">✕</button>
                 <ResizeHandles size={sizes.resizeHandle} onHandleDown={(e, handle) => onGroupResizeStart(e, handle)} />
               </div>
