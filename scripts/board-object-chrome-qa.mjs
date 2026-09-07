@@ -48,6 +48,13 @@ assert(
   'sticky sits above shape at the same point',
 )
 
+const img = { id: 'i1', x: 0, y: 0, w: 40, h: 40 }
+assert(hitBoardOverlay(10, 10, { images: [img] })?.type === 'image', 'hits image')
+assert(
+  hitBoardOverlay(10, 10, { images: [img], textBoxes: [{ id: 't3', x: 0, y: 0, width: 40, height: 40 }] })?.type === 'text',
+  'text sits above image',
+)
+
 assert(isInkTool('draw') && isInkTool('erase') && !isInkTool('select'), 'ink tools')
 assert(canMoveOverlays('select') && canMoveOverlays('text') && !canMoveOverlays('draw'), 'move overlays off ink')
 assert(isPlaceTool('sticky') && !isPlaceTool('select'), 'place tools')

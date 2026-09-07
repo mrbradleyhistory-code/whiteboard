@@ -1,3 +1,7 @@
+import { overlayHitBox } from './boardSelection'
+
+export { overlayHitBox } from './boardSelection'
+
 /** Seed strings older boards stored as real text. Treat them as empty placeholders. */
 const SEED_PLACEHOLDERS = new Set(['Text here', 'Note...'])
 
@@ -24,26 +28,16 @@ export function clearedBoardText(text) {
   return isBlankBoardText(text) ? '' : String(text ?? '')
 }
 
-export function overlayHitBox(type, item) {
-  if (type === 'text') {
-    return { x: item.x, y: item.y, w: item.width || 200, h: item.height || 60 }
-  }
-  if (type === 'sticky') {
-    return { x: item.x, y: item.y, w: item.width || 160, h: item.height || 110 }
-  }
-  return { x: item.x, y: item.y, w: item.width || 160, h: item.height || 120 }
-}
-
 export function pointInOverlay(type, item, x, y) {
   const b = overlayHitBox(type, item)
   return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h
 }
 
 /**
- * Top-most object at a canvas point. Paint order is shapes → stickies → text,
+ * Top-most object at a canvas point. Paint order is images → shapes → stickies → text,
  * so later items in each list sit above earlier ones, and text sits above stickies.
  */
-export function hitBoardOverlay(x, y, { textBoxes = [], stickies = [], shapes = [] } = {}) {
+export function hitBoardOverlay(x, y, { textBoxes = [], stickies = [], shapes = [], images = [] } = {}) {
   for (let i = textBoxes.length - 1; i >= 0; i--) {
     if (pointInOverlay('text', textBoxes[i], x, y)) return { type: 'text', id: textBoxes[i].id }
   }
@@ -52,6 +46,9 @@ export function hitBoardOverlay(x, y, { textBoxes = [], stickies = [], shapes = 
   }
   for (let i = shapes.length - 1; i >= 0; i--) {
     if (pointInOverlay('shape', shapes[i], x, y)) return { type: 'shape', id: shapes[i].id }
+  }
+  for (let i = images.length - 1; i >= 0; i--) {
+    if (pointInOverlay('image', images[i], x, y)) return { type: 'image', id: images[i].id }
   }
   return null
 }
