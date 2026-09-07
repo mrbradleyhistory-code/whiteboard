@@ -48,6 +48,7 @@ import {
   unionRects,
 } from '../inkLiveLayer'
 import {
+  coalescedPointerEvents,
   decideInkPointerDown,
   isDelayedTouchDrag,
   notePenActivity,
@@ -138,8 +139,7 @@ const canvasPos = (clientX, clientY, canvas) => {
 }
 
 const collectCoalescedPoints = (e, canvas) => {
-  const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e]
-  return events.map(ev => canvasPos(ev.clientX, ev.clientY, canvas))
+  return coalescedPointerEvents(e.nativeEvent || e).map(ev => canvasPos(ev.clientX, ev.clientY, canvas))
 }
 
 const MIN_POINT_DIST = 0.35
@@ -962,7 +962,7 @@ export default function Whiteboard({
     const z = zoomRef.current
     const x = (e.clientX - r.left) / z
     const y = (e.clientY - r.top) / z
-    e.currentTarget.setPointerCapture?.(e.pointerId)
+    try { e.currentTarget.setPointerCapture?.(e.pointerId) } catch (_) {}
     activePointerIdRef.current = e.pointerId
     stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
     placeDragRef.current = { type: tool, startX: x, startY: y, pointerId: e.pointerId }
@@ -1004,7 +1004,7 @@ export default function Whiteboard({
 
   const beginInkStroke = (e) => {
     const { tool: t } = drawSettingsRef.current
-    e.currentTarget.setPointerCapture(e.pointerId)
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
     activePointerIdRef.current = e.pointerId
     stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
     drewThisGestureRef.current = false

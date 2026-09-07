@@ -51,6 +51,12 @@ export function shouldRejectPalm(e, session, now = 0) {
   return lastPenAt > 0 && now - lastPenAt < PALM_REJECT_MS
 }
 
+export function coalescedPointerEvents(e) {
+  let events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null
+  if (!events?.length) events = [e]
+  return events
+}
+
 export function shouldCommitStroke(eventType) {
   return eventType === 'pointerup'
 }

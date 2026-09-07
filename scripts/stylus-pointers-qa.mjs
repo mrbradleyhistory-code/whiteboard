@@ -1,5 +1,6 @@
 import {
   PALM_REJECT_MS,
+  coalescedPointerEvents,
   decideInkPointerDown,
   isDelayedTouchDrag,
   isInkContactButton,
@@ -77,5 +78,18 @@ assert(!shouldCommitStroke('lostpointercapture'), 'lost capture discards')
 
 assert(notePenActivity('pen', 0, 42) === 42, 'note pen time')
 assert(notePenActivity('touch', 10, 42) === 10, 'touch does not note pen')
+
+const coalescedEmpty = coalescedPointerEvents({
+  clientX: 5,
+  clientY: 6,
+  getCoalescedEvents() { return [] },
+})
+assert(coalescedEmpty.length === 1 && coalescedEmpty[0].clientX === 5, 'empty coalesced falls back to the event')
+const coalescedOk = coalescedPointerEvents({
+  getCoalescedEvents() { return [{ clientX: 1 }, { clientX: 2 }] },
+})
+assert(coalescedOk.length === 2 && coalescedOk[1].clientX === 2, 'uses coalesced points when present')
+const coalescedMissing = coalescedPointerEvents({ clientX: 9 })
+assert(coalescedMissing.length === 1 && coalescedMissing[0].clientX === 9, 'missing coalesced uses the event')
 
 console.log('stylus-pointers-qa: all assertions passed')
