@@ -38,6 +38,15 @@ import {
   canMoveOverlays,
   rectFromPlaceDrag,
 } from '../boardObjectChrome'
+import {
+  applyBoardToLiveTransform,
+  commitStrokeClipRect,
+  devicePixelRatioSafe,
+  strokeDirtyRect,
+  strokeLineWidth,
+  syncLiveLayerCanvas,
+  unionRects,
+} from '../inkLiveLayer'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -231,6 +240,8 @@ export default function Whiteboard({
   const historyRef = useRef([])
   const historyIndexRef = useRef(-1)
   const scrollRef = useRef(null)
+  const liveLayerHostRef = useRef(null)
+  const liveDirtyRef = useRef(null)
   const rootRef = useRef(null)
   const pagesBarCollapsedBeforeFsRef = useRef(null)
   const pngImportInputRef = useRef(null)
@@ -327,21 +338,23 @@ export default function Whiteboard({
     shapes: overrides.shapes !== undefined ? overrides.shapes : shapes,
   }), [stickies, textBoxes, images, shapes])
 
+  const clearStrokeOverlay = useCallback(() => {
+    const overlay = strokeCanvasRef.current
+    if (!overlay) return
+    const ctx = overlay.getContext('2d')
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, overlay.width, overlay.height)
+    liveDirtyRef.current = null
+  }, [])
+
   const redrawCanvas = useCallback((strokes) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ;(strokes || strokesRef.current).forEach(s => drawStrokeOnCtx(ctx, s))
-    const overlay = strokeCanvasRef.current
-    overlay?.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
-  }, [])
-
-  const clearStrokeOverlay = useCallback(() => {
-    const overlay = strokeCanvasRef.current
-    if (!overlay) return
-    overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height)
-  }, [])
+    clearStrokeOverlay()
+  }, [clearStrokeOverlay])
 
   const applyPage = useCallback((page) => {
     const snap = pageToSnapshot(page)
@@ -697,6 +710,8 @@ export default function Whiteboard({
 
     const main = canvasRef.current
     const overlay = strokeCanvasRef.current
+    const host = liveLayerHostRef.current
+    const scroller = scrollRef.current
     if (!main) return
 
     const { tool: t } = drawSettingsRef.current
@@ -711,13 +726,30 @@ export default function Whiteboard({
       return
     }
 
-    // Pen and highlighter: smooth curve on overlay (avoids beaded segment stamps)
-    if (!overlay) return
+    if (!overlay || !host || !scroller) return
+    const dpr = devicePixelRatioSafe()
+    const synced = syncLiveLayerCanvas(overlay, host, dpr)
     const ctx = overlay.getContext('2d')
-    ctx.clearRect(0, 0, overlay.width, overlay.height)
+    const zoom = zoomRef.current
+    const lineW = strokeLineWidth(stroke)
+    const nextDirty = strokeDirtyRect(
+      pts, lineW, zoom, scroller.scrollLeft, scroller.scrollTop, dpr, overlay.width, overlay.height,
+    )
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    if (synced.resized) {
+      ctx.clearRect(0, 0, overlay.width, overlay.height)
+    } else {
+      const clear = unionRects(liveDirtyRef.current, nextDirty)
+      if (clear) ctx.clearRect(clear.x, clear.y, clear.w, clear.h)
+    }
+
+    applyBoardToLiveTransform(ctx, zoom, scroller.scrollLeft, scroller.scrollTop, dpr)
     applyStrokeStyle(ctx, stroke, { livePreview: stroke.highlight })
-    traceSmoothStroke(ctx, pts)
+    if (pts.length < 2) drawStrokeDot(ctx, stroke)
+    else traceSmoothStroke(ctx, pts)
     ctx.globalCompositeOperation = 'source-over'
+    liveDirtyRef.current = nextDirty
   }, [])
 
   const scheduleStrokeFrame = useCallback(() => {
@@ -727,6 +759,36 @@ export default function Whiteboard({
       paintLiveStroke()
     })
   }, [paintLiveStroke])
+
+  useEffect(() => {
+    const host = liveLayerHostRef.current
+    const scroller = scrollRef.current
+    if (!host || !scroller) return
+
+    const sync = () => {
+      const overlay = strokeCanvasRef.current
+      if (!overlay) return
+      const dpr = devicePixelRatioSafe()
+      const { resized } = syncLiveLayerCanvas(overlay, host, dpr)
+      if (resized) {
+        liveDirtyRef.current = null
+        if (drawing.current) scheduleStrokeFrame()
+      } else if (drawing.current) {
+        scheduleStrokeFrame()
+      }
+    }
+
+    sync()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null
+    ro?.observe(host)
+    scroller.addEventListener('scroll', sync, { passive: true })
+    window.addEventListener('resize', sync)
+    return () => {
+      ro?.disconnect()
+      scroller.removeEventListener('scroll', sync)
+      window.removeEventListener('resize', sync)
+    }
+  }, [scheduleStrokeFrame])
 
   const cancelStrokeFrame = () => {
     if (drawRafRef.current != null) {
@@ -928,15 +990,21 @@ export default function Whiteboard({
         strokesRef.current = []
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         scheduleSave({ strokes: [] })
-      } else if (stroke.points.length === 1) {
-        drawStrokeDot(ctx, stroke)
-        const newStrokes = [...strokesRef.current, stroke]
-        strokesRef.current = newStrokes
-        scheduleSave({ strokes: newStrokes })
       } else {
-        applyStrokeStyle(ctx, stroke)
-        traceSmoothStroke(ctx, stroke.points)
-        ctx.globalCompositeOperation = 'source-over'
+        const clip = commitStrokeClipRect(stroke.points, strokeLineWidth(stroke))
+        if (clip) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(clip.x, clip.y, clip.w, clip.h)
+          ctx.clip()
+        }
+        if (stroke.points.length === 1) drawStrokeDot(ctx, stroke)
+        else {
+          applyStrokeStyle(ctx, stroke)
+          traceSmoothStroke(ctx, stroke.points)
+          ctx.globalCompositeOperation = 'source-over'
+        }
+        if (clip) ctx.restore()
         const newStrokes = [...strokesRef.current, stroke]
         strokesRef.current = newStrokes
         scheduleSave({ strokes: newStrokes })
@@ -1879,8 +1947,10 @@ export default function Whiteboard({
         )}
 
         {/* Canvas */}
+        <div ref={liveLayerHostRef} style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
         <div ref={scrollRef} style={{
-          flex: 1, overflow: 'auto', touchAction: 'none',
+          position: 'absolute', inset: 0,
+          overflow: 'auto', touchAction: 'none',
           cursor: isMiddlePanning ? 'grabbing' : 'default',
         }}>
           <div style={{ width: CANVAS_WIDTH * zoom, height: CANVAS_HEIGHT * zoom, position:'relative', flexShrink:0 }}>
@@ -2150,13 +2220,23 @@ export default function Whiteboard({
             onPointerUp={onCanvasPointerUp}
             onPointerCancel={onCanvasPointerCancel}
             onClick={handleCanvasClick} />
-          <canvas ref={strokeCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT}
-            style={{
-              position:'absolute', top:0, left:0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT,
-              touchAction:'none', pointerEvents:'none', zIndex: Z_BOARD_INK_PREVIEW,
-            }} />
             </div>
           </div>
+        </div>
+        <canvas
+          ref={strokeCanvasRef}
+          width={1}
+          height={1}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            touchAction: 'none',
+            pointerEvents: 'none',
+            zIndex: Z_BOARD_INK_PREVIEW,
+          }}
+        />
         </div>
       </div>
 
