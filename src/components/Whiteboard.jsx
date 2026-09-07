@@ -47,6 +47,14 @@ import {
   syncLiveLayerCanvas,
   unionRects,
 } from '../inkLiveLayer'
+import {
+  decideInkPointerDown,
+  isDelayedTouchDrag,
+  notePenActivity,
+  pointerKindFromEvent,
+  shouldCommitStroke,
+  shouldRejectPalm,
+} from '../stylusPointers'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
 
@@ -258,6 +266,8 @@ export default function Whiteboard({
   const drawRafRef = useRef(null)
   const liveStrokeRenderedRef = useRef(0)
   const drewThisGestureRef = useRef(false)
+  const stylusSessionRef = useRef({ activeKind: null, lastPenAt: 0 })
+  const suppressClickRef = useRef(false)
   const drawSettingsRef = useRef({ tool: 'select', color: '#1a1a1a', width: 5, highlight: false, highlightColor: '#f6c90e' })
 
   const [tool, setTool] = useState('select')
@@ -797,6 +807,46 @@ export default function Whiteboard({
     }
   }
 
+  const stylusSnapshot = () => ({
+    drawing: drawing.current,
+    activePointerId: activePointerIdRef.current,
+    activeKind: stylusSessionRef.current.activeKind,
+    lastPenAt: stylusSessionRef.current.lastPenAt,
+  })
+
+  const markPenFromEvent = (e) => {
+    const now = Date.now()
+    stylusSessionRef.current.lastPenAt = notePenActivity(
+      pointerKindFromEvent(e),
+      stylusSessionRef.current.lastPenAt,
+      now,
+    )
+    return now
+  }
+
+  const rejectPalmEvent = (e) => {
+    const now = markPenFromEvent(e)
+    if (!shouldRejectPalm(e, stylusSnapshot(), now)) return false
+    suppressClickRef.current = true
+    e.preventDefault?.()
+    e.stopPropagation?.()
+    return true
+  }
+
+  const abortLiveStroke = (releaseTarget) => {
+    cancelStrokeFrame()
+    const el = releaseTarget || canvasRef.current
+    if (el?.releasePointerCapture && activePointerIdRef.current != null) {
+      try { el.releasePointerCapture(activePointerIdRef.current) } catch (_) {}
+    }
+    activePointerIdRef.current = null
+    stylusSessionRef.current.activeKind = null
+    clearStrokeOverlay()
+    drawing.current = false
+    currentStroke.current = null
+    liveStrokeRenderedRef.current = 0
+  }
+
   // --- Drawing handlers (Pointer Events + coalesced points) ---
   const clearOverlayFocus = () => {
     setSelectedOverlay(null)
@@ -862,9 +912,29 @@ export default function Whiteboard({
     scheduleSave({ shapes: n })
   }
 
+  const releaseBoardPointer = (e) => {
+    const host = e?.currentTarget
+    if (host?.releasePointerCapture && e.pointerId != null) {
+      try { host.releasePointerCapture(e.pointerId) } catch (_) {}
+    }
+    activePointerIdRef.current = null
+    stylusSessionRef.current.activeKind = null
+  }
+
+  const abortPlacePointer = (e) => {
+    if (!placeDragRef.current) return false
+    if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return false
+    markPenFromEvent(e)
+    placeDragRef.current = null
+    setPlacePreview(null)
+    releaseBoardPointer(e)
+    return true
+  }
+
   const finishPlacePointer = (e) => {
     if (!placeDragRef.current) return false
     if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return false
+    markPenFromEvent(e)
     const host = e.currentTarget
     const r = host.getBoundingClientRect()
     const z = zoomRef.current
@@ -873,10 +943,7 @@ export default function Whiteboard({
     commitPlaceFromDrag(x, y)
     placeDragRef.current = null
     setPlacePreview(null)
-    activePointerIdRef.current = null
-    if (host?.releasePointerCapture && e.pointerId != null) {
-      try { host.releasePointerCapture(e.pointerId) } catch (_) {}
-    }
+    releaseBoardPointer(e)
     return true
   }
 
@@ -884,6 +951,8 @@ export default function Whiteboard({
     if (e.button === 1 || middlePanRef.current.active) return
     if (e.target !== e.currentTarget) return
     if (isInkTool(tool)) return
+    if (rejectPalmEvent(e)) return
+    if (placeDragRef.current && placeDragRef.current.pointerId !== e.pointerId) return
     if (tool === 'select') {
       clearOverlayFocus()
       return
@@ -895,6 +964,7 @@ export default function Whiteboard({
     const y = (e.clientY - r.top) / z
     e.currentTarget.setPointerCapture?.(e.pointerId)
     activePointerIdRef.current = e.pointerId
+    stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
     placeDragRef.current = { type: tool, startX: x, startY: y, pointerId: e.pointerId }
     setPlacePreview({
       type: tool, x, y, w: 0, h: 0,
@@ -928,15 +998,15 @@ export default function Whiteboard({
     finishPlacePointer(e)
   }
 
-  const onCanvasPointerDown = (e) => {
-    if (e.button === 1 || middlePanRef.current.active) return
-    const { tool: t } = drawSettingsRef.current
-    if (t !== 'draw' && t !== 'erase') return
-    if (touchGestureRef.current.active) return
-    if (!canvasRef.current) return
+  const onBoardPointerCancel = (e) => {
+    abortPlacePointer(e)
+  }
 
+  const beginInkStroke = (e) => {
+    const { tool: t } = drawSettingsRef.current
     e.currentTarget.setPointerCapture(e.pointerId)
     activePointerIdRef.current = e.pointerId
+    stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
     drewThisGestureRef.current = false
     liveStrokeRenderedRef.current = 0
     clearStrokeOverlay()
@@ -959,6 +1029,25 @@ export default function Whiteboard({
     e.preventDefault()
   }
 
+  const onCanvasPointerDown = (e) => {
+    if (e.button === 1 || middlePanRef.current.active) return
+    const { tool: t } = drawSettingsRef.current
+    if (t !== 'draw' && t !== 'erase') return
+    if (touchGestureRef.current.active) return
+    if (!canvasRef.current) return
+
+    const now = markPenFromEvent(e)
+    const decision = decideInkPointerDown(e, stylusSnapshot(), now)
+    if (decision === 'ignore') {
+      suppressClickRef.current = true
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (decision === 'steal') abortLiveStroke(e.currentTarget)
+    beginInkStroke(e)
+  }
+
   const onCanvasPointerMove = (e) => {
     if (!drawing.current || !currentStroke.current) return
     if (activePointerIdRef.current !== e.pointerId) return
@@ -970,15 +1059,19 @@ export default function Whiteboard({
     e.preventDefault()
   }
 
-  const finishCanvasPointer = (e) => {
+  const finishCanvasPointer = (e, { commit } = {}) => {
     if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return
     if (!drawing.current) return
 
-    cancelStrokeFrame()
-    if (e?.currentTarget?.releasePointerCapture && activePointerIdRef.current != null) {
-      try { e.currentTarget.releasePointerCapture(activePointerIdRef.current) } catch (_) {}
+    const shouldCommit = commit ?? shouldCommitStroke(e?.type)
+    markPenFromEvent(e)
+
+    if (!shouldCommit) {
+      abortLiveStroke(e?.currentTarget)
+      return
     }
-    activePointerIdRef.current = null
+
+    cancelStrokeFrame()
 
     const { tool: t } = drawSettingsRef.current
     const canvas = canvasRef.current
@@ -1011,18 +1104,28 @@ export default function Whiteboard({
       }
     }
 
-    clearStrokeOverlay()
     drawing.current = false
     currentStroke.current = null
     liveStrokeRenderedRef.current = 0
+    const pointerId = activePointerIdRef.current
+    activePointerIdRef.current = null
+    stylusSessionRef.current.activeKind = null
+    clearStrokeOverlay()
+    if (e?.currentTarget?.releasePointerCapture && pointerId != null) {
+      try { e.currentTarget.releasePointerCapture(pointerId) } catch (_) {}
+    }
   }
 
   const onCanvasPointerUp = (e) => {
-    finishCanvasPointer(e)
+    finishCanvasPointer(e, { commit: true })
   }
 
   const onCanvasPointerCancel = (e) => {
-    finishCanvasPointer(e)
+    finishCanvasPointer(e, { commit: false })
+  }
+
+  const onCanvasLostPointerCapture = (e) => {
+    finishCanvasPointer(e, { commit: false })
   }
 
   const beginObjectEdit = (type, id) => {
@@ -1067,11 +1170,27 @@ export default function Whiteboard({
 
   const onOverlayActivate = (e, type, id) => {
     e.stopPropagation()
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    if (rejectPalmEvent(e)) return
+    if (e.target.closest?.('[data-overlay-chrome]')) return
+    activateOverlay(type, id)
+  }
+
+  const onOverlayPenUp = (e, type, id) => {
+    if (pointerKindFromEvent(e) !== 'pen') return
+    if (overlayClickMovedRef.current) return
     if (e.target.closest?.('[data-overlay-chrome]')) return
     activateOverlay(type, id)
   }
 
   const handleCanvasClick = (e) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
     if (drewThisGestureRef.current) {
       drewThisGestureRef.current = false
     }
@@ -1105,6 +1224,7 @@ export default function Whiteboard({
   cancelDragResizeRef.current = cancelDragResize
 
   const handleEditTouchEnd = (e, type, id) => {
+    if (rejectPalmEvent(e)) return
     if (touchGestureRef.current.active || e.touches.length > 0) return
     const pending = touchDragPendingRef.current
     if (pending?.id === id && pending.moved) return
@@ -1144,13 +1264,16 @@ export default function Whiteboard({
     if (e.pointerId != null && e.currentTarget?.setPointerCapture) {
       try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
     }
-    e.preventDefault()
+    // preventDefault on mouse pointerdown suppresses click (Slice B edit). Pen/touch still need it.
+    if (pointerKindFromEvent(e) !== 'mouse') e.preventDefault()
   }
 
   const onDragStart = (e, type, id) => {
     if (e.button === 1 || middlePanRef.current.active) return
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
+    if (rejectPalmEvent(e)) return
     if (shouldIgnoreOverlayPointer(e.target)) return
+    if (dragActiveRef.current || touchDragPendingRef.current) return
     e.stopPropagation()
     overlayClickMovedRef.current = false
     overlayWasSelectedRef.current = !!(selectedOverlay && selectedOverlay.type === type && selectedOverlay.id === id)
@@ -1166,7 +1289,7 @@ export default function Whiteboard({
       return
     }
     const { clientX, clientY } = pointerXY(e)
-    if (isTouchPointer(e)) {
+    if (isDelayedTouchDrag(e)) {
       touchDragPendingRef.current = { type, id, startX: clientX, startY: clientY, moved: false, item }
       e.preventDefault()
       return
@@ -1252,6 +1375,7 @@ export default function Whiteboard({
   // --- Resize (images, text boxes, stickies) ---
   const onResizeStart = (e, item, type = 'image') => {
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
+    if (rejectPalmEvent(e)) return
     e.stopPropagation()
     const { clientX, clientY } = pointerXY(e)
     const startW = type === 'image' ? item.w
@@ -1263,12 +1387,12 @@ export default function Whiteboard({
     const startFontSize = type !== 'image' ? (item.fontSize || (type === 'sticky' ? 13 : type === 'shape' ? 16 : 18)) : null
     overlayClickMovedRef.current = true
     resizeRef.current = { type, id: item.id, startX: clientX, startY: clientY, startW, startH, startFontSize }
-    if (isTouchPointer(e)) e.preventDefault()
+    if (isDelayedTouchDrag(e) || isTouchPointer(e)) e.preventDefault()
   }
 
   const onDragMove = useCallback((e) => {
     const pending = touchDragPendingRef.current
-    if (pending && !dragActiveRef.current && isTouchPointer(e)) {
+    if (pending && !dragActiveRef.current && isDelayedTouchDrag(e)) {
       const { clientX, clientY } = pointerXY(e)
       if (Math.hypot(clientX - pending.startX, clientY - pending.startY) < TOUCH_DRAG_THRESHOLD) return
       pending.moved = true
@@ -1962,7 +2086,7 @@ export default function Whiteboard({
               onPointerDown={onBoardPointerDown}
               onPointerMove={onBoardPointerMove}
               onPointerUp={onBoardPointerUp}
-              onPointerCancel={onBoardPointerUp}>
+              onPointerCancel={onBoardPointerCancel}>
           {/* Images and overlays below ink; ink layer stays on top visually */}
           <div style={{
             position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none',
@@ -2037,6 +2161,8 @@ export default function Whiteboard({
                     borderRadius: 4,
                     zIndex: dragging?.type === 'shape' && dragging?.id === sh.id ? Z_BOARD_DRAG_ITEM : undefined,
                   }}
+                  onPointerDown={canMoveOverlays(tool) ? e => onDragStart(e,'shape',sh.id) : undefined}
+                  onPointerUp={e => onOverlayPenUp(e, 'shape', sh.id)}
                   onMouseDown={canMoveOverlays(tool) ? e => onDragStart(e,'shape',sh.id) : undefined}
                   onTouchStart={canMoveOverlays(tool) ? e => onDragStart(e,'shape',sh.id) : undefined}
                   onClick={e => onOverlayActivate(e, 'shape', sh.id)}
@@ -2080,7 +2206,7 @@ export default function Whiteboard({
                       style={{ ...canvasControlDelete, top: -14, right: -14, zIndex: 2 }} aria-label="Remove shape">✕</button>
                   )}
                   {showShapeControls(sh.id) && (
-                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, sh, 'shape')} onTouchStart={e => onResizeStart(e, sh, 'shape')}
+                    <div data-overlay-chrome onPointerDown={e => onResizeStart(e, sh, 'shape')} onMouseDown={e => onResizeStart(e, sh, 'shape')} onTouchStart={e => onResizeStart(e, sh, 'shape')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
@@ -2104,6 +2230,8 @@ export default function Whiteboard({
                   display:'flex', flexDirection:'column',
                   zIndex: dragging?.type === 'sticky' && dragging?.id === s.id ? Z_BOARD_DRAG_ITEM : undefined,
                 }}
+                  onPointerDown={canMoveOverlays(tool) ? e => onDragStart(e,'sticky',s.id) : undefined}
+                  onPointerUp={e => onOverlayPenUp(e, 'sticky', s.id)}
                   onMouseDown={canMoveOverlays(tool) ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onTouchStart={canMoveOverlays(tool) ? e => onDragStart(e,'sticky',s.id) : undefined}
                   onClick={e => onOverlayActivate(e, 'sticky', s.id)}
@@ -2132,7 +2260,7 @@ export default function Whiteboard({
                     </div>
                   )}
                   {stickyActive && (
-                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, s, 'sticky')} onTouchStart={e => onResizeStart(e, s, 'sticky')}
+                    <div data-overlay-chrome onPointerDown={e => onResizeStart(e, s, 'sticky')} onMouseDown={e => onResizeStart(e, s, 'sticky')} onTouchStart={e => onResizeStart(e, s, 'sticky')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
@@ -2165,6 +2293,8 @@ export default function Whiteboard({
                     borderRadius: 4,
                     zIndex: dragging?.type === 'text' && dragging?.id === t.id ? Z_BOARD_DRAG_ITEM : undefined,
                   }}
+                  onPointerDown={canMoveOverlays(tool) ? e => onDragStart(e,'text',t.id) : undefined}
+                  onPointerUp={e => onOverlayPenUp(e, 'text', t.id)}
                   onMouseDown={canMoveOverlays(tool) ? e => onDragStart(e,'text',t.id) : undefined}
                   onTouchStart={canMoveOverlays(tool) ? e => onDragStart(e,'text',t.id) : undefined}
                   onClick={e => onOverlayActivate(e, 'text', t.id)}
@@ -2200,7 +2330,7 @@ export default function Whiteboard({
                       style={{ ...canvasControlDelete, top: -14, right: -14 }} aria-label="Remove text">✕</button>
                   )}
                   {overlayChromeVisible('text', t.id) && (
-                    <div data-overlay-chrome onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
+                    <div data-overlay-chrome onPointerDown={e => onResizeStart(e, t, 'text')} onMouseDown={e => onResizeStart(e, t, 'text')} onTouchStart={e => onResizeStart(e, t, 'text')}
                       style={canvasResizeHandle} role="presentation" />
                   )}
                 </div>
@@ -2219,6 +2349,7 @@ export default function Whiteboard({
             onPointerMove={onCanvasPointerMove}
             onPointerUp={onCanvasPointerUp}
             onPointerCancel={onCanvasPointerCancel}
+            onLostPointerCapture={onCanvasLostPointerCapture}
             onClick={handleCanvasClick} />
             </div>
           </div>
