@@ -1004,7 +1004,10 @@ export default function Whiteboard({
 
   const beginInkStroke = (e) => {
     const { tool: t } = drawSettingsRef.current
-    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    const native = e.nativeEvent || e
+    if (native.isTrusted) {
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    }
     activePointerIdRef.current = e.pointerId
     stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
     drewThisGestureRef.current = false
@@ -1121,10 +1124,6 @@ export default function Whiteboard({
   }
 
   const onCanvasPointerCancel = (e) => {
-    finishCanvasPointer(e, { commit: false })
-  }
-
-  const onCanvasLostPointerCapture = (e) => {
     finishCanvasPointer(e, { commit: false })
   }
 
@@ -2349,7 +2348,6 @@ export default function Whiteboard({
             onPointerMove={onCanvasPointerMove}
             onPointerUp={onCanvasPointerUp}
             onPointerCancel={onCanvasPointerCancel}
-            onLostPointerCapture={onCanvasLostPointerCapture}
             onClick={handleCanvasClick} />
             </div>
           </div>
