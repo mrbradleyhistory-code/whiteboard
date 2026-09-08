@@ -78,6 +78,10 @@ assert(
   decideInkPointerDown({ pointerType: 'pen', pointerId: 8, button: 0 }, drawingMouse, 2000) === 'steal',
   'pen steals from a compatibility mouse pointer',
 )
+assert(
+  decideInkPointerDown({ pointerType: 'pen', pointerId: 12, button: 0 }, drawingPen, 1200) === 'steal',
+  'a new pen id steals a stuck pen stroke',
+)
 
 assert(
   shouldStartInkFromMove({ pointerType: 'pen', buttons: 1, pressure: 0 }, idle),

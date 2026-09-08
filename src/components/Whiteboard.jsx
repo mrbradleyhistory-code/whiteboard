@@ -1872,43 +1872,51 @@ export default function Whiteboard({
     }
   }, [])
 
-  // Viewport capture so Promethean/USI pens still ink when they miss the huge
+  // Viewport/window capture so Promethean/USI pens still ink when they miss the huge
   // transformed page canvas or when Chrome would otherwise pointercancel a scroll.
   useEffect(() => {
-    const host = liveLayerHostRef.current
-    if (!host) return
     const isInking = () => isInkTool(drawSettingsRef.current.tool) || drawing.current
+    const inHost = (e) => {
+      const host = liveLayerHostRef.current
+      if (!host) return false
+      const t = e.target
+      return t === host || host.contains(t)
+    }
     const down = (e) => {
-      if (!isInkTool(drawSettingsRef.current.tool)) return
+      if (!isInkTool(drawSettingsRef.current.tool) || !inHost(e)) return
       inkPointerRef.current.down(e)
     }
     const move = (e) => {
       if (!isInking()) return
+      if (!inHost(e) && activePointerIdRef.current !== e.pointerId) return
       inkPointerRef.current.move(e)
     }
     const up = (e) => {
       if (!isInking()) return
+      if (!inHost(e) && activePointerIdRef.current !== e.pointerId) return
       inkPointerRef.current.up(e)
     }
     const cancel = (e) => {
       if (!isInking()) return
+      if (!inHost(e) && activePointerIdRef.current !== e.pointerId) return
       inkPointerRef.current.cancel(e)
     }
     const menu = (e) => {
-      if (!isInkTool(drawSettingsRef.current.tool)) return
+      if (!isInkTool(drawSettingsRef.current.tool) || !inHost(e)) return
       e.preventDefault()
     }
-    host.addEventListener('pointerdown', down, { capture: true, passive: false })
-    host.addEventListener('pointermove', move, { capture: true, passive: false })
-    host.addEventListener('pointerup', up, { capture: true, passive: false })
-    host.addEventListener('pointercancel', cancel, { capture: true, passive: false })
-    host.addEventListener('contextmenu', menu, { capture: true })
+    const opts = { capture: true, passive: false }
+    window.addEventListener('pointerdown', down, opts)
+    window.addEventListener('pointermove', move, opts)
+    window.addEventListener('pointerup', up, opts)
+    window.addEventListener('pointercancel', cancel, opts)
+    window.addEventListener('contextmenu', menu, { capture: true })
     return () => {
-      host.removeEventListener('pointerdown', down, { capture: true })
-      host.removeEventListener('pointermove', move, { capture: true })
-      host.removeEventListener('pointerup', up, { capture: true })
-      host.removeEventListener('pointercancel', cancel, { capture: true })
-      host.removeEventListener('contextmenu', menu, { capture: true })
+      window.removeEventListener('pointerdown', down, { capture: true })
+      window.removeEventListener('pointermove', move, { capture: true })
+      window.removeEventListener('pointerup', up, { capture: true })
+      window.removeEventListener('pointercancel', cancel, { capture: true })
+      window.removeEventListener('contextmenu', menu, { capture: true })
     }
   }, [])
 
@@ -2441,7 +2449,7 @@ export default function Whiteboard({
         )}
 
         {/* Canvas */}
-        <div ref={liveLayerHostRef} style={{
+        <div ref={liveLayerHostRef} data-board-ink-host style={{
           flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden',
           touchAction: 'none',
           cursor: isInkTool(tool) ? cursorStyle : undefined,

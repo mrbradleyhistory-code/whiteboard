@@ -66,8 +66,8 @@ export function decideInkPointerDown(e, session, now = 0) {
 
   if (drawing) {
     if (e?.pointerId != null && e.pointerId === session.activePointerId) return 'ignore'
-    // Compatibility mouse pointer often fires before the real pen on Windows/Promethean.
-    if (kind === 'pen' && session.activeKind !== 'pen') return 'steal'
+    // Compatibility mouse often fires first; a new pen id should also recover a stuck stroke.
+    if (kind === 'pen') return 'steal'
     return 'ignore'
   }
 
