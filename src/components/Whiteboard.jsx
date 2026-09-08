@@ -67,10 +67,13 @@ import {
   coalescedPointerEvents,
   decideInkPointerDown,
   isDelayedTouchDrag,
+  isMiddleMousePan,
   notePenActivity,
   pointerKindFromEvent,
+  shouldCommitOnCancel,
   shouldCommitStroke,
   shouldRejectPalm,
+  shouldStartInkFromMove,
 } from '../stylusPointers'
 
 const PAGES_BAR_COLLAPSED_KEY = 'wb-pages-bar-collapsed'
@@ -305,6 +308,7 @@ export default function Whiteboard({
   const stylusSessionRef = useRef({ activeKind: null, lastPenAt: 0 })
   const suppressClickRef = useRef(false)
   const drawSettingsRef = useRef({ tool: 'select', color: '#1a1a1a', width: 5, highlight: false, highlightColor: '#f6c90e' })
+  const inkPointerRef = useRef({ down() {}, move() {}, up() {}, cancel() {} })
 
   const [tool, setTool] = useState('select')
   const [color, setColor] = useState('#1a1a1a')
@@ -960,7 +964,7 @@ export default function Whiteboard({
 
   const abortLiveStroke = (releaseTarget) => {
     cancelStrokeFrame()
-    const el = releaseTarget || canvasRef.current
+    const el = releaseTarget || liveLayerHostRef.current || canvasRef.current
     if (el?.releasePointerCapture && activePointerIdRef.current != null) {
       try { el.releasePointerCapture(activePointerIdRef.current) } catch (_) {}
     }
@@ -1073,7 +1077,7 @@ export default function Whiteboard({
   }
 
   const onBoardPointerDown = (e) => {
-    if (e.button === 1 || middlePanRef.current.active) return
+    if (isMiddleMousePan(e) || middlePanRef.current.active) return
     if (e.target !== e.currentTarget) return
     if (isInkTool(tool)) return
     if (rejectPalmEvent(e)) return
@@ -1205,8 +1209,9 @@ export default function Whiteboard({
   const beginInkStroke = (e) => {
     const { tool: t } = drawSettingsRef.current
     const native = e.nativeEvent || e
+    const captureEl = liveLayerHostRef.current || e.currentTarget
     if (native.isTrusted) {
-      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+      try { captureEl?.setPointerCapture?.(e.pointerId) } catch (_) {}
     }
     activePointerIdRef.current = e.pointerId
     stylusSessionRef.current.activeKind = pointerKindFromEvent(e)
@@ -1230,10 +1235,11 @@ export default function Whiteboard({
       scheduleStrokeFrame()
     }
     e.preventDefault()
+    e.stopPropagation?.()
   }
 
   const onCanvasPointerDown = (e) => {
-    if (e.button === 1 || middlePanRef.current.active) return
+    if (isMiddleMousePan(e) || middlePanRef.current.active) return
     const { tool: t } = drawSettingsRef.current
     if (t !== 'draw' && t !== 'erase') return
     if (touchGestureRef.current.active) return
@@ -1247,12 +1253,21 @@ export default function Whiteboard({
       e.stopPropagation()
       return
     }
-    if (decision === 'steal') abortLiveStroke(e.currentTarget)
+    if (decision === 'steal') abortLiveStroke(liveLayerHostRef.current || e.currentTarget)
     beginInkStroke(e)
   }
 
   const onCanvasPointerMove = (e) => {
-    if (!drawing.current || !currentStroke.current) return
+    if (!drawing.current || !currentStroke.current) {
+      const { tool: t } = drawSettingsRef.current
+      if ((t === 'draw' || t === 'erase') && shouldStartInkFromMove(e, stylusSnapshot())) {
+        const now = markPenFromEvent(e)
+        const decision = decideInkPointerDown(e, stylusSnapshot(), now)
+        if (decision === 'steal') abortLiveStroke(liveLayerHostRef.current || e.currentTarget)
+        if (decision === 'start' || decision === 'steal') beginInkStroke(e)
+      }
+      return
+    }
     if (activePointerIdRef.current !== e.pointerId) return
 
     const canvas = canvasRef.current
@@ -1260,6 +1275,7 @@ export default function Whiteboard({
     drewThisGestureRef.current = true
     scheduleStrokeFrame()
     e.preventDefault()
+    e.stopPropagation?.()
   }
 
   const finishCanvasPointer = (e, { commit } = {}) => {
@@ -1314,8 +1330,9 @@ export default function Whiteboard({
     activePointerIdRef.current = null
     stylusSessionRef.current.activeKind = null
     clearStrokeOverlay()
-    if (e?.currentTarget?.releasePointerCapture && pointerId != null) {
-      try { e.currentTarget.releasePointerCapture(pointerId) } catch (_) {}
+    const captureEl = liveLayerHostRef.current || e?.currentTarget
+    if (captureEl?.releasePointerCapture && pointerId != null) {
+      try { captureEl.releasePointerCapture(pointerId) } catch (_) {}
     }
   }
 
@@ -1324,7 +1341,14 @@ export default function Whiteboard({
   }
 
   const onCanvasPointerCancel = (e) => {
-    finishCanvasPointer(e, { commit: false })
+    const commit = shouldCommitOnCancel(e?.type, stylusSnapshot(), drewThisGestureRef.current)
+    finishCanvasPointer(e, { commit })
+  }
+  inkPointerRef.current = {
+    down: onCanvasPointerDown,
+    move: onCanvasPointerMove,
+    up: onCanvasPointerUp,
+    cancel: onCanvasPointerCancel,
   }
 
   const beginObjectEdit = (type, id) => {
@@ -1479,7 +1503,7 @@ export default function Whiteboard({
   }
 
   const onDragStart = (e, type, id) => {
-    if (e.button === 1 || middlePanRef.current.active) return
+    if (isMiddleMousePan(e) || middlePanRef.current.active) return
     if (touchGestureRef.current.active || (e.touches && e.touches.length > 1)) return
     if (rejectPalmEvent(e)) return
     if (shouldIgnoreOverlayPointer(e.target)) return
@@ -1809,7 +1833,7 @@ export default function Whiteboard({
     }
 
     const onPointerDown = (e) => {
-      if (e.button !== 1) return
+      if (!isMiddleMousePan(e)) return
       e.preventDefault()
       e.stopPropagation()
       cancelDragResizeRef.current()
@@ -1845,6 +1869,46 @@ export default function Whiteboard({
       el.removeEventListener('auxclick', onAuxClick)
       middlePanRef.current.active = false
       setIsMiddlePanning(false)
+    }
+  }, [])
+
+  // Viewport capture so Promethean/USI pens still ink when they miss the huge
+  // transformed page canvas or when Chrome would otherwise pointercancel a scroll.
+  useEffect(() => {
+    const host = liveLayerHostRef.current
+    if (!host) return
+    const isInking = () => isInkTool(drawSettingsRef.current.tool) || drawing.current
+    const down = (e) => {
+      if (!isInkTool(drawSettingsRef.current.tool)) return
+      inkPointerRef.current.down(e)
+    }
+    const move = (e) => {
+      if (!isInking()) return
+      inkPointerRef.current.move(e)
+    }
+    const up = (e) => {
+      if (!isInking()) return
+      inkPointerRef.current.up(e)
+    }
+    const cancel = (e) => {
+      if (!isInking()) return
+      inkPointerRef.current.cancel(e)
+    }
+    const menu = (e) => {
+      if (!isInkTool(drawSettingsRef.current.tool)) return
+      e.preventDefault()
+    }
+    host.addEventListener('pointerdown', down, { capture: true, passive: false })
+    host.addEventListener('pointermove', move, { capture: true, passive: false })
+    host.addEventListener('pointerup', up, { capture: true, passive: false })
+    host.addEventListener('pointercancel', cancel, { capture: true, passive: false })
+    host.addEventListener('contextmenu', menu, { capture: true })
+    return () => {
+      host.removeEventListener('pointerdown', down, { capture: true })
+      host.removeEventListener('pointermove', move, { capture: true })
+      host.removeEventListener('pointerup', up, { capture: true })
+      host.removeEventListener('pointercancel', cancel, { capture: true })
+      host.removeEventListener('contextmenu', menu, { capture: true })
     }
   }, [])
 
@@ -2377,7 +2441,11 @@ export default function Whiteboard({
         )}
 
         {/* Canvas */}
-        <div ref={liveLayerHostRef} style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+        <div ref={liveLayerHostRef} style={{
+          flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden',
+          touchAction: 'none',
+          cursor: isInkTool(tool) ? cursorStyle : undefined,
+        }}>
         <div ref={scrollRef} style={{
           position: 'absolute', inset: 0,
           overflow: 'auto', touchAction: 'none',
@@ -2695,7 +2763,8 @@ export default function Whiteboard({
             width: '100%',
             height: '100%',
             touchAction: 'none',
-            pointerEvents: 'none',
+            pointerEvents: isInkTool(tool) ? 'auto' : 'none',
+            cursor: isInkTool(tool) ? cursorStyle : 'default',
             zIndex: Z_BOARD_INK_PREVIEW,
           }}
         />

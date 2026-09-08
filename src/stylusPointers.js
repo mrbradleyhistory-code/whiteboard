@@ -23,25 +23,63 @@ export function isInkContactButton(button) {
   return button == null || button === 0 || button === -1
 }
 
+/** Pen tip, barrel, or eraser — Chrome/Promethean often maps the tip to button 2. */
+export function isPenDownButton(button) {
+  return isInkContactButton(button) || button === 2 || button === 5
+}
+
+export function isMiddleMousePan(e) {
+  return pointerKindFromEvent(e) === 'mouse' && e?.button === 1
+}
+
+/** Digitizer contact (not hover). Many USI/Promethean pens report pressure 0. */
+export function isPenInContact(e) {
+  if (pointerKindFromEvent(e) !== 'pen') return false
+  if ((e.buttons ?? 0) !== 0) return true
+  if (typeof e.pressure === 'number' && e.pressure > 0) return true
+  return false
+}
+
+function isPointerDownType(type) {
+  return !type || type === 'pointerdown' || (typeof type === 'string' && type.endsWith('pointerdown'))
+}
+
 /**
- * @param {{ pointerType?: string, pointerId?: number, button?: number, type?: string }} e
+ * @param {{ pointerType?: string, pointerId?: number, button?: number, buttons?: number, pressure?: number, type?: string }} e
  * @param {{ drawing: boolean, activePointerId: number|null, activeKind: string|null, lastPenAt: number }} session
  * @param {number} now
  * @returns {'start' | 'ignore' | 'steal'}
  */
 export function decideInkPointerDown(e, session, now = 0) {
-  if (!isInkContactButton(e?.button)) return 'ignore'
   const kind = pointerKindFromEvent(e)
+  if (kind === 'pen') {
+    if (isPointerDownType(e?.type)) {
+      if (!isPenDownButton(e?.button)) return 'ignore'
+    } else if (!isPenInContact(e)) {
+      return 'ignore'
+    }
+  } else if (!isInkContactButton(e?.button)) {
+    return 'ignore'
+  }
+
   const drawing = !!(session?.drawing && session.activePointerId != null)
 
   if (drawing) {
     if (e?.pointerId != null && e.pointerId === session.activePointerId) return 'ignore'
-    if (kind === 'pen' && session.activeKind === 'touch') return 'steal'
+    // Compatibility mouse pointer often fires before the real pen on Windows/Promethean.
+    if (kind === 'pen' && session.activeKind !== 'pen') return 'steal'
     return 'ignore'
   }
 
   if (kind === 'touch' && shouldRejectPalm(e, session, now)) return 'ignore'
   return 'start'
+}
+
+/** Missed pointerdown: start inking on the first in-contact pen move. */
+export function shouldStartInkFromMove(e, session) {
+  if (session?.drawing) return false
+  if (pointerKindFromEvent(e) !== 'pen') return false
+  return isPenInContact(e)
 }
 
 export function shouldRejectPalm(e, session, now = 0) {
@@ -59,6 +97,12 @@ export function coalescedPointerEvents(e) {
 
 export function shouldCommitStroke(eventType) {
   return eventType === 'pointerup'
+}
+
+/** Chrome often pointercancel's a pen after treating it as a scroll. Keep ink if we already drew. */
+export function shouldCommitOnCancel(eventType, session, drew) {
+  if (eventType !== 'pointercancel' && eventType !== 'lostpointercapture') return false
+  return !!(drew && session?.activeKind === 'pen')
 }
 
 export function notePenActivity(kind, lastPenAt, now) {
