@@ -3458,6 +3458,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Match Figma/Canva: a DIV receives ink pointers; canvases often miss Promethean pens. */
+.wb-ink-hit {
+  touch-action: none;
+}
+
+html.wb-inking,
+html.wb-inking body {
+  touch-action: none;
+}
+
 button {
   cursor: pointer;
   touch-action: manipulation;

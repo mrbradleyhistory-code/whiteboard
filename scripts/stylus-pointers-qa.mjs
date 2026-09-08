@@ -2,8 +2,10 @@ import {
   PALM_REJECT_MS,
   coalescedPointerEvents,
   decideInkPointerDown,
+  isClientPointOverElement,
   isDelayedTouchDrag,
   isInkContactButton,
+  isInkDownButton,
   isMiddleMousePan,
   isPenDownButton,
   isPenInContact,
@@ -47,7 +49,14 @@ assert(decideInkPointerDown({ pointerType: 'pen', pointerId: 7, button: 2 }, idl
 assert(decideInkPointerDown({ pointerType: 'pen', pointerId: 7, button: 5 }, idle, 1000) === 'start', 'pen eraser end still inks')
 assert(decideInkPointerDown({ pointerType: 'mouse', pointerId: 1, button: 0 }, idle, 1000) === 'start', 'mouse starts')
 assert(decideInkPointerDown({ pointerType: 'touch', pointerId: 2, button: 0 }, idle, 1000) === 'start', 'finger can draw when no pen')
-assert(decideInkPointerDown({ pointerType: 'mouse', pointerId: 1, button: 2 }, idle, 1000) === 'ignore', 'mouse right-click ignored')
+assert(decideInkPointerDown({ pointerType: 'mouse', pointerId: 1, button: 2 }, idle, 1000) === 'start', 'stylus-as-mouse button 2 still inks')
+assert(isInkDownButton({ pointerType: 'mouse', button: 2 }), 'mouse button 2 is ink when drawing')
+assert(isClientPointOverElement({ clientX: 10, clientY: 10 }, {
+  getBoundingClientRect() { return { left: 0, top: 0, right: 20, bottom: 20 } },
+}), 'point over element')
+assert(!isClientPointOverElement({ clientX: 50, clientY: 10 }, {
+  getBoundingClientRect() { return { left: 0, top: 0, right: 20, bottom: 20 } },
+}), 'point outside element')
 
 const drawingPen = { drawing: true, activePointerId: 7, activeKind: 'pen', lastPenAt: 1000 }
 assert(
@@ -92,8 +101,12 @@ assert(
   'pen hover move does not start',
 )
 assert(
-  !shouldStartInkFromMove({ pointerType: 'touch', buttons: 1 }, idle),
-  'finger move does not retro-start',
+  shouldStartInkFromMove({ pointerType: 'touch', buttons: 1 }, idle),
+  'finger move with contact can start if pointerdown was missed',
+)
+assert(
+  shouldStartInkFromMove({ pointerType: 'mouse', buttons: 2 }, idle),
+  'stylus-as-mouse move with button 2 starts',
 )
 assert(
   !shouldStartInkFromMove({ pointerType: 'pen', buttons: 1 }, drawingPen),

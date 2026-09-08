@@ -32,16 +32,48 @@ export function isMiddleMousePan(e) {
   return pointerKindFromEvent(e) === 'mouse' && e?.button === 1
 }
 
+/**
+ * Draw-tool contact for any pointer. ActivPanel often reports the stylus as a
+ * mouse with button 2 (Figma/Canva still ink; we used to ignore that).
+ */
+export function isInkDownButton(e) {
+  if (isMiddleMousePan(e)) return false
+  const b = e?.button
+  return b == null || b === -1 || b === 0 || b === 2 || b === 5
+}
+
+export function isInkButtonsDown(e) {
+  const buttons = e?.buttons
+  if (buttons == null) return false
+  if (buttons === 0) return false
+  if (buttons === 4) return false
+  return true
+}
+
+export function pointerIdOf(e) {
+  return e?.pointerId ?? 1
+}
+
+export function isClientPointOverElement(e, el) {
+  if (!e || !el || typeof el.getBoundingClientRect !== 'function') return false
+  const r = el.getBoundingClientRect()
+  const x = e.clientX
+  const y = e.clientY
+  if (typeof x !== 'number' || typeof y !== 'number') return false
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+}
+
 /** Digitizer contact (not hover). Many USI/Promethean pens report pressure 0. */
 export function isPenInContact(e) {
   if (pointerKindFromEvent(e) !== 'pen') return false
-  if ((e.buttons ?? 0) !== 0) return true
+  if (isInkButtonsDown(e)) return true
   if (typeof e.pressure === 'number' && e.pressure > 0) return true
   return false
 }
 
 function isPointerDownType(type) {
-  return !type || type === 'pointerdown' || (typeof type === 'string' && type.endsWith('pointerdown'))
+  return !type || type === 'pointerdown' || type === 'mousedown'
+    || (typeof type === 'string' && (type.endsWith('pointerdown') || type.endsWith('mousedown')))
 }
 
 /**
@@ -51,14 +83,13 @@ function isPointerDownType(type) {
  * @returns {'start' | 'ignore' | 'steal'}
  */
 export function decideInkPointerDown(e, session, now = 0) {
+  if (isMiddleMousePan(e)) return 'ignore'
   const kind = pointerKindFromEvent(e)
   if (kind === 'pen') {
-    if (isPointerDownType(e?.type)) {
-      if (!isPenDownButton(e?.button)) return 'ignore'
-    } else if (!isPenInContact(e)) {
+    if (!isPointerDownType(e?.type) && !isPenInContact(e) && !isInkButtonsDown(e)) {
       return 'ignore'
     }
-  } else if (!isInkContactButton(e?.button)) {
+  } else if (!isInkDownButton(e)) {
     return 'ignore'
   }
 
@@ -66,7 +97,6 @@ export function decideInkPointerDown(e, session, now = 0) {
 
   if (drawing) {
     if (e?.pointerId != null && e.pointerId === session.activePointerId) return 'ignore'
-    // Compatibility mouse often fires first; a new pen id should also recover a stuck stroke.
     if (kind === 'pen') return 'steal'
     return 'ignore'
   }
@@ -75,10 +105,11 @@ export function decideInkPointerDown(e, session, now = 0) {
   return 'start'
 }
 
-/** Missed pointerdown: start inking on the first in-contact pen move. */
+/** Missed pointerdown: start inking on the first in-contact move (pen or stylus-as-mouse). */
 export function shouldStartInkFromMove(e, session) {
   if (session?.drawing) return false
-  if (pointerKindFromEvent(e) !== 'pen') return false
+  if (isMiddleMousePan(e)) return false
+  if (isInkButtonsDown(e)) return true
   return isPenInContact(e)
 }
 
@@ -96,13 +127,13 @@ export function coalescedPointerEvents(e) {
 }
 
 export function shouldCommitStroke(eventType) {
-  return eventType === 'pointerup'
+  return eventType === 'pointerup' || eventType === 'mouseup'
 }
 
 /** Chrome often pointercancel's a pen after treating it as a scroll. Keep ink if we already drew. */
 export function shouldCommitOnCancel(eventType, session, drew) {
   if (eventType !== 'pointercancel' && eventType !== 'lostpointercapture') return false
-  return !!(drew && session?.activeKind === 'pen')
+  return !!(drew && (session?.activeKind === 'pen' || session?.activeKind === 'mouse'))
 }
 
 export function notePenActivity(kind, lastPenAt, now) {
