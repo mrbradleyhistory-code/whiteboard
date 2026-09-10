@@ -5,17 +5,68 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unit 1 Set 1 Historical Thinking</title>
   <style>
-:root {
+:root,
+[data-theme="light"] {
   --accent: #6366f1;
   --accent-dark: #4f46e5;
   --accent-light: #eef2ff;
+  --page-bg: #f5f5f4;
   --surface: #ffffff;
   --surface-muted: #fafaf9;
   --border: #e7e5e4;
   --text: #1c1917;
   --text-muted: #78716c;
-  --radius: 12px;
+  --success: #059669;
+  --danger: #dc2626;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --quiz-correct-bg: #d1fae5;
+  --quiz-correct-border: #059669;
+  --quiz-wrong-bg: #fef2f2;
+  --quiz-wrong-border: #dc2626;
+  --presenter-bg: #f5f5f4;
+  --presenter-text: #1c1917;
+  --presenter-muted: #78716c;
+  --presenter-surface: #ffffff;
+  --presenter-border: #e7e5e4;
+  --presenter-btn-bg: #fafaf9;
+  --presenter-btn-border: #d6d3d1;
+  --presenter-choice-bg: #ffffff;
+  --presenter-choice-border: #d6d3d1;
+  --presenter-choice-correct-bg: #d1fae5;
+  --presenter-choice-correct-border: #059669;
+  --presenter-feedback: #059669;
+  --radius: 12px;
+}
+
+[data-theme="dark"] {
+  --accent: #818cf8;
+  --accent-dark: #6366f1;
+  --accent-light: #312e81;
+  --page-bg: #1c1917;
+  --surface: #292524;
+  --surface-muted: #1c1917;
+  --border: #44403c;
+  --text: #fafaf9;
+  --text-muted: #a8a29e;
+  --success: #34d399;
+  --danger: #f87171;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --quiz-correct-bg: #1e3d38;
+  --quiz-correct-border: #2a9d8f;
+  --quiz-wrong-bg: #3d2224;
+  --quiz-wrong-border: #e63946;
+  --presenter-bg: #1a1d21;
+  --presenter-text: #ffffff;
+  --presenter-muted: #9aa3ad;
+  --presenter-surface: #252a31;
+  --presenter-border: #3d4450;
+  --presenter-btn-bg: #2d333b;
+  --presenter-btn-border: #5c6570;
+  --presenter-choice-bg: #252a31;
+  --presenter-choice-border: #3d4450;
+  --presenter-choice-correct-bg: #1e3d38;
+  --presenter-choice-correct-border: #2a9d8f;
+  --presenter-feedback: #6ee7b7;
 }
 
 * { box-sizing: border-box; }
@@ -23,10 +74,11 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #f5f5f4;
+  background: var(--page-bg);
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 button { font: inherit; }
@@ -37,8 +89,17 @@ button { font: inherit; }
   padding: 24px 16px 48px;
 }
 
-.app-header { margin-bottom: 28px; }
-.app-header--compact { margin-bottom: 16px; }
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page-header .app-header { margin-bottom: 0; flex: 1; min-width: 0; }
+
+.app-header--compact { margin-bottom: 0; }
 
 .app-header h1 {
   margin: 0 0 6px;
@@ -59,6 +120,7 @@ button { font: inherit; }
   border-radius: 16px;
   padding: 20px;
   box-shadow: var(--shadow);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .btn {
@@ -76,6 +138,7 @@ button { font: inherit; }
   color: var(--text);
   cursor: pointer;
   touch-action: manipulation;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .btn:hover:not(:disabled) { filter: brightness(0.97); }
@@ -83,11 +146,11 @@ button { font: inherit; }
 .btn--primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn--primary:hover:not(:disabled) { background: var(--accent-dark); }
 
-.btn--large {
-  width: 100%;
-  min-height: 56px;
-  font-size: 17px;
-  border-radius: 14px;
+.btn--theme {
+  flex-shrink: 0;
+  min-width: 88px;
+  padding: 8px 12px;
+  font-size: 14px;
 }
 
 .top-nav {
@@ -102,20 +165,6 @@ button { font: inherit; }
 .hint { color: var(--text-muted); font-size: 0.85rem; margin: 16px 0 0; }
 .hint--nav { margin: -8px 0 16px; }
 .hint--center { text-align: center; }
-
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 16px;
-  font-size: 15px;
-}
 
 .vocab-list {
   list-style: none;
@@ -144,16 +193,17 @@ button { font: inherit; }
   font-size: 0.95rem;
 }
 
-/* Presenter (flashcards & quiz) */
+/* Flashcard presenter */
 .presenter {
   position: fixed;
   inset: 0;
   z-index: 300;
-  background: #1a1d21;
-  color: #fff;
+  background: var(--presenter-bg);
+  color: var(--presenter-text);
   display: flex;
   flex-direction: column;
   padding: 20px 28px 28px;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .presenter__bar {
@@ -170,15 +220,33 @@ button { font: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #9aa3ad;
+  color: var(--presenter-muted);
+}
+
+.presenter__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .presenter__exit {
-  border: 1px solid #5c6570;
+  border: 1px solid var(--presenter-btn-border);
   background: transparent;
-  color: #fff;
+  color: var(--presenter-text);
   padding: 8px 16px;
   border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.presenter__theme {
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--presenter-btn-border);
+  background: var(--presenter-btn-bg);
+  color: var(--presenter-text);
   cursor: pointer;
   font-weight: 600;
 }
@@ -206,66 +274,6 @@ button { font: inherit; }
   white-space: pre-wrap;
 }
 
-.presenter__prompt--quiz {
-  flex: 0 1 auto;
-  max-height: 28vh;
-  font-size: clamp(28px, 4.5vw, 56px);
-}
-
-.presenter__choices {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 12px;
-  max-width: 900px;
-  width: 100%;
-  margin-inline: auto;
-}
-
-.presenter__choice {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  border: 2px solid #3d4450;
-  border-radius: 14px;
-  background: #252a31;
-  font-size: clamp(18px, 3vw, 28px);
-}
-
-.presenter__choice--correct { border-color: #2a9d8f; background: #1e3d38; }
-
-.presenter__choice-num {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #3d4450;
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.presenter__choice--correct .presenter__choice-num { background: #2a9d8f; }
-
-.presenter__hint {
-  text-align: center;
-  font-size: 16px;
-  color: #9aa3ad;
-  margin: 16px 0 0;
-}
-
-.presenter__feedback {
-  text-align: center;
-  font-size: 22px;
-  font-weight: 700;
-  color: #6ee7b7;
-  margin: 8px 0;
-}
-
 .presenter__nav {
   display: flex;
   gap: 16px;
@@ -280,16 +288,23 @@ button { font: inherit; }
   min-height: 64px;
   padding: 14px 24px;
   border-radius: 14px;
-  border: 2px solid #5c6570;
-  background: #2d333b;
-  color: #fff;
+  border: 2px solid var(--presenter-btn-border);
+  background: var(--presenter-btn-bg);
+  color: var(--presenter-text);
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .presenter__nav-btn:disabled { opacity: 0.35; cursor: default; }
-.presenter__nav-btn--primary { border-color: var(--accent); background: var(--accent); }
+.presenter__nav-btn--primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+.presenter__hint {
+  text-align: center;
+  font-size: 16px;
+  color: var(--presenter-muted);
+  margin: 16px 0 0;
+}
 
 .presenter__done { font-size: 42px; margin: auto; text-align: center; }
 
@@ -332,13 +347,13 @@ button { font: inherit; }
 }
 
 .quiz__choice--correct {
-  background: #d1fae5 !important;
-  border-color: #059669 !important;
+  background: var(--quiz-correct-bg) !important;
+  border-color: var(--quiz-correct-border) !important;
 }
 
 .quiz__choice--wrong {
-  background: #fef2f2 !important;
-  border-color: #dc2626 !important;
+  background: var(--quiz-wrong-bg) !important;
+  border-color: var(--quiz-wrong-border) !important;
 }
 
 .quiz__choice--highlight {
@@ -372,7 +387,7 @@ button { font: inherit; }
 .quiz-perfect {
   margin-bottom: 16px;
   text-align: center;
-  color: var(--success, #059669);
+  color: var(--success);
   font-weight: 600;
 }
 
@@ -426,9 +441,56 @@ button { font: inherit; }
     .filter(c => c.front || c.back);
 
   const root = document.getElementById('root');
+  const THEME_KEY = 'vocab-theme';
   let view = 'list';
   let presenterCleanup = null;
   let quizCleanup = null;
+
+  function readTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  let theme = readTheme();
+
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+
+  function syncThemeToggleLabels() {
+    document.querySelectorAll('[data-theme-toggle]').forEach(node => {
+      node.textContent = theme === 'dark' ? 'Light' : 'Dark';
+      node.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    });
+  }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme();
+    syncThemeToggleLabels();
+  }
+
+  function themeToggleButton(className) {
+    return el('button', {
+      type: 'button',
+      className: className ? className : 'btn btn--theme',
+      'data-theme-toggle': true,
+      'aria-label': theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      onClick: toggleTheme,
+    }, theme === 'dark' ? 'Light' : 'Dark');
+  }
+
+  function pageHeader(subtitle) {
+    return el('div', { className: 'page-header' },
+      el('header', { className: 'app-header app-header--compact' },
+        el('h1', null, title),
+        el('p', null, subtitle),
+      ),
+      themeToggleButton('btn btn--theme'),
+    );
+  }
 
   function shuffleCards(list) {
     const a = [...list];
@@ -529,11 +591,7 @@ button { font: inherit; }
   function renderList() {
     root.innerHTML = '';
 
-    root.appendChild(el('header', { className: 'app-header' },
-      el('h1', null, title),
-      el('p', null, cards.length + ' vocabulary terms'),
-    ));
-
+    root.appendChild(pageHeader(cards.length + ' vocabulary terms'));
     root.appendChild(topNav('list'));
 
     if (cards.length < 4) {
@@ -571,7 +629,10 @@ button { font: inherit; }
         el('span', null, title),
         el('span', null, done() ? '' : (index + 1) + ' / ' + deck.length),
         el('span', null, 'Flashcards'),
-        el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
+        el('div', { className: 'presenter__bar-actions' },
+          themeToggleButton('presenter__theme'),
+          el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
+        ),
       );
 
       if (!deck.length) {
@@ -668,10 +729,7 @@ button { font: inherit; }
     root.innerHTML = '';
 
     if (cards.length < 4) {
-      root.appendChild(el('header', { className: 'app-header' },
-        el('h1', null, title),
-        el('p', null, 'Practice quiz'),
-      ));
+      root.appendChild(pageHeader('Practice quiz'));
       root.appendChild(topNav('quiz'));
       root.appendChild(el('div', { className: 'panel' },
         el('p', null, 'Practice quiz needs at least 4 terms in this set.'),
@@ -723,10 +781,7 @@ button { font: inherit; }
       if (done()) {
         const pct = Math.round((score / deck.length) * 100);
         const results = el('div', { className: 'quiz-results' },
-          el('header', { className: 'app-header app-header--compact' },
-            el('h1', null, title),
-            el('p', null, 'Quiz results'),
-          ),
+          pageHeader('Quiz results'),
           topNav('quiz'),
           el('div', { className: 'panel quiz-results__panel' },
             el('p', { className: 'quiz-results__score' }, 'Score: ' + score + ' / ' + deck.length),
@@ -771,10 +826,7 @@ button { font: inherit; }
       }
 
       const cur = current();
-      wrap.appendChild(el('header', { className: 'app-header app-header--compact' },
-        el('h1', null, title),
-        el('p', null, 'Question ' + (index + 1) + ' of ' + deck.length),
-      ));
+      wrap.appendChild(pageHeader('Question ' + (index + 1) + ' of ' + deck.length));
       wrap.appendChild(topNav('quiz'));
 
       wrap.appendChild(el('p', { className: 'quiz__label' }, 'Definition'));
@@ -843,6 +895,7 @@ button { font: inherit; }
     else renderList();
   }
 
+  applyTheme();
   document.title = title;
   render();
 })();

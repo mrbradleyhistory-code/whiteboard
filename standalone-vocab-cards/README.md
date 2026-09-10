@@ -4,6 +4,10 @@ Self-contained HTML vocabulary study pages for **Google Sites** or any static ho
 
 Each vocabulary set is **one HTML file** with everything inlined (styles + app logic + terms).
 
+**Default view:** vocabulary list with **Flashcards** and **Practice quiz** buttons at the top.
+
+**Practice quiz:** students pick answers; at the end they get a score plus a **Terms to study** list for any they missed.
+
 ## Open in Cursor
 
 These files are on branch **`cursor/standalone-vocab-cards-f1ec`** (not merged to `main` yet).
@@ -43,8 +47,10 @@ No other files needed.
 
 ```bash
 cd standalone-vocab-cards
-node bundle-student-set.mjs unit-1-set-2-my-set.html
+node bundle-student-set.mjs unit-1-set-2-my-set.source.html
 ```
+
+(Outputs `unit-1-set-2-my-set.html` — keeps `.source.html` as the editable copy.)
 
 4. Upload the bundled `.html` to Drive and embed on Sites.
 

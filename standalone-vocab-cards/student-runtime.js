@@ -20,9 +20,56 @@
     .filter(c => c.front || c.back);
 
   const root = document.getElementById('root');
+  const THEME_KEY = 'vocab-theme';
   let view = 'list';
   let presenterCleanup = null;
   let quizCleanup = null;
+
+  function readTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  let theme = readTheme();
+
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+
+  function syncThemeToggleLabels() {
+    document.querySelectorAll('[data-theme-toggle]').forEach(node => {
+      node.textContent = theme === 'dark' ? 'Light' : 'Dark';
+      node.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    });
+  }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme();
+    syncThemeToggleLabels();
+  }
+
+  function themeToggleButton(className) {
+    return el('button', {
+      type: 'button',
+      className: className ? className : 'btn btn--theme',
+      'data-theme-toggle': true,
+      'aria-label': theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      onClick: toggleTheme,
+    }, theme === 'dark' ? 'Light' : 'Dark');
+  }
+
+  function pageHeader(subtitle) {
+    return el('div', { className: 'page-header' },
+      el('header', { className: 'app-header app-header--compact' },
+        el('h1', null, title),
+        el('p', null, subtitle),
+      ),
+      themeToggleButton('btn btn--theme'),
+    );
+  }
 
   function shuffleCards(list) {
     const a = [...list];
@@ -123,11 +170,7 @@
   function renderList() {
     root.innerHTML = '';
 
-    root.appendChild(el('header', { className: 'app-header' },
-      el('h1', null, title),
-      el('p', null, cards.length + ' vocabulary terms'),
-    ));
-
+    root.appendChild(pageHeader(cards.length + ' vocabulary terms'));
     root.appendChild(topNav('list'));
 
     if (cards.length < 4) {
@@ -165,7 +208,10 @@
         el('span', null, title),
         el('span', null, done() ? '' : (index + 1) + ' / ' + deck.length),
         el('span', null, 'Flashcards'),
-        el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
+        el('div', { className: 'presenter__bar-actions' },
+          themeToggleButton('presenter__theme'),
+          el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
+        ),
       );
 
       if (!deck.length) {
@@ -262,10 +308,7 @@
     root.innerHTML = '';
 
     if (cards.length < 4) {
-      root.appendChild(el('header', { className: 'app-header' },
-        el('h1', null, title),
-        el('p', null, 'Practice quiz'),
-      ));
+      root.appendChild(pageHeader('Practice quiz'));
       root.appendChild(topNav('quiz'));
       root.appendChild(el('div', { className: 'panel' },
         el('p', null, 'Practice quiz needs at least 4 terms in this set.'),
@@ -317,10 +360,7 @@
       if (done()) {
         const pct = Math.round((score / deck.length) * 100);
         const results = el('div', { className: 'quiz-results' },
-          el('header', { className: 'app-header app-header--compact' },
-            el('h1', null, title),
-            el('p', null, 'Quiz results'),
-          ),
+          pageHeader('Quiz results'),
           topNav('quiz'),
           el('div', { className: 'panel quiz-results__panel' },
             el('p', { className: 'quiz-results__score' }, 'Score: ' + score + ' / ' + deck.length),
@@ -365,10 +405,7 @@
       }
 
       const cur = current();
-      wrap.appendChild(el('header', { className: 'app-header app-header--compact' },
-        el('h1', null, title),
-        el('p', null, 'Question ' + (index + 1) + ' of ' + deck.length),
-      ));
+      wrap.appendChild(pageHeader('Question ' + (index + 1) + ' of ' + deck.length));
       wrap.appendChild(topNav('quiz'));
 
       wrap.appendChild(el('p', { className: 'quiz__label' }, 'Definition'));
@@ -437,6 +474,7 @@
     else renderList();
   }
 
+  applyTheme();
   document.title = title;
   render();
 })();
