@@ -27,9 +27,7 @@ if (!vocabMatch) {
 
 const css = readFileSync(join(dir, 'student-styles.css'), 'utf8');
 const runtime = readFileSync(join(dir, 'student-runtime.js'), 'utf8')
-  .replace(/^\/\*\*[\s\S]*?\*\/\s*/, '')
-  .replace(/^\(function \(\) \{/, '')
-  .replace(/\}\)\(\);\s*$/, '');
+  .replace(/^\/\*\*[\s\S]*?\*\/\s*/, '');
 
 const titleMatch = html.match(/<title>([^<]*)<\/title>/);
 const title = titleMatch ? titleMatch[1] : 'Vocabulary';
@@ -50,7 +48,7 @@ ${css}
     window.VOCAB_SET = ${vocabMatch[1]};
   </script>
   <script>
-${runtime}
+${runtime.trim()}
   </script>
 </body>
 </html>

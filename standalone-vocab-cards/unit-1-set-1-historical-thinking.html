@@ -319,7 +319,7 @@ button { font: inherit; }
     };
   </script>
   <script>
-
+(function () {
   const config = window.VOCAB_SET;
   if (!config || !Array.isArray(config.cards)) {
     document.body.innerHTML = '<p style="padding:24px;font-family:system-ui">Missing vocabulary data.</p>';
@@ -671,7 +671,7 @@ button { font: inherit; }
 
   document.title = title;
   render();
-
+})();
   </script>
 </body>
 </html>
