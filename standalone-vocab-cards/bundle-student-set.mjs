@@ -18,6 +18,9 @@ if (!input) {
 }
 
 const inputPath = join(dir, input);
+const outputPath = input.endsWith('.source.html')
+  ? join(dir, input.replace(/\.source\.html$/, '.html'))
+  : inputPath;
 const html = readFileSync(inputPath, 'utf8');
 const vocabMatch = html.match(/<script>\s*window\.VOCAB_SET\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
 if (!vocabMatch) {
@@ -54,5 +57,5 @@ ${runtime.trim()}
 </html>
 `;
 
-writeFileSync(inputPath, out);
-console.log('Bundled:', inputPath);
+writeFileSync(outputPath, out);
+console.log('Bundled:', outputPath);

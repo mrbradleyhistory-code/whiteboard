@@ -1,12 +1,6 @@
 /**
  * Student vocab viewer runtime.
  * Each HTML page sets window.VOCAB_SET before loading this script.
- *
- * Expected shape:
- *   window.VOCAB_SET = {
- *     title: 'Unit 1 Set 1 Historical Thinking',
- *     cards: [{ front: 'Term', back: 'Definition' }, ...]
- *   };
  */
 
 (function () {
@@ -26,8 +20,9 @@
     .filter(c => c.front || c.back);
 
   const root = document.getElementById('root');
-  let view = 'menu';
+  let view = 'list';
   let presenterCleanup = null;
+  let quizCleanup = null;
 
   function shuffleCards(list) {
     const a = [...list];
@@ -88,7 +83,6 @@
   function btn(label, opts = {}) {
     const classes = ['btn'];
     if (opts.variant === 'primary') classes.push('btn--primary');
-    if (opts.variant === 'large') classes.push('btn--large');
     if (opts.className) classes.push(opts.className);
     return el('button', {
       type: 'button',
@@ -98,58 +92,47 @@
     }, label);
   }
 
-  function goHome() {
+  function goToList() {
     if (presenterCleanup) {
       presenterCleanup();
       presenterCleanup = null;
     }
-    view = 'menu';
+    if (quizCleanup) {
+      quizCleanup();
+      quizCleanup = null;
+    }
+    view = 'list';
     render();
   }
 
-  function renderMenu() {
+  function topNav(active) {
+    return el('nav', { className: 'top-nav' },
+      btn('Flashcards', {
+        className: active === 'flashcards' ? 'btn--primary' : '',
+        disabled: !cards.length,
+        onClick: () => { view = 'flashcards'; render(); },
+      }),
+      btn('Practice quiz', {
+        className: active === 'quiz' ? 'btn--primary' : '',
+        disabled: cards.length < 4,
+        onClick: () => { view = 'quiz'; render(); },
+      }),
+    );
+  }
+
+  function renderList() {
     root.innerHTML = '';
+
     root.appendChild(el('header', { className: 'app-header' },
       el('h1', null, title),
       el('p', null, cards.length + ' vocabulary terms'),
     ));
 
-    const panel = el('div', { className: 'panel menu-panel' },
-      el('p', { className: 'menu-lead' }, 'Choose how you want to study:'),
-      el('div', { className: 'menu-actions' },
-        btn('Vocabulary list', {
-          variant: 'large',
-          onClick: () => { view = 'list'; render(); },
-        }),
-        btn('Flashcards', {
-          variant: 'large primary',
-          className: 'btn--primary btn--large',
-          disabled: !cards.length,
-          onClick: () => { view = 'flashcards'; render(); },
-        }),
-        btn('Practice quiz', {
-          className: 'btn--primary btn--large',
-          disabled: cards.length < 4,
-          onClick: () => { view = 'quiz'; render(); },
-        }),
-      ),
-    );
+    root.appendChild(topNav('list'));
 
     if (cards.length < 4) {
-      panel.appendChild(el('p', { className: 'hint' }, 'Practice quiz needs at least 4 terms.'));
+      root.appendChild(el('p', { className: 'hint hint--nav' }, 'Practice quiz needs at least 4 terms.'));
     }
-
-    root.appendChild(panel);
-  }
-
-  function renderList() {
-    root.innerHTML = '';
-    root.appendChild(el('button', { type: 'button', className: 'back-link', onClick: goHome }, '← Back'));
-
-    root.appendChild(el('header', { className: 'app-header app-header--compact' },
-      el('h1', null, title),
-      el('p', null, 'Vocabulary list'),
-    ));
 
     const list = el('ul', { className: 'vocab-list' });
     cards.forEach(c => {
@@ -162,7 +145,7 @@
     root.appendChild(el('div', { className: 'panel' }, list));
   }
 
-  function renderPresenter(mode) {
+  function renderFlashcards() {
     root.innerHTML = '';
     const container = el('div', { className: 'presenter' });
     root.appendChild(container);
@@ -170,39 +153,23 @@
     let deck = shuffleCards(cards);
     let index = 0;
     let cyclePhase = 'term';
-    let revealed = false;
-    let choiceList = [];
 
     function current() { return deck[index]; }
     function done() { return index >= deck.length; }
 
-    function refreshChoices() {
-      if (mode === 'quiz' && current() && !done()) {
-        choiceList = pickTermChoices(deck, current());
-        revealed = false;
-      }
-    }
-
     function paint() {
       container.innerHTML = '';
-      const canGoBack = mode === 'cycle'
-        ? (cyclePhase === 'def' || index > 0)
-        : (revealed || index > 0);
+      const canGoBack = cyclePhase === 'def' || index > 0;
 
       const bar = el('header', { className: 'presenter__bar' },
         el('span', null, title),
         el('span', null, done() ? '' : (index + 1) + ' / ' + deck.length),
-        el('span', null, mode === 'cycle' ? 'Flashcards' : 'Quiz'),
-        el('button', { type: 'button', className: 'presenter__exit', onClick: goHome }, 'Exit'),
+        el('span', null, 'Flashcards'),
+        el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
       );
 
       if (!deck.length) {
         container.append(bar, el('p', { className: 'presenter__hint', style: { margin: 'auto' } }, 'No terms in this set.'));
-        return;
-      }
-
-      if (mode === 'quiz' && deck.length < 4) {
-        container.append(bar, el('p', { className: 'presenter__hint', style: { margin: 'auto' } }, 'Quiz needs at least 4 terms.'));
         return;
       }
 
@@ -214,16 +181,9 @@
           el('div', { className: 'presenter__actions' },
             btn('Start over', {
               className: 'btn--primary presenter__nav-btn presenter__nav-btn--primary',
-              onClick: () => {
-                index = 0;
-                cyclePhase = 'term';
-                revealed = false;
-                deck = shuffleCards(cards);
-                refreshChoices();
-                paint();
-              },
+              onClick: () => { index = 0; cyclePhase = 'term'; deck = shuffleCards(cards); paint(); },
             }),
-            btn('Back to menu', { className: 'presenter__nav-btn', onClick: goHome }),
+            btn('Back to list', { className: 'presenter__nav-btn', onClick: goToList }),
           ),
         );
         return;
@@ -235,66 +195,33 @@
           type: 'button',
           className: 'presenter__nav-btn',
           disabled: !canGoBack || undefined,
-          onClick: () => (mode === 'cycle' ? cycleBack() : quizBack()),
+          onClick: cycleBack,
         }, '← Back'),
         el('button', {
           type: 'button',
           className: 'presenter__nav-btn presenter__nav-btn--primary',
-          onClick: () => (mode === 'cycle' ? cycleForward() : quizForward()),
-        }, mode === 'cycle'
-          ? (cyclePhase === 'term' ? 'Show definition →' : 'Next card →')
-          : (revealed ? 'Next question →' : 'Show answer →')),
+          onClick: cycleForward,
+        }, cyclePhase === 'term' ? 'Show definition →' : 'Next card →'),
       );
 
-      if (mode === 'cycle') {
-        container.append(
-          bar,
-          el('p', { className: 'presenter__label' }, cyclePhase === 'term' ? 'Term' : 'Definition'),
-          el('div', { className: 'presenter__prompt' }, cyclePhase === 'term' ? cur.front : cur.back),
-          el('p', { className: 'presenter__hint' }, 'Page Down = forward · Page Up = back'),
-          nav,
-        );
-        return;
-      }
-
-      const choicesEl = el('ul', { className: 'presenter__choices' });
-      choiceList.forEach((ch, i) => {
-        const isCorrect = ch.id === cur.id;
-        let cls = 'presenter__choice';
-        if (revealed && isCorrect) cls += ' presenter__choice--correct';
-        choicesEl.appendChild(el('li', { className: cls },
-          el('span', { className: 'presenter__choice-num' }, String(i + 1)),
-          el('span', null, ch.front),
-        ));
-      });
-
-      const parts = [
+      container.append(
         bar,
-        el('p', { className: 'presenter__label' }, 'Definition'),
-        el('div', { className: 'presenter__prompt presenter__prompt--quiz' }, cur.back),
-        choicesEl,
-        el('p', { className: 'presenter__hint' }, !revealed
-          ? 'Page Down → reveal correct answer'
-          : 'Answer: ' + cur.front + ' · Page Down → next'),
-      ];
-      if (revealed) parts.push(el('p', { className: 'presenter__feedback' }, 'Correct: ' + cur.front));
-      parts.push(nav);
-      parts.forEach(p => container.appendChild(p));
+        el('p', { className: 'presenter__label' }, cyclePhase === 'term' ? 'Term' : 'Definition'),
+        el('div', { className: 'presenter__prompt' }, cyclePhase === 'term' ? cur.front : cur.back),
+        el('p', { className: 'presenter__hint' }, 'Page Down = forward · Page Up = back'),
+        nav,
+      );
     }
 
     function goNextCard() {
       index++;
       cyclePhase = 'term';
-      revealed = false;
-      refreshChoices();
       paint();
     }
 
     function goPrevCard() {
       index = Math.max(0, index - 1);
       cyclePhase = 'term';
-      revealed = false;
-      refreshChoices();
       paint();
     }
 
@@ -308,37 +235,21 @@
       else if (index > 0) goPrevCard();
     }
 
-    function quizForward() {
-      if (!revealed) { revealed = true; paint(); }
-      else goNextCard();
-    }
-
-    function quizBack() {
-      if (revealed) { revealed = false; paint(); }
-      else if (index > 0) goPrevCard();
-    }
-
     function onKey(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        goHome();
+        goToList();
         return;
       }
       const delta = pageDelta(e.key);
       if (delta === 0) return;
       e.preventDefault();
-      if (mode === 'cycle') {
-        if (delta === 1) cycleForward();
-        else cycleBack();
-      } else {
-        if (delta === 1) quizForward();
-        else quizBack();
-      }
+      if (delta === 1) cycleForward();
+      else cycleBack();
     }
 
     window.addEventListener('keydown', onKey);
     requestFullscreen(container);
-    refreshChoices();
     paint();
 
     presenterCleanup = () => {
@@ -347,16 +258,183 @@
     };
   }
 
+  function renderPracticeQuiz() {
+    root.innerHTML = '';
+
+    if (cards.length < 4) {
+      root.appendChild(el('header', { className: 'app-header' },
+        el('h1', null, title),
+        el('p', null, 'Practice quiz'),
+      ));
+      root.appendChild(topNav('quiz'));
+      root.appendChild(el('div', { className: 'panel' },
+        el('p', null, 'Practice quiz needs at least 4 terms in this set.'),
+        btn('Back to list', { onClick: goToList, style: { marginTop: '16px' } }),
+      ));
+      return;
+    }
+
+    const wrap = el('div', { className: 'quiz' });
+    root.appendChild(wrap);
+
+    let deck = shuffleCards(cards);
+    let index = 0;
+    let score = 0;
+    let missed = [];
+    let choices = [];
+    let pickedId = null;
+    let choiceIndex = 0;
+
+    function current() { return deck[index]; }
+    function done() { return index >= deck.length; }
+
+    function refreshChoices() {
+      if (current() && !done()) {
+        choices = pickTermChoices(cards, current());
+        pickedId = null;
+        choiceIndex = 0;
+      }
+    }
+
+    function submitChoice(ch) {
+      if (!ch || pickedId) return;
+      pickedId = ch.id;
+      const cur = current();
+      const correct = ch.id === cur.id;
+      if (correct) score++;
+      else missed.push(cur);
+      paint();
+      setTimeout(() => {
+        index++;
+        refreshChoices();
+        paint();
+      }, 900);
+    }
+
+    function paint() {
+      wrap.innerHTML = '';
+
+      if (done()) {
+        const pct = Math.round((score / deck.length) * 100);
+        const results = el('div', { className: 'quiz-results' },
+          el('header', { className: 'app-header app-header--compact' },
+            el('h1', null, title),
+            el('p', null, 'Quiz results'),
+          ),
+          topNav('quiz'),
+          el('div', { className: 'panel quiz-results__panel' },
+            el('p', { className: 'quiz-results__score' }, 'Score: ' + score + ' / ' + deck.length),
+            el('p', { className: 'quiz-results__pct' }, pct + '% correct'),
+          ),
+        );
+
+        if (missed.length) {
+          results.appendChild(el('div', { className: 'panel quiz-missed' },
+            el('h2', { className: 'quiz-missed__title' }, 'Terms to study'),
+            el('p', { className: 'hint' }, 'Review these before your next attempt:'),
+            el('ul', { className: 'vocab-list' },
+              ...missed.map(c => el('li', { className: 'vocab-list__item' },
+                el('div', { className: 'vocab-list__term' }, c.front),
+                el('div', { className: 'vocab-list__def' }, c.back),
+              )),
+            ),
+          ));
+        } else {
+          results.appendChild(el('div', { className: 'panel quiz-perfect' },
+            el('p', null, 'Perfect score — nice work!'),
+          ));
+        }
+
+        results.appendChild(el('div', { className: 'quiz-results__actions' },
+          btn('Try again', {
+            variant: 'primary',
+            onClick: () => {
+              deck = shuffleCards(cards);
+              index = 0;
+              score = 0;
+              missed = [];
+              refreshChoices();
+              paint();
+            },
+          }),
+          btn('Back to list', { onClick: goToList }),
+        ));
+
+        wrap.appendChild(results);
+        return;
+      }
+
+      const cur = current();
+      wrap.appendChild(el('header', { className: 'app-header app-header--compact' },
+        el('h1', null, title),
+        el('p', null, 'Question ' + (index + 1) + ' of ' + deck.length),
+      ));
+      wrap.appendChild(topNav('quiz'));
+
+      wrap.appendChild(el('p', { className: 'quiz__label' }, 'Definition'));
+      wrap.appendChild(el('div', { className: 'quiz__prompt panel' }, cur.back));
+
+      const choiceWrap = el('div', { className: 'quiz__choices' });
+      choices.forEach((ch, i) => {
+        const isCorrect = ch.id === cur.id;
+        const isPicked = pickedId === ch.id;
+        let cls = 'btn quiz__choice';
+        if (pickedId) {
+          if (isCorrect) cls += ' quiz__choice--correct';
+          else if (isPicked) cls += ' quiz__choice--wrong';
+        } else if (i === choiceIndex) {
+          cls += ' quiz__choice--highlight';
+        }
+        choiceWrap.appendChild(el('button', {
+          type: 'button',
+          className: cls,
+          disabled: !!pickedId || undefined,
+          onClick: () => submitChoice(ch),
+        }, el('strong', null, (i + 1) + '. '), ch.front));
+      });
+
+      wrap.appendChild(choiceWrap);
+      wrap.appendChild(el('p', { className: 'hint hint--center' },
+        pickedId ? 'Next question…' : 'Pick the term that matches the definition'));
+      wrap.appendChild(btn('Exit quiz', { className: 'quiz__exit', onClick: goToList }));
+    }
+
+    function onKey(e) {
+      if (done() || pickedId) return;
+      const delta = pageDelta(e.key);
+      if (delta !== 0) {
+        e.preventDefault();
+        const n = choices.length || 4;
+        choiceIndex = delta === 1 ? (choiceIndex + 1) % n : (choiceIndex - 1 + n) % n;
+        paint();
+        return;
+      }
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        submitChoice(choices[choiceIndex]);
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    refreshChoices();
+    paint();
+
+    quizCleanup = () => window.removeEventListener('keydown', onKey);
+  }
+
   function render() {
     if (presenterCleanup) {
       presenterCleanup();
       presenterCleanup = null;
     }
+    if (quizCleanup) {
+      quizCleanup();
+      quizCleanup = null;
+    }
 
-    if (view === 'list') renderList();
-    else if (view === 'flashcards') renderPresenter('cycle');
-    else if (view === 'quiz') renderPresenter('quiz');
-    else renderMenu();
+    if (view === 'flashcards') renderFlashcards();
+    else if (view === 'quiz') renderPracticeQuiz();
+    else renderList();
   }
 
   document.title = title;

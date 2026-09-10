@@ -83,11 +83,18 @@ button { font: inherit; }
   border-radius: 14px;
 }
 
-.menu-panel { padding: 24px; }
-.menu-lead { margin: 0 0 20px; color: var(--text-muted); }
-.menu-actions { display: flex; flex-direction: column; gap: 12px; }
+.top-nav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.top-nav .btn { flex: 1; min-width: 140px; }
 
 .hint { color: var(--text-muted); font-size: 0.85rem; margin: 16px 0 0; }
+.hint--nav { margin: -8px 0 16px; }
+.hint--center { text-align: center; }
 
 .back-link {
   display: inline-flex;
@@ -286,3 +293,86 @@ button { font: inherit; }
   margin-top: 24px;
   flex-wrap: wrap;
 }
+
+/* Practice quiz */
+.quiz__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+
+.quiz__prompt {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.quiz__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.quiz__choice {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 16px;
+}
+
+.quiz__choice--correct {
+  background: #d1fae5 !important;
+  border-color: #059669 !important;
+}
+
+.quiz__choice--wrong {
+  background: #fef2f2 !important;
+  border-color: #dc2626 !important;
+}
+
+.quiz__choice--highlight {
+  border: 2px solid var(--accent);
+  background: var(--accent-light);
+}
+
+.quiz__exit { margin-top: 8px; }
+
+.quiz-results__panel { text-align: center; margin-bottom: 16px; }
+
+.quiz-results__score {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+
+.quiz-results__pct {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.quiz-missed { margin-bottom: 16px; }
+
+.quiz-missed__title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.quiz-perfect {
+  margin-bottom: 16px;
+  text-align: center;
+  color: var(--success, #059669);
+  font-weight: 600;
+}
+
+.quiz-results__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quiz-results__actions .btn { flex: 1; min-width: 140px; }
