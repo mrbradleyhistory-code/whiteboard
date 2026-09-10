@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit 1 Set 1 Historical Thinking</title>
+  <style>
+:root,
+[data-theme="light"] {
+  --accent: #6366f1;
+  --accent-dark: #4f46e5;
+  --accent-light: #eef2ff;
+  --page-bg: #f5f5f4;
+  --surface: #ffffff;
+  --surface-muted: #fafaf9;
+  --border: #e7e5e4;
+  --text: #1c1917;
+  --text-muted: #78716c;
+  --success: #059669;
+  --danger: #dc2626;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --quiz-correct-bg: #d1fae5;
+  --quiz-correct-border: #059669;
+  --quiz-wrong-bg: #fef2f2;
+  --quiz-wrong-border: #dc2626;
+  --presenter-bg: #f5f5f4;
+  --presenter-text: #1c1917;
+  --presenter-muted: #78716c;
+  --presenter-surface: #ffffff;
+  --presenter-border: #e7e5e4;
+  --presenter-btn-bg: #fafaf9;
+  --presenter-btn-border: #d6d3d1;
+  --presenter-choice-bg: #ffffff;
+  --presenter-choice-border: #d6d3d1;
+  --presenter-choice-correct-bg: #d1fae5;
+  --presenter-choice-correct-border: #059669;
+  --presenter-feedback: #059669;
+  --radius: 12px;
+}
+
+[data-theme="dark"] {
+  --accent: #818cf8;
+  --accent-dark: #6366f1;
+  --accent-light: #312e81;
+  --page-bg: #1c1917;
+  --surface: #292524;
+  --surface-muted: #1c1917;
+  --border: #44403c;
+  --text: #fafaf9;
+  --text-muted: #a8a29e;
+  --success: #34d399;
+  --danger: #f87171;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --quiz-correct-bg: #1e3d38;
+  --quiz-correct-border: #2a9d8f;
+  --quiz-wrong-bg: #3d2224;
+  --quiz-wrong-border: #e63946;
+  --presenter-bg: #1a1d21;
+  --presenter-text: #ffffff;
+  --presenter-muted: #9aa3ad;
+  --presenter-surface: #252a31;
+  --presenter-border: #3d4450;
+  --presenter-btn-bg: #2d333b;
+  --presenter-btn-border: #5c6570;
+  --presenter-choice-bg: #252a31;
+  --presenter-choice-border: #3d4450;
+  --presenter-choice-correct-bg: #1e3d38;
+  --presenter-choice-correct-border: #2a9d8f;
+  --presenter-feedback: #6ee7b7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--page-bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+button { font: inherit; }
+
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page-header .app-header { margin-bottom: 0; flex: 1; min-width: 0; }
+
+.app-header--compact { margin-bottom: 0; }
+
+.app-header h1 {
+  margin: 0 0 6px;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.app-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn:hover:not(:disabled) { filter: brightness(0.97); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn--primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn--primary:hover:not(:disabled) { background: var(--accent-dark); }
+
+.btn--theme {
+  flex-shrink: 0;
+  min-width: 88px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.top-nav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.top-nav .btn { flex: 1; min-width: 140px; }
+
+.hint { color: var(--text-muted); font-size: 0.85rem; margin: 16px 0 0; }
+.hint--nav { margin: -8px 0 16px; }
+.hint--center { text-align: center; }
+
+.vocab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.vocab-list__item {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.vocab-list__item:last-child { border-bottom: none; }
+
+.vocab-list__term {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 4px;
+}
+
+.vocab-list__def {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* Flashcard presenter */
+.presenter {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--presenter-bg);
+  color: var(--presenter-text);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 28px 28px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.presenter__bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 18px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.presenter__bar span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--presenter-muted);
+}
+
+.presenter__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.presenter__exit {
+  border: 1px solid var(--presenter-btn-border);
+  background: transparent;
+  color: var(--presenter-text);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.presenter__theme {
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--presenter-btn-border);
+  background: var(--presenter-btn-bg);
+  color: var(--presenter-text);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.presenter__label {
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-align: center;
+  margin: 0 0 12px;
+}
+
+.presenter__prompt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: clamp(32px, 6vw, 72px);
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 20px;
+  white-space: pre-wrap;
+}
+
+.presenter__nav {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 20px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.presenter__nav-btn {
+  min-width: min(260px, 42vw);
+  min-height: 64px;
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: 2px solid var(--presenter-btn-border);
+  background: var(--presenter-btn-bg);
+  color: var(--presenter-text);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.presenter__nav-btn:disabled { opacity: 0.35; cursor: default; }
+.presenter__nav-btn--primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+.presenter__hint {
+  text-align: center;
+  font-size: 16px;
+  color: var(--presenter-muted);
+  margin: 16px 0 0;
+}
+
+.presenter__done { font-size: 42px; margin: auto; text-align: center; }
+
+.presenter__actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+/* Practice quiz */
+.quiz__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+
+.quiz__prompt {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.quiz__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.quiz__choice {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: 16px;
+}
+
+.quiz__choice--correct {
+  background: var(--quiz-correct-bg) !important;
+  border-color: var(--quiz-correct-border) !important;
+}
+
+.quiz__choice--wrong {
+  background: var(--quiz-wrong-bg) !important;
+  border-color: var(--quiz-wrong-border) !important;
+}
+
+.quiz__choice--highlight {
+  border: 2px solid var(--accent);
+  background: var(--accent-light);
+}
+
+.quiz__exit { margin-top: 8px; }
+
+.quiz-results__panel { text-align: center; margin-bottom: 16px; }
+
+.quiz-results__score {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+
+.quiz-results__pct {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.quiz-missed { margin-bottom: 16px; }
+
+.quiz-missed__title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.quiz-perfect {
+  margin-bottom: 16px;
+  text-align: center;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.quiz-results__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quiz-results__actions .btn { flex: 1; min-width: 140px; }
+
+  </style>
+</head>
+<body>
+  <div id="root" class="app"></div>
+  <script>
+    window.VOCAB_SET = {
+      title: 'Unit 1 Set 1 Historical Thinking',
+      cards: [
+        { front: 'Primary Source', back: 'Source recorded by a first-hand witness to events' },
+        { front: 'Secondary Source', back: 'Source written after an event by someone who played no part in it' },
+        { front: 'Bias', back: 'Prejudice or unfair opinion toward or against one group or person, regardless of evidence' },
+        { front: 'Archaeology', back: 'The study of human history and prehistory through the excavation of sites and the analysis of artifacts and other physical remains.' },
+        { front: 'Economics', back: 'The branch of knowledge concerned with the production, consumption, and transfer of wealth. How we use our resources to satisfy needs and wants.' },
+        { front: 'Geography', back: "The study of the earth's physical and cultural features and how they affect people" },
+        { front: 'History', back: 'The study of past events' },
+        { front: 'Historiography', back: 'History of history (the study of how history is written and interpreted, including the methods, sources, and biases involved in historical writing and how they change over time)' },
+        { front: 'supply', back: 'The amount of a good or service available' },
+        { front: 'demand', back: 'How much people want to buy a given product' },
+        { front: 'need', back: 'Something necessary for survival' },
+        { front: 'want', back: "Something you'd like, but that isn't necessary to survive" },
+        { front: 'religion', back: 'A system of beliefs and practices often centered around spiritual or moral principles. (beliefs about morality and the afterlife, god or gods)' },
+      ],
+    };
+  </script>
+  <script>
+(function () {
+  const config = window.VOCAB_SET;
+  if (!config || !Array.isArray(config.cards)) {
+    document.body.innerHTML = '<p style="padding:24px;font-family:system-ui">Missing vocabulary data.</p>';
+    return;
+  }
+
+  const title = String(config.title || 'Vocabulary').trim();
+  const cards = config.cards
+    .map((c, i) => ({
+      id: 'c' + i,
+      front: String(c.front ?? '').trim(),
+      back: String(c.back ?? '').trim(),
+    }))
+    .filter(c => c.front || c.back);
+
+  const root = document.getElementById('root');
+  const THEME_KEY = 'vocab-theme';
+  let view = 'list';
+  let presenterCleanup = null;
+  let quizCleanup = null;
+
+  function readTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  let theme = readTheme();
+
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+
+  function syncThemeToggleLabels() {
+    document.querySelectorAll('[data-theme-toggle]').forEach(node => {
+      node.textContent = theme === 'dark' ? 'Light' : 'Dark';
+      node.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    });
+  }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme();
+    syncThemeToggleLabels();
+  }
+
+  function themeToggleButton(className) {
+    return el('button', {
+      type: 'button',
+      className: className ? className : 'btn btn--theme',
+      'data-theme-toggle': true,
+      'aria-label': theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+      onClick: toggleTheme,
+    }, theme === 'dark' ? 'Light' : 'Dark');
+  }
+
+  function pageHeader(subtitle) {
+    return el('div', { className: 'page-header' },
+      el('header', { className: 'app-header app-header--compact' },
+        el('h1', null, title),
+        el('p', null, subtitle),
+      ),
+      themeToggleButton('btn btn--theme'),
+    );
+  }
+
+  function shuffleCards(list) {
+    const a = [...list];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function pickTermChoices(pool, correct, count = 4) {
+    const wrong = shuffleCards(pool.filter(c => c.id !== correct.id)).slice(0, count - 1);
+    const choices = shuffleCards([correct, ...wrong]);
+    while (choices.length < count) {
+      choices.push({ id: 'pad_' + choices.length, front: '—', back: '—' });
+    }
+    return choices.slice(0, count);
+  }
+
+  function pageDelta(key) {
+    switch (key) {
+      case 'PageDown': case 'ArrowRight': case 'ArrowDown': case ' ': case 'MediaTrackNext': return 1;
+      case 'PageUp': case 'ArrowLeft': case 'ArrowUp': case 'MediaTrackPrevious': return -1;
+      default: return 0;
+    }
+  }
+
+  function requestFullscreen(el) {
+    if (!el) return Promise.resolve();
+    if (el.requestFullscreen) return el.requestFullscreen().catch(() => {});
+    if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+    return Promise.resolve();
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) return document.exitFullscreen().catch(() => {});
+    if (document.webkitFullscreenElement && document.webkitExitFullscreen) return document.webkitExitFullscreen();
+    return Promise.resolve();
+  }
+
+  function el(tag, attrs, ...children) {
+    const node = document.createElement(tag);
+    if (attrs) {
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'className') node.className = v;
+        else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+        else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v != null && v !== false) node.setAttribute(k, v === true ? '' : v);
+      }
+    }
+    for (const child of children.flat()) {
+      if (child == null) continue;
+      node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+    }
+    return node;
+  }
+
+  function btn(label, opts = {}) {
+    const classes = ['btn'];
+    if (opts.variant === 'primary') classes.push('btn--primary');
+    if (opts.className) classes.push(opts.className);
+    return el('button', {
+      type: 'button',
+      className: classes.join(' '),
+      onClick: opts.onClick,
+      disabled: opts.disabled || undefined,
+    }, label);
+  }
+
+  function goToList() {
+    if (presenterCleanup) {
+      presenterCleanup();
+      presenterCleanup = null;
+    }
+    if (quizCleanup) {
+      quizCleanup();
+      quizCleanup = null;
+    }
+    view = 'list';
+    render();
+  }
+
+  function topNav(active) {
+    return el('nav', { className: 'top-nav' },
+      btn('Flashcards', {
+        className: active === 'flashcards' ? 'btn--primary' : '',
+        disabled: !cards.length,
+        onClick: () => { view = 'flashcards'; render(); },
+      }),
+      btn('Practice quiz', {
+        className: active === 'quiz' ? 'btn--primary' : '',
+        disabled: cards.length < 4,
+        onClick: () => { view = 'quiz'; render(); },
+      }),
+    );
+  }
+
+  function renderList() {
+    root.innerHTML = '';
+
+    root.appendChild(pageHeader(cards.length + ' vocabulary terms'));
+    root.appendChild(topNav('list'));
+
+    if (cards.length < 4) {
+      root.appendChild(el('p', { className: 'hint hint--nav' }, 'Practice quiz needs at least 4 terms.'));
+    }
+
+    const list = el('ul', { className: 'vocab-list' });
+    cards.forEach(c => {
+      list.appendChild(el('li', { className: 'vocab-list__item' },
+        el('div', { className: 'vocab-list__term' }, c.front),
+        el('div', { className: 'vocab-list__def' }, c.back),
+      ));
+    });
+
+    root.appendChild(el('div', { className: 'panel' }, list));
+  }
+
+  function renderFlashcards() {
+    root.innerHTML = '';
+    const container = el('div', { className: 'presenter' });
+    root.appendChild(container);
+
+    let deck = shuffleCards(cards);
+    let index = 0;
+    let cyclePhase = 'term';
+
+    function current() { return deck[index]; }
+    function done() { return index >= deck.length; }
+
+    function paint() {
+      container.innerHTML = '';
+      const canGoBack = cyclePhase === 'def' || index > 0;
+
+      const bar = el('header', { className: 'presenter__bar' },
+        el('span', null, title),
+        el('span', null, done() ? '' : (index + 1) + ' / ' + deck.length),
+        el('span', null, 'Flashcards'),
+        el('div', { className: 'presenter__bar-actions' },
+          themeToggleButton('presenter__theme'),
+          el('button', { type: 'button', className: 'presenter__exit', onClick: goToList }, 'Exit'),
+        ),
+      );
+
+      if (!deck.length) {
+        container.append(bar, el('p', { className: 'presenter__hint', style: { margin: 'auto' } }, 'No terms in this set.'));
+        return;
+      }
+
+      if (done()) {
+        container.append(
+          bar,
+          el('h2', { className: 'presenter__done' }, 'End of set'),
+          el('p', { className: 'presenter__hint' }, title),
+          el('div', { className: 'presenter__actions' },
+            btn('Start over', {
+              className: 'btn--primary presenter__nav-btn presenter__nav-btn--primary',
+              onClick: () => { index = 0; cyclePhase = 'term'; deck = shuffleCards(cards); paint(); },
+            }),
+            btn('Back to list', { className: 'presenter__nav-btn', onClick: goToList }),
+          ),
+        );
+        return;
+      }
+
+      const cur = current();
+      const nav = el('div', { className: 'presenter__nav' },
+        el('button', {
+          type: 'button',
+          className: 'presenter__nav-btn',
+          disabled: !canGoBack || undefined,
+          onClick: cycleBack,
+        }, '← Back'),
+        el('button', {
+          type: 'button',
+          className: 'presenter__nav-btn presenter__nav-btn--primary',
+          onClick: cycleForward,
+        }, cyclePhase === 'term' ? 'Show definition →' : 'Next card →'),
+      );
+
+      container.append(
+        bar,
+        el('p', { className: 'presenter__label' }, cyclePhase === 'term' ? 'Term' : 'Definition'),
+        el('div', { className: 'presenter__prompt' }, cyclePhase === 'term' ? cur.front : cur.back),
+        el('p', { className: 'presenter__hint' }, 'Page Down = forward · Page Up = back'),
+        nav,
+      );
+    }
+
+    function goNextCard() {
+      index++;
+      cyclePhase = 'term';
+      paint();
+    }
+
+    function goPrevCard() {
+      index = Math.max(0, index - 1);
+      cyclePhase = 'term';
+      paint();
+    }
+
+    function cycleForward() {
+      if (cyclePhase === 'term') { cyclePhase = 'def'; paint(); }
+      else goNextCard();
+    }
+
+    function cycleBack() {
+      if (cyclePhase === 'def') { cyclePhase = 'term'; paint(); }
+      else if (index > 0) goPrevCard();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        goToList();
+        return;
+      }
+      const delta = pageDelta(e.key);
+      if (delta === 0) return;
+      e.preventDefault();
+      if (delta === 1) cycleForward();
+      else cycleBack();
+    }
+
+    window.addEventListener('keydown', onKey);
+    requestFullscreen(container);
+    paint();
+
+    presenterCleanup = () => {
+      window.removeEventListener('keydown', onKey);
+      exitFullscreen();
+    };
+  }
+
+  function renderPracticeQuiz() {
+    root.innerHTML = '';
+
+    if (cards.length < 4) {
+      root.appendChild(pageHeader('Practice quiz'));
+      root.appendChild(topNav('quiz'));
+      root.appendChild(el('div', { className: 'panel' },
+        el('p', null, 'Practice quiz needs at least 4 terms in this set.'),
+        btn('Back to list', { onClick: goToList, style: { marginTop: '16px' } }),
+      ));
+      return;
+    }
+
+    const wrap = el('div', { className: 'quiz' });
+    root.appendChild(wrap);
+
+    let deck = shuffleCards(cards);
+    let index = 0;
+    let score = 0;
+    let missed = [];
+    let choices = [];
+    let pickedId = null;
+    let choiceIndex = 0;
+
+    function current() { return deck[index]; }
+    function done() { return index >= deck.length; }
+
+    function refreshChoices() {
+      if (current() && !done()) {
+        choices = pickTermChoices(cards, current());
+        pickedId = null;
+        choiceIndex = 0;
+      }
+    }
+
+    function submitChoice(ch) {
+      if (!ch || pickedId) return;
+      pickedId = ch.id;
+      const cur = current();
+      const correct = ch.id === cur.id;
+      if (correct) score++;
+      else missed.push(cur);
+      paint();
+      setTimeout(() => {
+        index++;
+        refreshChoices();
+        paint();
+      }, 900);
+    }
+
+    function paint() {
+      wrap.innerHTML = '';
+
+      if (done()) {
+        const pct = Math.round((score / deck.length) * 100);
+        const results = el('div', { className: 'quiz-results' },
+          pageHeader('Quiz results'),
+          topNav('quiz'),
+          el('div', { className: 'panel quiz-results__panel' },
+            el('p', { className: 'quiz-results__score' }, 'Score: ' + score + ' / ' + deck.length),
+            el('p', { className: 'quiz-results__pct' }, pct + '% correct'),
+          ),
+        );
+
+        if (missed.length) {
+          results.appendChild(el('div', { className: 'panel quiz-missed' },
+            el('h2', { className: 'quiz-missed__title' }, 'Terms to study'),
+            el('p', { className: 'hint' }, 'Review these before your next attempt:'),
+            el('ul', { className: 'vocab-list' },
+              ...missed.map(c => el('li', { className: 'vocab-list__item' },
+                el('div', { className: 'vocab-list__term' }, c.front),
+                el('div', { className: 'vocab-list__def' }, c.back),
+              )),
+            ),
+          ));
+        } else {
+          results.appendChild(el('div', { className: 'panel quiz-perfect' },
+            el('p', null, 'Perfect score — nice work!'),
+          ));
+        }
+
+        results.appendChild(el('div', { className: 'quiz-results__actions' },
+          btn('Try again', {
+            variant: 'primary',
+            onClick: () => {
+              deck = shuffleCards(cards);
+              index = 0;
+              score = 0;
+              missed = [];
+              refreshChoices();
+              paint();
+            },
+          }),
+          btn('Back to list', { onClick: goToList }),
+        ));
+
+        wrap.appendChild(results);
+        return;
+      }
+
+      const cur = current();
+      wrap.appendChild(pageHeader('Question ' + (index + 1) + ' of ' + deck.length));
+      wrap.appendChild(topNav('quiz'));
+
+      wrap.appendChild(el('p', { className: 'quiz__label' }, 'Definition'));
+      wrap.appendChild(el('div', { className: 'quiz__prompt panel' }, cur.back));
+
+      const choiceWrap = el('div', { className: 'quiz__choices' });
+      choices.forEach((ch, i) => {
+        const isCorrect = ch.id === cur.id;
+        const isPicked = pickedId === ch.id;
+        let cls = 'btn quiz__choice';
+        if (pickedId) {
+          if (isCorrect) cls += ' quiz__choice--correct';
+          else if (isPicked) cls += ' quiz__choice--wrong';
+        } else if (i === choiceIndex) {
+          cls += ' quiz__choice--highlight';
+        }
+        choiceWrap.appendChild(el('button', {
+          type: 'button',
+          className: cls,
+          disabled: !!pickedId || undefined,
+          onClick: () => submitChoice(ch),
+        }, el('strong', null, (i + 1) + '. '), ch.front));
+      });
+
+      wrap.appendChild(choiceWrap);
+      wrap.appendChild(el('p', { className: 'hint hint--center' },
+        pickedId ? 'Next question…' : 'Pick the term that matches the definition'));
+      wrap.appendChild(btn('Exit quiz', { className: 'quiz__exit', onClick: goToList }));
+    }
+
+    function onKey(e) {
+      if (done() || pickedId) return;
+      const delta = pageDelta(e.key);
+      if (delta !== 0) {
+        e.preventDefault();
+        const n = choices.length || 4;
+        choiceIndex = delta === 1 ? (choiceIndex + 1) % n : (choiceIndex - 1 + n) % n;
+        paint();
+        return;
+      }
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        submitChoice(choices[choiceIndex]);
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    refreshChoices();
+    paint();
+
+    quizCleanup = () => window.removeEventListener('keydown', onKey);
+  }
+
+  function render() {
+    if (presenterCleanup) {
+      presenterCleanup();
+      presenterCleanup = null;
+    }
+    if (quizCleanup) {
+      quizCleanup();
+      quizCleanup = null;
+    }
+
+    if (view === 'flashcards') renderFlashcards();
+    else if (view === 'quiz') renderPracticeQuiz();
+    else renderList();
+  }
+
+  applyTheme();
+  document.title = title;
+  render();
+})();
+  </script>
+</body>
+</html>

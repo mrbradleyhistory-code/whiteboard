@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vocab Cards — Student Sets</title>
+  <link rel="stylesheet" href="student-styles.css">
+  <style>
+    .set-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .set-links a {
+      display: block;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface-muted);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .set-links a:hover { background: var(--accent-light); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Vocabulary Sets</h1>
+      <p>Student study pages — pick a set to open.</p>
+    </header>
+    <div class="panel">
+      <ul class="set-links">
+        <li><a href="unit-1-set-1-historical-thinking.html">Unit 1 Set 1 — Historical Thinking</a></li>
+      </ul>
+      <p class="hint" style="margin-top: 20px;">Each set is a single self-contained <code>.html</code> file. See README.</p>
+    </div>
+  </div>
+</body>
+</html>
