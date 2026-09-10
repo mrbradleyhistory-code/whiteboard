@@ -1,67 +1,64 @@
-# Vocab Cards (standalone)
+# Vocab Cards (standalone, student-facing)
 
-A **single-file** flashcard app with no login, no Firebase, and no build step. Designed for school networks that block Vercel and cloud auth.
+Self-contained HTML vocabulary study pages for **Google Sites** or any static host. No Firebase, no login, no build step.
 
-## What it does
+Each vocabulary set is its own HTML page with three study modes:
 
-- Create and edit flashcard decks (term / definition)
-- Import from Quizlet, Knowt, or CSV (tab-separated paste or file upload)
-- **Present** modes for class: cycle (term → definition) and quiz (multiple choice)
-- **Practice** modes for students: flip cards and self-paced quiz
-- Export / import decks as JSON for backup or sharing
-
-Data is stored in the browser’s **localStorage** on whichever device opens the file.
-
-## How to use with students
-
-### Option A — Open the HTML file directly
-
-1. Copy `index.html` to a USB drive, school SharePoint/OneDrive folder, or Google Drive (if not blocked).
-2. Students double-click `index.html` or open it in Chrome/Edge.
-3. Works offline. No server required.
-
-> Some browsers restrict `file://` localStorage slightly; Chrome and Edge generally work fine.
-
-### Option B — Host on an allowed internal server
-
-If your district allows an internal web server (SharePoint static hosting, district IIS, etc.):
-
-1. Upload `index.html` to that server.
-2. Share the URL with students.
-
-### Option C — Teacher prepares decks, students import
-
-1. Build decks on your machine in Vocab Cards.
-2. **Export all decks** or **Export deck JSON** from the edit screen.
-3. Share the `.json` file (email attachment, LMS file, USB).
-4. Students open Vocab Cards and click **Import JSON**.
-
-## Sharing from Class Launchpad
-
-The main Class Launchpad app stores decks in Firebase. To move a deck here:
-
-1. In Class Launchpad, export is not built-in yet — copy/paste from Quizlet export, or manually recreate.
-2. Or paste Quizlet/Knowt export text into **Import from Quizlet / Knowt / CSV**.
-
-## Keyboard shortcuts (present & practice)
-
-| Key | Action |
-|-----|--------|
-| Page Down / → / Space | Forward |
-| Page Up / ← | Back |
-| Escape | Exit presenter |
-
-## Limitations vs Class Launchpad
-
-- No Google sign-in or cloud sync (by design — avoids blocked services)
-- Decks stay on one browser unless you export/import JSON
-- No integration with lessons, whiteboards, or class rosters
+1. **Vocabulary list** — scrollable terms and definitions
+2. **Flashcards** — fullscreen display mode (term → definition → next)
+3. **Practice quiz** — fullscreen multiple-choice quiz (needs 4+ terms)
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Entire app (HTML + CSS + JS) |
-| `README.md` | This guide |
+| `unit-1-set-1-historical-thinking.html` | First set (ready to embed) |
+| `student-set-template.html` | Copy this to create a new set |
+| `student-styles.css` | Shared styles |
+| `student-runtime.js` | Shared app logic |
+| `index.html` | Optional index linking to all sets |
+| `deck-builder.html` | Legacy teacher tool (create/import decks locally) |
 
-No `npm install`, no Vite, no Firebase.
+## Google Sites workflow
+
+1. Upload these files to **Google Drive** (keep them in one folder):
+   - `student-styles.css`
+   - `student-runtime.js`
+   - `unit-1-set-1-historical-thinking.html` (and any other set pages)
+2. Open the set HTML in Drive → **Share** → “Anyone with the link” → **Viewer**
+3. In Google Sites, add an **Embed** block and paste the preview/embed URL for that HTML file, or use an iframe pointing to the hosted file.
+
+> Keep `student-styles.css` and `student-runtime.js` in the **same folder** as each set HTML file so relative links work.
+
+4. Create a new Google Sites page per vocabulary set and embed that set’s HTML file.
+
+## Adding a new vocabulary set
+
+1. Copy `student-set-template.html` → e.g. `unit-1-set-2-…​.html`
+2. Edit the `<title>` and `window.VOCAB_SET` block at the bottom of the file:
+   - Set `title` to the page heading students see
+   - Add `{ front: 'term', back: 'definition' }` entries to `cards`
+3. Upload the new HTML file to the same Drive folder as the CSS/JS files
+4. Embed on a new Google Sites page
+
+### From Quizlet export
+
+Quizlet’s copy/export is usually tab-separated (`term<TAB>definition` per line). Convert each line to:
+
+```javascript
+{ front: 'Primary Source', back: 'Source recorded by a first-hand witness to events' },
+```
+
+## Keyboard shortcuts (flashcards & quiz)
+
+| Key | Action |
+|-----|--------|
+| Page Down / → / Space | Forward |
+| Page Up / ← | Back |
+| Escape | Back to menu |
+
+## Limitations
+
+- Vocabulary is baked into each HTML file (no student editing)
+- Quiz mode requires at least 4 terms
+- Embedded in Google Sites iframes may not support browser fullscreen; on-screen buttons still work
